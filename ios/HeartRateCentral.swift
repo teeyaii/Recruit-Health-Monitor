@@ -31,6 +31,7 @@ final class HeartRateCentral: NSObject, ObservableObject, CBCentralManagerDelega
     private var timer: Timer?
     private var foreground = true
     private var scanning = false
+    private var scanGeneration = 0
 
     override init() {
         super.init()
@@ -50,12 +51,41 @@ final class HeartRateCentral: NSObject, ObservableObject, CBCentralManagerDelega
         bluetoothReady = central.state == .poweredOn
         if !bluetoothReady { stop() }
     }
-    func start() {
-        guard bluetoothReady && foreground else { return }
+    /// Standard scan only sees devices advertising 180D. A wider scan is opt-in
+    /// and still requires an explicit slot assignment before any connection.
+    func start(allDevices: Bool = false) {
+        guard bluetoothReady && foreground else {
+            message = "Enable Bluetooth and keep STEVE in the foreground."; return
+        }
+        central.stopScan()
+        scanGeneration += 1
+        let generation = scanGeneration
         scanning = true
-        central.scanForPeripherals(withServices: [serviceID], options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+        message = allDevices
+          ? "Broad BLE scan (15s). Discovery does not prove Heart Rate Service support."
+          : "Searching advertised Heart Rate Service 180D (15s). Try Broad Scan if missing."
+        central.scanForPeripherals(withServices: allDevices ? nil : [serviceID],
+                                   options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
-            self?.central.stopScan(); self?.scanning = false
+            guard let self = self, self.scanGeneration == generation else { return }
+            self.central.stopScan()
+            self.scanning = false
+            self.message = "Scan finished. Assign a device explicitly or try Broad Scan."
+        }
+    }
+    /// End-to-end HTTPS/credential probe with ZERO heart-rate readings.
+    /// Does not require a band and cannot validate actual BLE compatibility.
+    func testServerConnection() {
+        guard let client = client else { uploadStatus = "Configure HTTPS and gateway credential first."; return }
+        guard foreground else { uploadStatus = "Open STEVE in the foreground to test."; return }
+        uploadStatus = "Testing Gateway -> HTTPS server (empty heartbeat)..."
+        Task { @MainActor [weak self] in
+            do {
+                try await client.heartbeat()
+                self?.uploadStatus = "Gateway/credential verified; no BPM was sent."
+            } catch {
+                self?.uploadStatus = "Gateway test failed: verify HTTPS, token, gateway ID, or Render wake-up."
+            }
         }
     }
     func assign(_ id: UUID, slot: String, deviceID: String) {
@@ -86,6 +116,7 @@ final class HeartRateCentral: NSObject, ObservableObject, CBCentralManagerDelega
         DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: timeout)
     }
     func stop() {
+        scanGeneration += 1
         central.stopScan(); scanning = false
         reconnects.values.forEach { $0.cancel() }; reconnects.removeAll()
         timeouts.values.forEach { $0.cancel() }; timeouts.removeAll()
