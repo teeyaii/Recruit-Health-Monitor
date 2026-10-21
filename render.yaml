@@ -1,0 +1,36 @@
+# STEVE 1.0 LIVE backend — manual opt-in Render Free Blueprint.
+# Does not deploy automatically; review Render's plan and configure the provisioning map.
+services:
+  - type: web
+    name: steve-1-0-live-gateway
+    runtime: docker
+    repo: https://github.com/teeyaii/Recruit-Health-Monitor
+    branch: main
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    autoDeployTrigger: off
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: PORT
+        value: "8080"
+      - key: STEVE_VIEWER_TOKEN
+        generateValue: true
+      - key: STEVE_GATEWAY_TOKEN_G01
+        generateValue: true
+      - key: STEVE_GATEWAY_TOKEN_G02
+        generateValue: true
+      - key: STEVE_GATEWAY_TOKEN_G03
+        generateValue: true
+      - key: STEVE_GATEWAY_TOKEN_G04
+        generateValue: true
+      - key: STEVE_GATEWAY_TOKEN_G05
+        generateValue: true
+      # Set ONLY within Render, with operator-approved anonymous device assignments.
+      # Render prompts for this during the initial Blueprint creation.
+      - key: STEVE_SLOT_MAP_JSON
+        sync: false
