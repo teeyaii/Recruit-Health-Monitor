@@ -46,14 +46,14 @@ class MainActivity : Activity() {
    scanner.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(heartService)).build()),
     ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback)
    scanning = true
-   status.text = "Scanning for standard BLE heart rate broadcasters..."
+   status.text = "Scanning for up to 5 BLE heart rate broadcasters..."
   } catch (e: SecurityException) { status.text = "Bluetooth permission denied" }
  }
 
  private val scanCallback = object : ScanCallback() {
   override fun onScanResult(callbackType: Int, result: ScanResult) {
    val address = result.device.address
-   if (connections.containsKey(address) || connections.size >= 3) return
+   if (connections.containsKey(address) || connections.size >= 5) return
    values[address] = "Connecting..."
    try { connections[address] = result.device.connectGatt(this@MainActivity, false, callbacks) }
    catch (e: Exception) { values[address] = "Connection error: ${e.javaClass.simpleName}" }
