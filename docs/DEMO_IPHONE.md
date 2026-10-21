@@ -2,6 +2,8 @@
 
 ## Ready to demonstrate now
 
+Verified 21 October 2026: https://teeyaii.github.io/Recruit-Health-Monitor/ responds HTTP 200 and runs the 15-slot demonstration. The repository is currently public. The publication instructions below describe the existing optional workflow, not an outstanding prerequisite.
+
 The single-file static demo lives in **dashboard/index.html**. It runs in mobile Safari without a companion app.
 
 - Shows 15 anonymous simulated slots R01–R15 with three slots per G01–G05.
@@ -33,4 +35,5 @@ The static demo does **not** deliver native BLE-to-server uploading, real multi-
 
 ## Next high-value engineering milestone
 
-Wire existing Android BLE / iOS CoreBluetooth reader callbacks into the existing HTTPS uploader with an explicit one-device-to-one-slot pairing screen. Verify with synthetic fixtures first, and only then with one authorized physical band. Do not claim physical BLE readiness from CI alone.
+The native selection/assignment/uploader integration is implemented in PR #3. See [current setup and blockers](MVP_SETUP.md). Next: choose the live HTTPS host, supply Apple signing access if needed, and validate one authorized physical band. CI alone does not establish physical BLE readiness.
+

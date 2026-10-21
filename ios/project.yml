@@ -10,6 +10,7 @@ targets:
     sources:
       - HeartRateCentral.swift
       - HeartRatePacket.swift
+      - AssignmentRules.swift
       - GatewayUploadClient.swift
       - STEVEGatewayApp.swift
     settings:

@@ -1,0 +1,8 @@
+*
+!server/
+!server/index.js
+!server/contract.js
+!server/package.json
+!dashboard/
+!dashboard/index.html
+!dashboard/live.html

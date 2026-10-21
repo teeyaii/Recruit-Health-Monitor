@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test synthetic BLE packet decoding
         run: |
-          swiftc ios/HeartRatePacket.swift ios/tests/main.swift -o /tmp/steve-packet-tests
+          swiftc ios/HeartRatePacket.swift ios/AssignmentRules.swift ios/tests/main.swift -o /tmp/steve-packet-tests
           /tmp/steve-packet-tests
       - name: Install XcodeGen
         run: brew install xcodegen

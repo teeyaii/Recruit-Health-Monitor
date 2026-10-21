@@ -8,3 +8,10 @@ for (bytes, expected) in fixtures {
     precondition(HeartRatePacket.decode(Data(bytes)) == expected, "BLE packet decoding failed")
 }
 print("8 synthetic BLE packet fixtures passed; no physical BLE test.")
+let used = [("R01", "opaque-01")]
+precondition(AssignmentRules.allows(slot: "R15", device: "opaque-15", used: used))
+precondition(!AssignmentRules.allows(slot: "R01", device: "opaque-02", used: used))
+precondition(!AssignmentRules.allows(slot: "R02", device: "opaque-01", used: used))
+precondition(!AssignmentRules.allows(slot: "R16", device: "opaque-16", used: used))
+precondition(!AssignmentRules.allows(slot: "R02", device: "AA:BB:CC", used: used))
+print("5 assignment fixtures passed.")

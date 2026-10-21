@@ -60,9 +60,8 @@ final class HeartRateCentral: NSObject, ObservableObject, CBCentralManagerDelega
     }
     func assign(_ id: UUID, slot: String, deviceID: String) {
         guard client != nil else { message = "Configure upload first."; return }
-        guard pairs[id] == nil, (1...15).map({ String(format: "R%02d", $0) }).contains(slot),
-              deviceID.range(of: "^[a-zA-Z0-9_-]{4,64}$", options: .regularExpression) != nil,
-              !pairs.values.contains(where: { $0.slot == slot || $0.deviceID == deviceID }) else {
+        guard pairs[id] == nil, AssignmentRules.allows(slot: slot, device: deviceID,
+              used: pairs.values.map { ($0.slot, $0.deviceID) }) else {
             message = "Invalid or duplicate slot/device assignment."; return
         }
         pairs[id] = Pairing(slot: slot, deviceID: deviceID)

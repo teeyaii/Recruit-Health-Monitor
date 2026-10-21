@@ -102,7 +102,7 @@ class MainActivity : Activity() {
   AlertDialog.Builder(this).setTitle("Confirm device → recruit slot").setView(form)
    .setNegativeButton("Cancel",null).setPositiveButton("Assign and connect") { _,_ ->
     val slot = slots.selectedItem.toString(); val id = opaque.text.toString().trim()
-    if (!Regex("[a-zA-Z0-9_-]{4,64}").matches(id) || pairs.values.any { it.slot == slot || it.opaque == id }) {
+    if (!AssignmentRules.allows(slot,id,pairs.values.map { it.slot to it.opaque })) {
      status.text = "Invalid or duplicate slot/device ID"; return@setPositiveButton
     }
     pairs[address] = Pairing(slot,id); connect(address)
