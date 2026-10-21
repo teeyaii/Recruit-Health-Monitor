@@ -32,6 +32,7 @@ class MainActivity : Activity() {
  private lateinit var rows: LinearLayout
  private lateinit var status: TextView
  private lateinit var uploadStatus: TextView
+ private lateinit var connectionTestStatus: TextView
  private lateinit var url: EditText
  private lateinit var token: EditText
  private lateinit var gateway: Spinner
@@ -52,13 +53,18 @@ class MainActivity : Activity() {
      runOnUiThread { uploadStatus.text = message }
     }
     uploader?.shutdown(); uploader = next; token.text.clear()
+    connectionTestStatus.text = "HTTPS gateway test not run"
     status.text = "Configured. Scan, choose device, then assign a provisioned slot."
    } catch (_: Exception) { status.text = "Use an HTTPS origin, G01–G05 and a 32+ character credential" }
   } })
   status = TextView(this); uploadStatus = TextView(this).apply { text = "Upload not configured" }
-  layout.addView(status); layout.addView(uploadStatus)
+  connectionTestStatus = TextView(this).apply { text = "HTTPS gateway test not run" }
+  layout.addView(status); layout.addView(uploadStatus); layout.addView(connectionTestStatus)
   layout.addView(Button(this).apply { text = "Test HTTPS Gateway (no BPM)"; setOnClickListener {
-   uploader?.testConnection() ?: run { uploadStatus.text = "Configure HTTPS and gateway credential first" }
+   if (pairs.isNotEmpty()) { connectionTestStatus.text = "Clear assignments before running the standalone gateway test"; return@setOnClickListener }
+   val sender = uploader ?: run { connectionTestStatus.text = "Configure HTTPS and gateway credential first"; return@setOnClickListener }
+   connectionTestStatus.text = "Testing Gateway -> Render (empty heartbeat; allow free instance to wake)..."
+   sender.testConnection { message -> runOnUiThread { connectionTestStatus.text = message } }
   } })
   layout.addView(Button(this).apply { text = "Scan HR devices (15 seconds)"; setOnClickListener { beginScan() } })
   layout.addView(Button(this).apply { text = "Broad scan nearby BLE (if none found)"; setOnClickListener {
