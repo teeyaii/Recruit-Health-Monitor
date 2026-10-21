@@ -1,5 +1,7 @@
 # Hybrid gateway implementation plan
 
+Historical plan: the native pairing/upload/reconnect and cloud compile milestones below are now implemented in PR #3. Use [MVP_SETUP](MVP_SETUP.md) and the root README for current capabilities and external hosting/signing/physical-testing requirements.
+
 ## Fixed scope
 - 15 anonymous recruit slots R01–R15, up to five gateways G01–G05.
 - Any mix of Android and iOS gateways; each gateway speaks the same JSON API.
@@ -38,3 +40,4 @@ Decision: implement a small native Swift BLE gateway rather than port an entire 
 - Dashboard supports manually entered WBGT context with a 30-minute freshness indicator, without medical risk rules.
 - CI includes API negative tests and 5-gateway synthetic smoke simulation. No field device validation or production deployment claimed.
 - Next gates: UI-assisted physical-device pairing, secure secret injection on signed phone builds, native BLE-to-HTTPS upload, reconnect/background tests, TLS infrastructure, data protection/retention policy and human-led field trials.
+

@@ -29,7 +29,7 @@ function snapshot(){const now=Date.now();
   const state=r?.state==="DISCONNECTED"?"DISCONNECTED":!r?.timestamp?"NO DATA":
     (!gatewayOnline||now-r.timestamp>TTL_MS)?"STALE":"CONNECTED";
   return {id,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
-   stale:state!=="CONNECTED",state,gateway,gatewayOnline,source:r?.source??null};
+   stale:state!=="CONNECTED",state,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
 function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
 // Deliberately synthetic only. Demo cannot run when NODE_ENV=production.

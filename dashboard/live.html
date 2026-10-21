@@ -1,5 +1,6 @@
 <!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>STEVE 1.0 — Live</title><style>
 :root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#111827;color:#f3f4f6}body{margin:0 auto;max-width:1050px;padding:18px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h1{font-size:1.4rem}p,small{color:#b8c4d5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.card{padding:16px;background:#1f2937;border-radius:12px;border-left:5px solid #64748b}.fresh{border-left-color:#38bdf8}.stale{border-left-color:#ef4444}.bpm{font-size:2rem;font-weight:bold}.notice{padding:12px;border:1px solid #64748b;border-radius:8px;margin:12px 0}button,input{padding:11px;border-radius:8px;background:#334155;color:white;border:1px solid #64748b}input{min-width:220px}form{display:flex;gap:8px;flex-wrap:wrap}
+[hidden]{display:none!important}*{box-sizing:border-box}input{max-width:100%}
 </style></head><body>
 <header><h1>STEVE 1.0 — Live</h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
@@ -11,7 +12,7 @@
  <button id="demoStart">เริ่มจำลอง 15 นาย</button>
  <button id="demoDrop">จำลองสัญญาณ R03 ขาด</button>
  <button id="demoDropGateway">ตัด Gateway G03</button>
- <button id="demoRestore">คืนสัญญาณ R03</button>
+ <button id="demoRestore">คืนสัญญาณทั้งหมด</button>
  <button id="demoStop">หยุดจำลอง</button>
 </div>
 <p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div>
