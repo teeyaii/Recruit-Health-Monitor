@@ -30,6 +30,7 @@ struct GatewayHomeView: View {
                     Text(central.uploadStatus).font(.caption)
                     Text(central.bluetoothReady ? "Bluetooth ready" : "Bluetooth unavailable")
                     Button("Test HTTPS Gateway (no BPM)") { central.testServerConnection() }
+                    Text(central.connectionTestStatus).font(.caption)
                     Button("Scan HR devices (15 seconds)") { central.start() }
                     Button("Broad scan nearby BLE (if no HR device appears)") {
                         central.start(allDevices: true)
