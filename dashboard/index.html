@@ -36,6 +36,15 @@ button:hover{filter:brightness(1.1)}input{font:inherit;background:#0d1727;color:
 .card .bpm{font-size:1.85rem;font-weight:800;margin-top:7px;font-variant-numeric:tabular-nums}
 .card .bpm small{font-size:.7rem;font-weight:500;color:#aebdd0}
 .card .detail{font-size:.76rem;color:#a9bbd4;line-height:1.5;margin-top:4px}
+.card.watch{border-left-color:#f1bf67}.card.rest{border-left-color:#fa995d;background:#322a24}.card.critical{border-left-color:#ff5475;background:#3a1d2a}
+.summary-alert{background:#243047;border:1px solid #57708f;padding:13px;border-radius:12px;line-height:1.55;margin:13px 0}
+.summary-alert.critical{background:#3a1d2a;border-color:#f87171}.summary-alert.rest{background:#30251d;border-color:#e5a35b}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.field-grid label{display:flex;flex-direction:column;gap:5px;font-size:.85rem;color:#b9cce1}
+.field-grid input,.field-grid select{width:100%;min-width:0;max-width:none}
+select{font:inherit;background:#0d1727;color:#fff;border:1px solid #4b6584;border-radius:9px;padding:10px;min-height:44px}
+.alert-note{font-size:.76rem;line-height:1.5;color:#f5dca8;margin-top:6px}
+@media(max-width:540px){.field-grid{grid-template-columns:1fr}}
 footer{font-size:.78rem;color:#8ea6c6;line-height:1.6;margin:20px 0}
 @media(max-width:800px){.panels{grid-template-columns:1fr}.roster{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:540px){main{padding:12px}.roster{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gateways{grid-template-columns:repeat(3,minmax(0,1fr))}.stat{padding:10px}.stat b{font-size:1.4rem}.card .bpm{font-size:1.5rem}}
@@ -53,6 +62,7 @@ footer{font-size:.78rem;color:#8ea6c6;line-height:1.6;margin:20px 0}
  <div class="stat"><span class="label">ข้อมูลขาด / เก่า</span><b id="missing">15</b></div>
  <div class="stat"><span class="label">Gateway จำลองออนไลน์</span><b id="gate-count">0/5</b></div>
 </section>
+<section id="alert-summary" class="summary-alert" role="status" aria-live="polite">การแจ้งเตือนเป็นตัวอย่างที่ครูฝึกเลือกด้วยตนเอง ไม่ใช่การประเมินโรคอัตโนมัติ</section>
 <div class="panels">
  <section class="panel">
   <h2>ควบคุมการสาธิต</h2>
@@ -81,6 +91,44 @@ footer{font-size:.78rem;color:#8ea6c6;line-height:1.6;margin:20px 0}
  <h2 id="gateway-heading">Gateway ทั้ง 5 เครื่อง (จำลอง)</h2>
  <div id="gateways" class="gateways"></div>
 </section>
+<section class="panel" aria-labelledby="profile-heading">
+ <h2 id="profile-heading">ข้อมูลทหารฝึกและเหตุแจ้งเตือน (ข้อมูลสมมติเท่านั้น)</h2>
+ <p class="note-small">กรอกเฉพาะรหัสสมมติ ห้ามกรอกชื่อ เลขประจำตัวจริง โรคหรือประวัติสุขภาพจริงในหน้า Demo สาธารณะ ข้อมูลทั้งหมดเก็บแค่ในหน้านี้ หายเมื่อรีเฟรชและไม่ส่งไปเซิร์ฟเวอร์</p>
+ <div class="field-grid">
+  <label>ช่องผู้ฝึก<select id="profile-slot"><option value="R01">R01</option><option value="R02">R02</option><option value="R03">R03</option><option value="R04">R04</option><option value="R05">R05</option><option value="R06">R06</option><option value="R07">R07</option><option value="R08">R08</option><option value="R09">R09</option><option value="R10">R10</option><option value="R11">R11</option><option value="R12">R12</option><option value="R13">R13</option><option value="R14">R14</option><option value="R15">R15</option></select></label>
+  <label>รหัสสมมติ (ไม่ใช่รหัสประจำตัวจริง)<input id="profile-code" maxlength="24" placeholder="DEMO-R01"></label>
+  <label>น้ำหนักจำลอง (กก.)<input id="profile-weight" type="number" min="20" max="250" step="0.1" placeholder="70"></label>
+  <label>ส่วนสูงจำลอง (ซม.)<input id="profile-height" type="number" min="100" max="230" step="0.1" placeholder="175"></label>
+  <label>โรคประจำตัว (ตัวอย่างสมมติ)
+   <select id="profile-condition">
+    <option value="none">ไม่ระบุ / ไม่มีข้อมูล</option>
+    <option value="asthma">หอบหืด (ตัวอย่าง)</option>
+    <option value="diabetes">เบาหวาน (ตัวอย่าง)</option>
+    <option value="heart">โรคหัวใจ (ตัวอย่าง)</option>
+    <option value="other">มีข้อควรประเมินอื่น (ตัวอย่าง)</option>
+   </select>
+  </label>
+  <label>สถานะข้อควรระวังจากผู้ประเมิน
+   <select id="profile-caution">
+    <option value="none">ยังไม่มีข้อควรระวังที่บันทึก</option>
+    <option value="watch">ได้รับคำแนะนำให้เฝ้าระวัง (จำลอง)</option>
+   </select>
+  </label>
+  <label>เหตุที่ผู้สังเกตพบ (ข้อมูลจำลอง)
+   <select id="profile-observation">
+    <option value="none">ยังไม่มีการแจ้งเหตุ</option>
+    <option value="dizzy">เวียนศีรษะ / อ่อนแรง / คลื่นไส้</option>
+    <option value="confused">สับสน / พูดไม่ชัด / หมดสติ / ชัก</option>
+   </select>
+  </label>
+ </div>
+ <div class="controls" style="margin-top:13px">
+  <button id="profile-save" class="primary" type="button">บันทึกข้อมูลสมมติและเหตุแจ้งเตือน</button>
+  <button id="profile-replace" class="danger" type="button">เปลี่ยนคนในช่องนี้ / ล้างค่าก่อนหน้า</button>
+ </div>
+ <p id="profile-message" class="note-small" role="status">แก้ไขข้อมูลของแต่ละช่องได้ตลอด โดยไม่มีการจัดเก็บประวัติจริง</p>
+ <p class="note-small">อาการผิดปกติที่สังเกตได้สำคัญกว่าค่าชีพจรเดี่ยว ระบบนี้ไม่ใช้ BMI หรือโรคประจำตัวเพื่อคำนวณว่าใครปลอดภัย/อันตราย และไม่ใช้เกณฑ์ BPM ทางการแพทย์ที่ยังไม่ผ่านผู้เชี่ยวชาญ</p>
+</section>
 <div class="roster-heading"><h2>ชีพจรทหารใหม่ R01–R15 (จำลอง)</h2><span class="label">ข้อมูลใหม่ทุก 3 วินาที • ข้อมูลเก่าเมื่อเกิน 15 วินาที</span></div>
 <section id="roster" class="roster" aria-label="ข้อมูลชีพจรจำลอง 15 นาย"></section>
 <footer>STEVE 1.0 • Standalone offline demo • ใช้งานได้ผ่าน Safari บน iPhone หรือเบราว์เซอร์อื่นโดยไม่ต้องติดตั้งแอป • ไม่ใช้ข้อมูลบุคคล • ไม่เชื่อมต่อ BLE/API</footer>
@@ -90,10 +138,20 @@ footer{font-size:.78rem;color:#8ea6c6;line-height:1.6;margin:20px 0}
 const STALE_MS=15000;
 const SLOT_COUNT=15;
 const ids=Array.from({length:SLOT_COUNT},(_,i)=>"R"+String(i+1).padStart(2,"0"));
-const slots=ids.map((id,i)=>({id,gw:"G0"+(Math.floor(i/3)+1),hr:null,ts:null}));
+const newProfile=id=>({code:"DEMO-"+id,weight:null,height:null,condition:"none",caution:"none",observation:"none"});
+const slots=ids.map((id,i)=>({id,gw:"G0"+(Math.floor(i/3)+1),hr:null,ts:null,profile:newProfile(id)}));
 const history=[];
 const byId=id=>document.getElementById(id);
 let running=false,round=0,droppedR03=false,droppedG03=false,wbgt=null,wbgtAt=null;
+const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const conditionLabel={none:"ไม่ระบุ",asthma:"หอบหืด (สมมติ)",diabetes:"เบาหวาน (สมมติ)",heart:"โรคหัวใจ (สมมติ)",other:"มีข้อควรประเมิน (สมมติ)"};
+function alertFor(slot){
+ const p=slot.profile;
+ if(p.observation==="confused")return {level:"critical",title:"ฉุกเฉิน — ผู้สังเกตพบอาการสำคัญ",detail:"หยุดกิจกรรม เรียกทีมแพทย์/1669 และเริ่มลดความร้อนตามแผนฉุกเฉิน อย่ารอค่า BPM"};
+ if(p.observation==="dizzy")return {level:"rest",title:"หยุดกิจกรรมและประเมิน",detail:"พาไปที่ร่ม/ที่เย็น ให้เจ้าหน้าที่ประเมิน และมีผู้เฝ้าดูอาการ อย่าปล่อยลำพัง"};
+ if(p.caution==="watch")return {level:"watch",title:"เฝ้าระวังตามผู้ประเมิน",detail:"ปรับกิจกรรมและทำตามคำแนะนำบุคลากรทางการแพทย์ ไม่ถือว่าเป็นการวินิจฉัย"};
+ return null;
+}
 function fresh(slot,now){return slot.ts!==null && now-slot.ts<=STALE_MS;}
 function receive(slot,hr,now){
  if(!Number.isInteger(hr)||hr<25||hr>240)return;
@@ -120,6 +178,16 @@ function render(){
  const n=slots.filter(s=>fresh(s,now)).length;
  byId("fresh").textContent=n+"/15";
  byId("missing").textContent=String(15-n);
+ const flagged=slots.map(s=>({id:s.id,alert:alertFor(s)})).filter(x=>x.alert);
+ const urgent=flagged.find(x=>x.alert.level==="critical");
+ const rest=flagged.find(x=>x.alert.level==="rest");
+ const top=urgent||rest;
+ const banner=byId("alert-summary");
+ banner.className="summary-alert"+(urgent?" critical":rest?" rest":"");
+ banner.textContent=top
+  ?"เหตุจำลองต้องดำเนินการ: "+flagged.map(x=>x.id+" "+x.alert.title).join(" • ")+" — "+top.alert.detail
+  :flagged.length?"รายการเฝ้าระวังจำลอง: "+flagged.map(x=>x.id+" "+x.alert.title).join(" • ")
+  :"ยังไม่มีเหตุแจ้งเตือนจากผู้สังเกต (ไม่ใช่การรับรองว่าปลอดภัย) • ตัวอย่างนี้ไม่มีการวินิจฉัยอัตโนมัติ";
  const status=Array.from({length:5},(_,i)=>{
   const id="G0"+(i+1),assigned=slots.filter(s=>s.gw===id);
   const online=assigned.some(s=>fresh(s,now));
@@ -130,7 +198,9 @@ function render(){
  byId("roster").innerHTML=slots.map(s=>{
   const online=fresh(s,now);
   const age=s.ts===null?'ไม่เคยรับข้อมูล':Math.max(0,Math.round((now-s.ts)/1000))+' วินาทีที่แล้ว';
-  return '<article class="card '+(online?'':'stale')+'"><div class="id"><span>'+s.id+'</span><span class="tag">'+(online?'SIMULATED':'STALE')+'</span></div><div class="bpm">'+(online?s.hr:'—')+' <small>'+(online?'BPM':'ไม่ทราบค่า')+'</small></div><div class="detail">'+s.gw+' • '+age+'</div></article>';
+  const alert=alertFor(s),p=s.profile;
+  const detail=[p.weight===null?"":p.weight+" กก.",p.height===null?"":p.height+" ซม.",conditionLabel[p.condition]||"ไม่ระบุ"].filter(Boolean).join(" • ");
+  return '<article class="card '+(alert?alert.level:online?'':'stale')+'"><div class="id"><span>'+s.id+'</span><span class="tag">'+(alert?escapeHtml(alert.title):online?'SIMULATED':'STALE')+'</span></div><div class="detail">'+escapeHtml(p.code)+'</div><div class="bpm">'+(online?s.hr:'—')+' <small>'+(online?'BPM':'ไม่ทราบค่า')+'</small></div><div class="detail">'+s.gw+' • '+age+'</div><div class="detail">'+escapeHtml(detail)+'</div>'+(alert?'<div class="alert-note">'+escapeHtml(alert.detail)+'</div>':'')+'</article>';
  }).join("");
  if(wbgtAt!==null){
   const age=Math.round((now-wbgtAt)/60000),stale=age>=30;
@@ -138,6 +208,61 @@ function render(){
  }
 }
 function describe(message){byId("scenario").textContent=message;}
+function chosenSlot(){return slots.find(s=>s.id===byId("profile-slot").value);}
+function loadProfile(){
+ const slot=chosenSlot();if(!slot)return;
+ const p=slot.profile;
+ byId("profile-code").value=p.code;
+ byId("profile-weight").value=p.weight===null?"":String(p.weight);
+ byId("profile-height").value=p.height===null?"":String(p.height);
+ byId("profile-condition").value=p.condition;
+ byId("profile-caution").value=p.caution;
+ byId("profile-observation").value=p.observation;
+ byId("profile-message").textContent="กำลังแก้ไข "+slot.id+" (ตัวอย่างสมมติ ไม่ส่งข้อมูลไป Server)";
+}
+function readExampleNumber(id,min,max){
+ const raw=String(byId(id).value).trim();
+ if(!raw)return null;
+ const n=Number(raw);
+ if(!Number.isFinite(n)||n<min||n>max)return NaN;
+ return Math.round(n*10)/10;
+}
+byId("profile-slot").addEventListener("change",loadProfile);
+byId("profile-save").addEventListener("click",()=>{
+ const slot=chosenSlot();if(!slot)return;
+ const code=String(byId("profile-code").value).trim();
+ const weight=readExampleNumber("profile-weight",20,250);
+ const height=readExampleNumber("profile-height",100,230);
+ const condition=byId("profile-condition").value,caution=byId("profile-caution").value,observation=byId("profile-observation").value;
+ if(!/^DEMO-[A-Za-z0-9_-]{1,19}$/.test(code)||Number.isNaN(weight)||Number.isNaN(height)
+  ||!Object.hasOwn(conditionLabel,condition)||!["none","watch"].includes(caution)||!["none","dizzy","confused"].includes(observation)){
+   byId("profile-message").textContent="กรอกเฉพาะรหัสสมมติ DEMO-..., น้ำหนัก 20–250 กก. และส่วนสูง 100–230 ซม.";return;
+ }
+ const isNewOccupant=slot.profile.code!==code;
+ if(isNewOccupant){
+  slot.hr=null;slot.ts=null;
+  for(let i=history.length-1;i>=0;i--)if(history[i][1]===slot.id)history.splice(i,1);
+  // A new code means a new occupant; reset previous observation and medical restrictions.
+  // The operator must select a new person's reports after confirming the reassignment.
+  byId("profile-caution").value="none";
+  byId("profile-observation").value="none";
+ }
+ slot.profile={code,weight,height,condition:isNewOccupant?"none":condition,
+  caution:isNewOccupant?"none":caution,observation:isNewOccupant?"none":observation};
+ if(isNewOccupant)loadProfile();
+ byId("profile-message").textContent="บันทึกข้อมูลสมมติ "+slot.id+(isNewOccupant?" (เปลี่ยนผู้ฝึก: ล้างค่าชีพจรและเหตุเดิม กรุณาประเมินข้อควรระวังใหม่)":" • "+(alertFor(slot)?.title||"ไม่มีเหตุที่ผู้สังเกตเลือก"));
+ render();
+});
+byId("profile-replace").addEventListener("click",()=>{
+ const slot=chosenSlot();if(!slot)return;
+ slot.hr=null;slot.ts=null;slot.profile=newProfile(slot.id);
+ for(let i=history.length-1;i>=0;i--)if(history[i][1]===slot.id)history.splice(i,1);
+ loadProfile();
+ byId("profile-code").value="DEMO-NEW-"+slot.id;
+ byId("profile-message").textContent=slot.id+" ล้างคนเดิม ชีพจร/ข้อควรระวัง/เหตุแจ้งเตือนเก่าหมดแล้ว; กรอกรหัส DEMO ใหม่แล้วบันทึก";
+ render();
+});
+byId("profile-slot").value="R01";loadProfile();
 byId("toggle").addEventListener("click",()=>{
  running=!running;
  byId("toggle").textContent=running?"หยุดข้อมูลจำลอง":"เริ่มจำลอง";
@@ -155,7 +280,7 @@ byId("restore").addEventListener("click",()=>{
 });
 byId("reset").addEventListener("click",()=>{
  running=false;round=0;droppedR03=false;droppedG03=false;wbgt=null;wbgtAt=null;
- slots.forEach(s=>{s.hr=null;s.ts=null;});history.length=0;byId("wbgt").value="";
+ slots.forEach(s=>{s.hr=null;s.ts=null;s.profile=newProfile(s.id);});history.length=0;byId("wbgt").value="";loadProfile();
  byId("wbgt-state").textContent="ยังไม่มีค่า WBGT จำลอง";
  byId("toggle").textContent="เริ่มจำลอง";describe("รีเซ็ตข้อมูลสมมติทั้งหมดแล้ว");render();
 });
