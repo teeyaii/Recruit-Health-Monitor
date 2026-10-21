@@ -9,6 +9,8 @@ targets:
     platform: iOS
     sources:
       - HeartRateCentral.swift
+      - HeartRatePacket.swift
+      - AssignmentRules.swift
       - GatewayUploadClient.swift
       - STEVEGatewayApp.swift
     settings:
@@ -22,3 +24,4 @@ targets:
       properties:
         NSBluetoothAlwaysUsageDescription: "STEVE uses Bluetooth to read a heart rate broadcaster when the operator starts a scan."
         UILaunchScreen: {}
+

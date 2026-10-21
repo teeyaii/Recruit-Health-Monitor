@@ -1,6 +1,6 @@
 import http from "node:http";
 import { randomUUID, randomBytes } from "node:crypto";
-import { gatewayForBearer, validViewerToken, slotIsAuthorized, strictMode } from "./contract.js";
+import { gatewayForBearer, validViewerToken, slotIsAuthorized, strictMode, provisionedGateway } from "./contract.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -8,13 +8,14 @@ import path from "node:path";
 const PORT=Number(process.env.PORT||8080);
 const TTL_MS=15000;
 const DEMO_ENABLED=process.env.STEVE_DEMO_MODE==="1" && process.env.NODE_ENV!=="production";
-const MAX_AGE_MS=60000;
+const MAX_AGE_MS=15000;
+const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && process.env.NODE_ENV!=="production");
 const recruits=new Map();
 const clients=new Set();
 const sessions=new Map();
 const failedLogins=new Map();
 let conditions={wbgtC:null,timestamp:null,source:"not recorded"};
-let demoActive=false,demoDropR03=false,demoRound=0,demoTimer=null;
+let demoActive=false,demoDropR03=false,demoDropG03=false,demoRound=0,demoTimer=null;
 const lastByGateway=new Map();
 const SESSION_MS=8*60*60*1000;
 const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
@@ -22,9 +23,14 @@ const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../da
 function viewer(req){const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!cookie)return false;const expiry=sessions.get(cookie);if(!expiry)return false;if(expiry<Date.now()){sessions.delete(cookie);return false;}return true;}
 function send(res,code,data){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(data));}
 function snapshot(){const now=Date.now();
- for(const [id,reading] of recruits)if(now-reading.timestamp>MAX_AGE_MS)recruits.delete(id);
- return Array.from({length:15},(_,i)=>{const id="R"+String(i+1).padStart(2,"0");const r=recruits.get(id);
-return {id,hr:r&&now-r.timestamp<=TTL_MS?r.hr:null,timestamp:r?.timestamp??null,stale:!r||now-r.timestamp>TTL_MS,gateway:r?.gateway??null,source:r?.source??null};});}
+ return Array.from({length:15},(_,i)=>{
+  const id="R"+String(i+1).padStart(2,"0"),r=recruits.get(id),gateway=r?.gateway??provisionedGateway(id);
+  const gatewayOnline=gateway!=null && now-(lastByGateway.get(gateway)??0)<=TTL_MS;
+  const state=r?.state==="DISCONNECTED"?"DISCONNECTED":!r?.timestamp?"NO DATA":
+    (!gatewayOnline||now-r.timestamp>TTL_MS)?"STALE":"CONNECTED";
+  return {id,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
+   stale:state!=="CONNECTED",state,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
+ });}
 function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
 // Deliberately synthetic only. Demo cannot run when NODE_ENV=production.
 function demoTick(){
@@ -33,21 +39,23 @@ function demoTick(){
  for(let i=0;i<15;i++){
   const id="R"+String(i+1).padStart(2,"0");
   if(demoDropR03&&id==="R03")continue;
+  if(demoDropG03&&Math.floor(i/3)===2)continue;
   const gateway="G0"+(Math.floor(i/3)+1);
   const hr=72+((i*11+demoRound*3)%41);
-  recruits.set(id,{hr,timestamp:now,gateway,source:"SIMULATED"});
+  recruits.set(id,{hr,timestamp:now,gateway,source:"SIMULATED",state:"CONNECTED",eventAt:now});
   lastByGateway.set(gateway,now);
  }
  demoRound++;publish();
 }
 function demoControl(action){
  if(action==="start"){
-  demoActive=true;demoDropR03=false;demoTick();
+  demoActive=true;demoDropR03=false;demoDropG03=false;demoTick();
   if(!demoTimer)demoTimer=setInterval(demoTick,3000);
  }else if(action==="stop"){
   demoActive=false;if(demoTimer)clearInterval(demoTimer);demoTimer=null;publish();
  }else if(action==="drop" && demoActive){demoDropR03=true;}
- else if(action==="restore" && demoActive){demoDropR03=false;demoTick();}
+ else if(action==="drop-gateway" && demoActive){demoDropG03=true;}
+ else if(action==="restore" && demoActive){demoDropR03=false;demoDropG03=false;demoTick();}
  else return false;
  return true;
 }
@@ -85,14 +93,14 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==="GET"&&url.pathname==="/"){res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(dashboard));return;}
  if(DEMO_ENABLED && url.pathname==="/api/demo" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"viewer authorization required"});return;}
-  send(res,200,{enabled:true,active:demoActive,droppedR03:demoDropR03,source:"SIMULATED"});return;
+  send(res,200,{enabled:true,active:demoActive,droppedR03:demoDropR03,droppedG03:demoDropG03,source:"SIMULATED"});return;
  }
  if(DEMO_ENABLED && url.pathname==="/api/demo" && req.method==="POST"){
   if(!isViewer){send(res,403,{error:"viewer authorization required"});return;}
   let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>512){send(res,413,{error:"too large"});return;}}
   let data;try{data=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
   if(!demoControl(data?.action)){send(res,422,{error:"invalid demo action"});return;}
-  send(res,200,{ok:true,active:demoActive,droppedR03:demoDropR03,source:"SIMULATED"});return;
+  send(res,200,{ok:true,active:demoActive,droppedR03:demoDropR03,droppedG03:demoDropG03,source:"SIMULATED"});return;
  }
  if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}
@@ -116,16 +124,19 @@ const server=http.createServer(async(req,res)=>{
   let body;try{body=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
   if(!body||typeof body.gateway!=="string"||!/^G0[1-5]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>15){send(res,422,{error:"invalid gateway or batch"});return;}
   if(strictMode&&gatewayId!==body.gateway){send(res,403,{error:"gateway identity mismatch"});return;}
+  if(SYNTHETIC ? body.source!=="SIMULATED" : body.source!=null && body.source!=="GATEWAY"){send(res,422,{error:"source does not match server mode"});return;}
   const now=Date.now();let accepted=0;
   const seen=new Set();
   for(const item of body.readings){
-   if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)||!Number.isInteger(item.hr)||item.hr<25||item.hr>240||!Number.isFinite(item.timestamp)||item.timestamp>now+5000||item.timestamp<now-MAX_AGE_MS)continue;
+   if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)|| (item.state!=="DISCONNECTED" && (!Number.isInteger(item.hr)||item.hr<25||item.hr>240))||!Number.isSafeInteger(item.timestamp)||item.timestamp>now+1000||item.timestamp<now-MAX_AGE_MS)continue;
    if(!slotIsAuthorized(body.gateway,item))continue;
    if(seen.has(item.id))continue;
    seen.add(item.id);
-   const prior=recruits.get(item.id);if(prior&&prior.timestamp>=item.timestamp)continue;
+   const prior=recruits.get(item.id);if(prior&&(prior.eventAt??prior.timestamp)>=item.timestamp)continue;
    if(prior && prior.gateway!==body.gateway && now-prior.timestamp<=TTL_MS)continue;
-   recruits.set(item.id,{hr:item.hr,timestamp:item.timestamp,gateway:body.gateway,source:"GATEWAY"});accepted++;
+   const disconnected=item.state==="DISCONNECTED";
+   recruits.set(item.id,{hr:disconnected?null:item.hr,timestamp:disconnected?(prior?.timestamp??null):item.timestamp,
+    eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});accepted++;
   }
   lastByGateway.set(body.gateway,now);
   if(accepted)publish();send(res,200,{accepted,received:body.readings.length,request_id:randomUUID()});return;
@@ -134,3 +145,4 @@ const server=http.createServer(async(req,res)=>{
 });
 setInterval(publish,5000).unref();
 server.listen(PORT,()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
+

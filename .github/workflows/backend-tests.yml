@@ -29,6 +29,7 @@ jobs:
       - name: Simulate 5 gateways and 15 recruits
         env:
           RECRUIT_MONITOR_TOKEN: ci-only-long-random-placeholder-token-12345
+          STEVE_SYNTHETIC_MODE: '1'
           PORT: '18080'
           MONITOR_URL: http://127.0.0.1:18080
         run: |
@@ -40,3 +41,4 @@ jobs:
             sleep 1
           done
           node server/simulate-five-gateways.js
+

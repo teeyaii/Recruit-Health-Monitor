@@ -1,92 +1,56 @@
 # STEVE 1.0
 
-## iPhone-first 10-day MVP (synthetic demo)
+**Smart Training & Exercise Vital-sign Evaluation** — foreground Android/iPhone BLE gateway prototype for 15 anonymous slots (R01–R15) and five gateways (G01–G05).
 
-**Next practical output:** a one-file mobile-friendly, offline STEVE demo with 15 simulated recruits, 5 simulated gateways, start/stop, disconnect R03/G03, restore, manual **synthetic** WBGT and sample CSV. No backend, Bluetooth equipment or private data is required to view this offline demonstration.
+[Open the iPhone demonstration](https://teeyaii.github.io/Recruit-Health-Monitor/) · [Phone setup](docs/MVP_SETUP.md) · [API](server/README.md) · [Hardware validation](TEST_PLAN.md)
 
-- Source: [dashboard/index.html](dashboard/index.html)
-- One-time manual GitHub Pages deployment: [iPhone demo guide](docs/DEMO_IPHONE.md)
-- Automatic checks: server/static-demo.test.js, Android compile, iOS simulator compile and backend integration.
-- **Only the demo file can be published** via the opt-in GitHub Pages workflow; this may make the static demo public even if the repository is private. No live deployment has been claimed.
+The published demonstration uses **SIMULATED** data only. Its existing design is preserved. Open it in iPhone Safari and press **เริ่มจำลอง**. No app, band, or backend is required.
 
+STEVE is not a clinically validated medical device or heat-injury detector. Missing measurements are unknown, never zero or evidence of safety.
 
-**Smart Training & Exercise Vital-sign Evaluation** — prototype hybrid Android/iPhone gateway and centralized heart-rate dashboard for 15 pseudonymous recruit slots (R01–R15) and five gateways (G01–G05).
+## Implemented
 
-> STEVE 1.0 is a software prototype, **not** a medical device or heat-injury detector. Never treat missing measurements as zero or as evidence of safety. Continue direct human observation, WBGT/heat controls, rest, hydration and emergency procedures.
+- Android Kotlin and iOS CoreBluetooth: scan standard 180D devices, select one, explicitly assign a provisioned slot and opaque device ID, subscribe to 2A37 notifications, decode 8/16-bit BPM, and upload to HTTPS.
+- Runtime gateway URL/G01–G05/credential configuration. Credentials and pairings are memory-only.
+- Duplicate local slot/device rejection; server-side slot/device/gateway enforcement. Discovery order never identifies a recruit.
+- Three controlled reconnect attempts per pairing session, explicit Retry, 12-second connection/subscription timeout. Foreground operation only: leaving the app disconnects devices.
+- Bounded upload work, at most three attempts with original timestamps, stale queue expiry, and acknowledgement checking. No replay of offline history as fresh data.
+- Live dashboard SSE updates, NO DATA / STALE / DISCONNECTED states, gateway connectivity, last measurement time, and manual WBGT.
+- Backend drops duplicate/older timestamps and measurements older than 15 seconds. Disconnect events clear current BPM without falsifying the last measurement timestamp.
+- Strict viewer/gateway credentials, runtime provisioning, in-memory data only.
+- Synthetic HTTP → backend → SSE → dashboard integration test covering all 15 slots and five gateways, failures, recovery and incorrect assignments.
+- GitHub Actions Android tests/debug APK artifact and hosted macOS iOS simulator build plus Swift packet/assignment fixtures.
+- Container hosting files. **No live backend has been deployed.**
 
-## Current verified scope
-- Node.js authenticated ingest API, 15-slot snapshots, SSE dashboard, five-gateway status and duplicate active-slot guard. Backend GitHub Actions tests passed on 21 October 2026.
-- Android BLE HR reader prototype; Android APK compiled previously, but no Xiaomi hardware validation.
-- iOS CoreBluetooth Swift reader prototype; **not yet built or installed**.
-- Gateway simulator and browser demo are synthetic; no real band or production deployment verified.
-- **Implemented in this branch (source only):** separate gateway/viewer credentials, runtime slot/device provisioning validation, bounded login sessions and throttling, manual WBGT context (not a medical alarm), and standalone Android/iOS HTTPS upload helpers. Native BLE readers are **not wired** to these helpers and no hardware/production deployment has been verified.
-- **Not implemented yet:** native pairing UI, BLE-to-upload wiring, production key distribution, durable history, tested reconnect/background operation and real-world field validation.
+## Verification boundaries
 
-## Quick start on a computer or cloud runner
+Native compilation and synthetic tests do not validate physical Bluetooth, Xiaomi firmware compatibility, background reliability, multi-band capacity, or medical suitability. The iOS simulator build is unsigned and cannot be installed on an iPhone. See [setup](docs/MVP_SETUP.md) for signing and hosting requirements.
+
+The repository's existing main and PRs #1/#2 were inspected before implementation. Existing backend tests and native compile workflows passed; the deployed Pages URL returned HTTP 200 and the demo reached 15/15 in a narrow browser view. Current development results belong to PR #3 and its Actions runs.
+
+## Synthetic backend demo
+
+With Node.js 22 in a trusted temporary/cloud development environment:
+
 ```sh
-cd server
-RECRUIT_MONITOR_TOKEN=replace-with-a-random-32-plus-character-secret npm start
+export RECRUIT_MONITOR_TOKEN='choose-a-random-32-plus-character-test-secret'
+export STEVE_DEMO_MODE=1
+node server/index.js
 ```
-Open `http://localhost:8080/live` and log in with the token. This localhost example is **only for isolated development**; use HTTPS, distinct gateway/viewer credentials, secure cookie, rate limits and retention policy before deployment with real data.
 
-In another terminal run `RECRUIT_MONITOR_TOKEN=... node server/simulate-five-gateways.js` from repository root. Never commit credentials.
+Open `http://localhost:8080/live`, log in with that test secret, and use the simulation buttons. R03 and G03 loss are supported; Restore resumes updates. A remote server must use HTTPS. Do not put real data into this mode.
 
-## Project files
-- [Hybrid plan](docs/HYBRID_PLAN.md)
-- [iOS prototype](ios/README.md)
-- [Android source](android/app/src/main/java/org/recruit/monitor/MainActivity.kt)
-- [Live dashboard](dashboard/live.html)
-- [Simulation](server/simulate-five-gateways.js)
-- [Field test plan](TEST_PLAN.md)
+For the external five-gateway simulator, start the server with `STEVE_SYNTHETIC_MODE=1` and use the same development token to run `node server/simulate-five-gateways.js`. All its measurements are labeled SIMULATED. Synthetic-mode ingest rejects LIVE source packets; live servers reject SIMULATED packets.
 
-No third-party code has been copied into STEVE 1.0; external repositories are credited as architectural references in the hybrid plan.
+Run `cd server && npm test`. No external packages are required by the backend.
 
+## Continue from iPhone
 
-## Secure synthetic integration protocol (development / test)
+1. Use the [public synthetic demo](https://teeyaii.github.io/Recruit-Health-Monitor/) now.
+2. In GitHub → Actions, inspect **STEVE Android compile (no BLE device)** and **STEVE iOS simulator build (unsigned)**. Android runs include a debug APK artifact for later authorized Android testing.
+3. Choose an existing HTTPS container host and provision runtime credentials/mappings privately using [MVP_SETUP](docs/MVP_SETUP.md). No paid account is created by this project.
+4. Supply Apple signing access through a trusted hosted macOS build service if native iPhone installation is needed. No personally owned Mac is required.
+5. Validate one physical band, then multiple bands, before field use.
 
-The authenticated contract is \`POST /api/ingest\` with a per-gateway bearer credential, for example:
+No third-party source has been copied. Compatibility sources are recorded in [BLE_COMPATIBILITY](docs/BLE_COMPATIBILITY.md).
 
-\`\`\`json
-{"gateway":"G01","readings":[{"id":"R01","device_id":"synthetic-device-01","hr":83,"timestamp":1792587600000}]}
-\`\`\`
-
-\`timestamp\` must be an up-to-date Unix **milliseconds** timestamp; the example above is schematic, not a live measurement. The server rejects stale/future or implausible values and never turns missing data into 0. \`device_id\` is a random, opaque local pairing ID, **not** a recruit name or a MAC address. Provision unique devices and slots separately. The approved pairing relationship is set on the server; clients cannot self-assign an arbitrary slot.
-
-Strict mode (required for \`NODE_ENV=production\`) reads secrets from runtime environment only:
-
-- \`STEVE_VIEWER_TOKEN\`: secret for Dashboard login, 32+ characters.
-- \`STEVE_GATEWAY_TOKENS_JSON\`: e.g. \`{"G01":"<separate-32-plus-character-random-secret>"}\`. Each Gateway has a **different** credential.
-- \`STEVE_SLOT_MAP_JSON\`: e.g. \`{"G01":{"R01":"synthetic-device-01"}}\`. Must contain unique slots and device IDs.
-- \`COOKIE_SECURE=1\`: required in production. Deploy behind HTTPS/TLS termination and restrict ingress.
-- \`NODE_ENV=production\`: fails closed without all the above.
-
-For standalone **synthetic** developer tests only, \`RECRUIT_MONITOR_TOKEN\` enables legacy shared-token mode; never deploy it in production or use it for personnel data.
-
-The Dashboard viewer cookie cannot write to ingest. Gateways cannot edit operator context. \`POST /api/context\` is viewer-only and accepts \`{"wbgtC":29.5}\` as **manually measured** WBGT in Celsius. \`GET /api/context\` reports missing or stale after 30 minutes; this does not assess heat injury. All data is kept only in volatile server memory and disappears on restart. No medical names, BLE identifiers, identifiable assignments or secrets may be committed.
-
-Android \`GatewayUploader.kt\` and iOS \`GatewayUploadClient.swift\` are **unconnected transport building blocks** until an operator pairing UI and signed mobile builds exist. They intentionally do not store credentials or upload without explicit runtime setup. Continue direct human supervision, WBGT procedures and emergency protocols.
-
-Run synthetic checks with \`cd server && npm test\`; the GitHub workflow also runs the simulated 5-gateway / 15-slot smoke test. Hardware BLE, signed iOS app, lock-screen resilience and clinical safety are **not** covered by CI.
-
-
-## 10-day demonstrator: STEVE operator live simulation
-
-**MVP focus:** show G01–G05 delivering fake BPM to 15 anonymous R-slots on a mobile-friendly dashboard. Hardware pairing, medical alarm logic and operational security hardening are later gates.
-
-With Node.js 22+ in a trusted development environment:
-
-\`\`\`sh
-cd server
-RECRUIT_MONITOR_TOKEN=demo-only-long-random-token-not-for-production STEVE_DEMO_MODE=1 npm start
-\`\`\`
-
-Open \`http://localhost:8080/live\`, sign in with the same demo-only token, then use:
-- **เริ่มจำลอง 15 นาย** to inject explicitly labeled fake measurements for R01–R15.
-- **จำลองสัญญาณ R03 ขาด** to freeze R03, which must become stale after 15 seconds while the other slots continue.
-- **คืนสัญญาณ R03** to resume the stream.
-- **หยุดจำลอง** to end updates; all old readings must become stale.
-- Enter a manually measured WBGT via the dashboard when testing operator workflow (use synthetic values for demos).
-
-Enable \`STEVE_DEMO_MODE=1\` only in an isolated test environment; demo commands are disabled under \`NODE_ENV=production\`. An iPhone can view the dashboard **after** a server is hosted over a reachable HTTPS URL. This repository does not supply a live hosted URL. A standalone synthetic-only HTML demo also exists at \`dashboard/index.html\`.
-
-Before showing with actual wearables: complete mobile app-to-API wiring, human-confirmed pairing, physical BLE reconnection/range tests, and separate handling and consent for real data. **No actual BLE or real medical measurements were used for the demo or CI.**

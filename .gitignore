@@ -1,0 +1,10 @@
+.env
+.env.*
+*.p12
+*.mobileprovision
+*.key
+android/.gradle/
+android/**/build/
+ios/*.xcodeproj/
+ios/Info.plist
+node_modules/

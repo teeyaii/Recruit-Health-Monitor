@@ -1,10 +1,8 @@
-# iOS gateway proof-of-concept
+# iOS STEVE gateway
 
-Swift CoreBluetooth source prototype. The code scans for standard BLE Heart Rate Service (0x180D), connects, discovers measurement characteristic (0x2A37), and receives notifications. No Xiaomi hardware has been tested.
+The SwiftUI app scans standard BLE Heart Rate Service 180D, lists devices without auto-connecting, and requires explicit R-slot/opaque-device-ID assignment before subscribing to 2A37. It uploads via the shared HTTPS contract, with bounded retry/reconnection and stale-state display.
 
-To run on an iPhone, create an iOS SwiftUI app in Xcode, add `HeartRateCentral.swift` to the target, set `NSBluetoothAlwaysUsageDescription` in Info.plist, and call `start()` from the UI. iOS app signing/build requires a macOS/Xcode environment or compatible hosted build service; GitHub alone does not install an iOS app onto a phone.
+GitHub Actions generates the project with XcodeGen, executes parser/assignment fixtures, and compiles on a hosted macOS runner. This is an **unsigned simulator build**, not an installable iPhone app and not a Bluetooth test.
 
-This is **not** an operational gateway yet: no pairing/identity map, backend upload, reconnect, background restoration, or verified multi-band limit. A single iPhone cannot validate multiple Xiaomi bands without the bands.
+For phone setup and the signing path without a personally owned Mac, see [MVP_SETUP](../docs/MVP_SETUP.md). The runtime URL, gateway credential and pairings are held only in memory. Stop/clear and re-enter them after app restart. Keep the app foreground; background collection/restoration is deferred.
 
-
-GatewayUploadClient.swift is an HTTPS-only transport building block. Provision its URL, gateway credential and pseudonymous slot/device binding at runtime; the iOS HeartRateCentral reader is NOT yet wired to it. No Xcode project, signing, install, or physical BLE validation is claimed. Never put bearer credentials or names in source code.
