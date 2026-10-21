@@ -46,7 +46,25 @@ if (strictMode) {
 }
 if (env.NODE_ENV==="production" && env.COOKIE_SECURE!=="1")
   throw Error("Production requires COOKIE_SECURE=1 and TLS termination");
-export function validViewerToken(value) {return secureEquals(value,viewerToken);}
+// Equal capabilities for trainer + medical operator; distinct secrets permit
+// attribution. Existing viewer token remains a legacy full operator login.
+const operatorTokens=new Map();
+if(env.STEVE_TRAINER_TOKEN || env.STEVE_MEDIC_TOKEN){
+  if(!strictMode)throw Error("Operator credentials require strict production-style credentials");
+  const values=[["trainer",env.STEVE_TRAINER_TOKEN],["medic",env.STEVE_MEDIC_TOKEN]];
+  const reserved=new Set([viewerToken,...gatewayTokens.values()]);
+  for(const [role,token] of values){
+    if(typeof token!=="string"||token.length<32||reserved.has(token))
+      throw Error("Separate, unique 32+ character trainer and medic credentials required");
+    reserved.add(token);operatorTokens.set(role,token);
+  }
+}
+export function viewerRoleForToken(value) {
+  if(secureEquals(value,viewerToken))return "legacy";
+  for(const [role,token] of operatorTokens)if(secureEquals(value,token))return role;
+  return null;
+}
+export function validViewerToken(value) {return viewerRoleForToken(value)!==null;}
 export function gatewayForBearer(req) {
   const raw=req.headers.authorization || "";
   if (!raw.startsWith("Bearer ")) return null;
