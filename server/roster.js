@@ -71,7 +71,9 @@ export class RosterStore {
   if(p.paused)problem(409,"slot paused; verify new band then resume");
   const code=validateCode(input?.code);
   if(p.code!==null&&p.code!==code)problem(409,"use Replace to change occupant");
-  if(!restrictions.has(input.restriction)||!observations.has(input.observation))problem(422,"invalid restriction or observation");
+  if(slotIDs.some(other=>other!==id&&this.data.slots[other].code===code))
+   problem(409,"anonymous code already active on another slot");
+  if(!restrictions.has(input?.restriction)||!observations.has(input?.observation))problem(422,"invalid restriction or observation");
   const observation=input.observation;
   const next={...p,code,restriction:input.restriction,observation,
     acknowledged:observation===p.observation?p.acknowledged:false};
