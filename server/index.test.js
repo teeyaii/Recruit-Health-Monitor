@@ -21,6 +21,8 @@ test("authenticated five-gateway ingest and stale-safe snapshot",async()=>{
  r=await fetch(base+"/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token})});assert.equal(r.status,200);
  const cookie=r.headers.get("set-cookie")?.split(";")[0];assert.ok(cookie);
  r=await fetch(base+"/api/snapshot",{headers:{"Cookie":cookie}});assert.equal(r.status,200);
+ r=await fetch(base+"/api/gateways",{headers:{"Cookie":cookie}});assert.equal(r.status,200);const gateways=(await r.json()).gateways;assert.equal(gateways.length,5);assert.equal(gateways[4].online,true);
+ r=await fetch(base+"/api/ingest",{method:"POST",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"},body:JSON.stringify({gateway:"G01",readings:[{id:"R15",hr:101,timestamp:Date.now()+1}]})});assert.equal((await r.json()).accepted,0);
  r=await fetch(base+"/live");assert.equal(r.status,200);assert.match(await r.text(),/EventSource/);
  r=await fetch(base+"/api/ingest",{method:"POST",headers:{"Cookie":cookie,"Content-Type":"application/json"},body:JSON.stringify({gateway:"G01",readings:[]})});assert.equal(r.status,403);
  }finally{proc?.kill();}
