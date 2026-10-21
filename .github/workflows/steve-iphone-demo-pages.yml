@@ -1,29 +1,58 @@
 name: Publish STEVE iPhone standalone demo
-# Manual opt-in: a GitHub Pages deployment can make the DEMO publicly accessible.
-# Publishes only dashboard/index.html (SIMULATED ONLY), never source, API, secrets, or user data.
+# Public Pages serves ONLY synthetic index.html. No recruit health data, server source or secrets.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'dashboard/index.html'
+      - 'server/static-demo.test.js'
+      - 'server/profile-demo.test.js'
+      - '.github/workflows/steve-iphone-demo-pages.yml'
+  pull_request:
+    paths:
+      - 'dashboard/index.html'
+      - 'server/static-demo.test.js'
+      - 'server/profile-demo.test.js'
+      - '.github/workflows/steve-iphone-demo-pages.yml'
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: steve-demo-pages
   cancel-in-progress: true
 jobs:
-  publish:
+  validate:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test only fictional profile and 15-slot simulated dashboard
+        run: node --test server/static-demo.test.js server/profile-demo.test.js
+      - name: Verify only the offline demonstration will be published
+        run: |
+          test -f dashboard/index.html
+          ! grep -E 'fetch\\(|localStorage|sessionStorage|RECRUIT_MONITOR_TOKEN|STEVE_VIEWER_TOKEN' dashboard/index.html
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
-      - name: Validate offline synthetic demo
+      - uses: actions/configure-pages@v5
+      - name: Package only the demo HTML
         run: |
-          node --test server/static-demo.test.js
           mkdir -p _site
           cp dashboard/index.html _site/index.html
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
-      - uses: actions/deploy-pages@v4
+      - id: deployment
+        uses: actions/deploy-pages@v4
