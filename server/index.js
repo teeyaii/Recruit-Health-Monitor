@@ -7,12 +7,14 @@ import path from "node:path";
 
 const PORT=Number(process.env.PORT||8080);
 const TTL_MS=15000;
+const DEMO_ENABLED=process.env.STEVE_DEMO_MODE==="1" && process.env.NODE_ENV!=="production";
 const MAX_AGE_MS=60000;
 const recruits=new Map();
 const clients=new Set();
 const sessions=new Map();
 const failedLogins=new Map();
 let conditions={wbgtC:null,timestamp:null,source:"not recorded"};
+let demoActive=false,demoDropR03=false,demoRound=0,demoTimer=null;
 const lastByGateway=new Map();
 const SESSION_MS=8*60*60*1000;
 const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
@@ -22,8 +24,33 @@ function send(res,code,data){res.writeHead(code,{"Content-Type":"application/jso
 function snapshot(){const now=Date.now();
  for(const [id,reading] of recruits)if(now-reading.timestamp>MAX_AGE_MS)recruits.delete(id);
  return Array.from({length:15},(_,i)=>{const id="R"+String(i+1).padStart(2,"0");const r=recruits.get(id);
-return {id,hr:r&&now-r.timestamp<=TTL_MS?r.hr:null,timestamp:r?.timestamp??null,stale:!r||now-r.timestamp>TTL_MS,gateway:r?.gateway??null};});}
+return {id,hr:r&&now-r.timestamp<=TTL_MS?r.hr:null,timestamp:r?.timestamp??null,stale:!r||now-r.timestamp>TTL_MS,gateway:r?.gateway??null,source:r?.source??null};});}
 function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
+// Deliberately synthetic only. Demo cannot run when NODE_ENV=production.
+function demoTick(){
+ if(!demoActive)return;
+ const now=Date.now();
+ for(let i=0;i<15;i++){
+  const id="R"+String(i+1).padStart(2,"0");
+  if(demoDropR03&&id==="R03")continue;
+  const gateway="G0"+(Math.floor(i/3)+1);
+  const hr=72+((i*11+demoRound*3)%41);
+  recruits.set(id,{hr,timestamp:now,gateway,source:"SIMULATED"});
+  lastByGateway.set(gateway,now);
+ }
+ demoRound++;publish();
+}
+function demoControl(action){
+ if(action==="start"){
+  demoActive=true;demoDropR03=false;demoTick();
+  if(!demoTimer)demoTimer=setInterval(demoTick,3000);
+ }else if(action==="stop"){
+  demoActive=false;if(demoTimer)clearInterval(demoTimer);demoTimer=null;publish();
+ }else if(action==="drop" && demoActive){demoDropR03=true;}
+ else if(action==="restore" && demoActive){demoDropR03=false;demoTick();}
+ else return false;
+ return true;
+}
 const server=http.createServer(async(req,res)=>{
  const url=new URL(req.url,"http://localhost");
  if(url.pathname==="/health"){send(res,200,{ok:true});return;}
@@ -56,6 +83,17 @@ const server=http.createServer(async(req,res)=>{
  }
  if(!isViewer&&!isGateway){send(res,401,{error:"unauthorized"});return;}
  if(req.method==="GET"&&url.pathname==="/"){res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(dashboard));return;}
+ if(DEMO_ENABLED && url.pathname==="/api/demo" && req.method==="GET"){
+  if(!isViewer){send(res,403,{error:"viewer authorization required"});return;}
+  send(res,200,{enabled:true,active:demoActive,droppedR03:demoDropR03,source:"SIMULATED"});return;
+ }
+ if(DEMO_ENABLED && url.pathname==="/api/demo" && req.method==="POST"){
+  if(!isViewer){send(res,403,{error:"viewer authorization required"});return;}
+  let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>512){send(res,413,{error:"too large"});return;}}
+  let data;try{data=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
+  if(!demoControl(data?.action)){send(res,422,{error:"invalid demo action"});return;}
+  send(res,200,{ok:true,active:demoActive,droppedR03:demoDropR03,source:"SIMULATED"});return;
+ }
  if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}
  if(req.method==="GET"&&url.pathname==="/api/context"){send(res,200,{...conditions,stale:!conditions.timestamp||Date.now()-conditions.timestamp>1800000});return;}
@@ -87,7 +125,7 @@ const server=http.createServer(async(req,res)=>{
    seen.add(item.id);
    const prior=recruits.get(item.id);if(prior&&prior.timestamp>=item.timestamp)continue;
    if(prior && prior.gateway!==body.gateway && now-prior.timestamp<=TTL_MS)continue;
-   recruits.set(item.id,{hr:item.hr,timestamp:item.timestamp,gateway:body.gateway});accepted++;
+   recruits.set(item.id,{hr:item.hr,timestamp:item.timestamp,gateway:body.gateway,source:"GATEWAY"});accepted++;
   }
   lastByGateway.set(body.gateway,now);
   if(accepted)publish();send(res,200,{accepted,received:body.readings.length,request_id:randomUUID()});return;
