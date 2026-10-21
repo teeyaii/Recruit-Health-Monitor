@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recruit Health Monitor — Demo</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#101722;color:#eef2f7}body{margin:0;padding:20px;max-width:1150px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}h1{font-size:1.5rem;margin:0}p{color:#abb8c9}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}button{background:#24354a;border:1px solid #52667e;border-radius:8px;color:white;padding:10px 14px;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px}.card{background:#1b2736;border:1px solid #34465b;border-radius:12px;padding:16px}.card h2{font-size:1rem;margin:0 0 10px}.bpm{font-size:2rem;font-weight:700}.meta{font-size:.8rem;color:#aebbc9}.normal{border-left:5px solid #4bbd90}.review{border-left:5px solid #efbd5b}.missing{border-left:5px solid #9ca3af}.critical{border-left:5px solid #e77373}.note{padding:12px;border:1px solid #52667e;border-radius:8px;margin:15px 0}small{color:#aebbc9}
+</style></head><body>
+<header><div><h1>Recruit Health Monitor</h1><p>แดชบอร์ดตัวอย่าง • ทหารใหม่ R01–R15 • ไม่มีข้อมูลบุคคลจริง</p></div><strong id="clock"></strong></header>
+<div class="note"><strong>DEMO / SIMULATED DATA ONLY</strong> — ตัวเลขสร้างขึ้นเพื่อทดสอบหน้าจอ ไม่ใช่ชีพจรจริงหรือระบบเตือนภัยทางการแพทย์ ห้ามใช้ตัดสินความปลอดภัยระหว่างฝึก</div>
+<div class="controls"><button id="toggle">หยุดข้อมูลจำลอง</button><button id="drop">จำลองสัญญาณ R03 ขาด</button><button id="restore">คืนสัญญาณทั้งหมด</button><button id="csv">ส่งออก CSV จำลอง</button></div>
+<p id="summary" role="status"></p><div id="cards" class="grid" aria-live="polite"></div>
+<p><small>สถานะ stale เมื่อไม่มีข้อมูลใหม่เกิน 15 วินาที • เกณฑ์ HR ในตัวอย่างใช้แสดง UI เท่านั้น ไม่ใช่เกณฑ์การแพทย์ • ไม่มีการเชื่อมต่อ BLE หรือเซิร์ฟเวอร์ในหน้านี้</small></p>
+<script>
+"use strict";
+const staleMs=15000;
+const records=Array.from({length:15},(_,i)=>({id:"R"+String(i+1).padStart(2,"0"),hr:null,last:null,offline:false}));
+const history=[];let running=true;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function ingest(id,hr,ts=Date.now()){
+ const r=records.find(x=>x.id===id);
+ if(!r||!Number.isInteger(hr)||hr<25||hr>240||!Number.isFinite(ts))return false;
+ if(r.last!==null&&ts<r.last)return false;
+ r.hr=hr;r.last=ts;
+ history.push({time:new Date(ts).toISOString(),id,hr,source:"SIMULATED"});
+ return true;
+}
+function state(r,now){
+ if(r.last===null||now-r.last>staleMs)return "missing";
+ return r.hr>=170?"critical":r.hr>=140?"review":"normal";
+}
+function render(){
+ const now=Date.now();document.getElementById("clock").textContent=new Date(now).toLocaleTimeString("th-TH");
+ const counts={normal:0,review:0,critical:0,missing:0};
+ document.getElementById("cards").innerHTML=records.map(r=>{
+ const s=state(r,now);counts[s]++;
+ const age=r.last===null?"ไม่เคยรับข้อมูล":Math.max(0,Math.round((now-r.last)/1000))+" วินาทีที่แล้ว";
+ return '<article class="card '+s+'"><h2>'+esc(r.id)+'</h2><div class="bpm">'+(s==="missing"?"—":r.hr)+' <small>'+(s==="missing"?"STALE":"BPM")+'</small></div><div class="meta">'+esc(age)+'</div><div class="meta">'+({normal:"ข้อมูลจำลอง",review:"เกณฑ์สาธิต",critical:"เกณฑ์สาธิต",missing:"ไม่มีข้อมูลปัจจุบัน"}[s])+'</div></article>';
+ }).join("");
+ document.getElementById("summary").textContent="รับข้อมูลล่าสุด "+(15-counts.missing)+"/15 | ไม่มีข้อมูล "+counts.missing+" | เกณฑ์สาธิตระดับ 1 "+counts.review+" | ระดับ 2 "+counts.critical;
+}
+function tick(){if(running){const now=Date.now();records.forEach((r,i)=>{if(!r.offline)ingest(r.id,Math.max(55,Math.min(185,Math.round(92+18*Math.sin(now/6500+i)+Math.random()*16))),now);});}render();}
+document.getElementById("toggle").onclick=()=>{running=!running;document.getElementById("toggle").textContent=running?"หยุดข้อมูลจำลอง":"เริ่มข้อมูลจำลอง";};
+document.getElementById("drop").onclick=()=>{records[2].offline=true;render();};
+document.getElementById("restore").onclick=()=>{records.forEach(r=>r.offline=false);tick();};
+document.getElementById("csv").onclick=()=>{
+ const rows=[["timestamp_utc","recruit_id","heart_rate_bpm","source"],...history.map(x=>[x.time,x.id,x.hr,x.source])];
+ const blob=new Blob([rows.map(r=>r.join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"});
+ const a=document.createElement("a");const url=URL.createObjectURL(blob);a.href=url;a.download="recruit-demo-simulated.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+tick();setInterval(tick,3000);
+</script></body></html>
