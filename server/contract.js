@@ -2,7 +2,17 @@ import { timingSafeEqual } from "node:crypto";
 
 // All secrets and device assignments are provided at runtime, never checked into Git.
 const env=process.env;
-export const strictMode=Boolean(env.STEVE_GATEWAY_TOKENS_JSON || env.STEVE_VIEWER_TOKEN);
+// Render Blueprint supports a generated secret for each G01–G05 without a JSON secret bundle.
+// Existing STEVE_GATEWAY_TOKENS_JSON deployments continue to work unchanged.
+const separateTokenEntries=Array.from({length:5},(_,i)=>{
+  const id="G0"+(i+1);
+  return [id,env["STEVE_GATEWAY_TOKEN_"+id]];
+}).filter(([,token])=>token!==undefined && token!=="");
+const separateTokens=Object.fromEntries(separateTokenEntries);
+const usesSeparateTokens=separateTokenEntries.length>0;
+if(usesSeparateTokens && env.STEVE_GATEWAY_TOKENS_JSON)
+  throw Error("Configure either STEVE_GATEWAY_TOKENS_JSON or individual gateway tokens, not both");
+export const strictMode=Boolean(env.STEVE_GATEWAY_TOKENS_JSON || env.STEVE_VIEWER_TOKEN || usesSeparateTokens);
 function parseObject(value, name) {
   let parsed;
   try { parsed=JSON.parse(value); } catch { throw Error(name+" must contain valid JSON"); }
@@ -18,9 +28,9 @@ const gatewayTokens=new Map();
 let viewerToken;
 if (strictMode) {
   viewerToken=env.STEVE_VIEWER_TOKEN;
-  if (!viewerToken || viewerToken.length<32 || !env.STEVE_GATEWAY_TOKENS_JSON)
-    throw Error("Strict mode requires STEVE_VIEWER_TOKEN (32+ chars) and STEVE_GATEWAY_TOKENS_JSON");
-  const tokens=parseObject(env.STEVE_GATEWAY_TOKENS_JSON,"STEVE_GATEWAY_TOKENS_JSON");
+  if (!viewerToken || viewerToken.length<32 || (!env.STEVE_GATEWAY_TOKENS_JSON && !usesSeparateTokens))
+    throw Error("Strict mode requires STEVE_VIEWER_TOKEN (32+ chars) and gateway credentials");
+  const tokens=usesSeparateTokens ? separateTokens : parseObject(env.STEVE_GATEWAY_TOKENS_JSON,"STEVE_GATEWAY_TOKENS_JSON");
   if (Object.keys(tokens).length===0) throw Error("Configure at least one gateway");
   const all=new Set([viewerToken]);
   for (const [id, token] of Object.entries(tokens)) {
