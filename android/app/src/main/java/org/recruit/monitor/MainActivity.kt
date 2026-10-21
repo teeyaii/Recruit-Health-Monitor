@@ -26,6 +26,7 @@ class MainActivity : Activity() {
  private val pairs = mutableMapOf<String,Pairing>()
  private var uploader: GatewayUploader? = null
  private var scanning = false
+ private var scanGeneration = 0
  private var foreground = false
  private var generation = 0
  private lateinit var rows: LinearLayout
@@ -56,7 +57,14 @@ class MainActivity : Activity() {
   } })
   status = TextView(this); uploadStatus = TextView(this).apply { text = "Upload not configured" }
   layout.addView(status); layout.addView(uploadStatus)
+  layout.addView(Button(this).apply { text = "Test HTTPS Gateway (no BPM)"; setOnClickListener {
+   uploader?.testConnection() ?: run { uploadStatus.text = "Configure HTTPS and gateway credential first" }
+  } })
   layout.addView(Button(this).apply { text = "Scan HR devices (15 seconds)"; setOnClickListener { beginScan() } })
+  layout.addView(Button(this).apply { text = "Broad scan nearby BLE (if none found)"; setOnClickListener {
+   beginScan(allDevices = true)
+  } })
+  layout.addView(TextView(this).apply { text = "Broad Scan discovers nearby BLE devices only; it does not prove heart-rate broadcast compatibility." })
   layout.addView(Button(this).apply { text = "Stop and clear assignments"; setOnClickListener { stopAll(); pairs.clear(); redraw() } })
   rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
   layout.addView(rows)
@@ -69,25 +77,30 @@ class MainActivity : Activity() {
   if (missing.isNotEmpty()) { requestPermissions(missing.toTypedArray(),101); return false }
   return true
  }
- private fun beginScan() {
+ private fun beginScan(allDevices: Boolean = false) {
   if (!permitted()) return
   try {
    if (adapter?.isEnabled != true) { status.text = "Enable Bluetooth first"; return }
    stopScan()
    devices.entries.removeAll { !pairs.containsKey(it.key) }
-   adapter.bluetoothLeScanner?.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(heartService)).build()),
-    ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),scanCallback)
-   scanning = true; status.text = "Scanning; no device connects until you assign it"
-   handler.postDelayed({ stopScan() },15000)
+   val filters = if (allDevices) null else listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(heartService)).build())
+   val scanner = adapter.bluetoothLeScanner ?: run { status.text = "BLE scanner unavailable"; return }
+   val epoch = ++scanGeneration
+   scanner.startScan(filters, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback)
+   scanning = true
+   status.text = if (allDevices) "Broad BLE scan, 15s: finding a device does NOT prove HR broadcast"
+     else "Scanning HR Service 180D, 15s. Try Broad Scan if none found"
+   handler.postDelayed({ if (scanGeneration == epoch) stopScan() },15000)
   } catch (_: Exception) { status.text = "Scan unavailable; check Bluetooth permissions" }
  }
  private fun stopScan() {
+  scanGeneration++
   try { if (scanning) adapter?.bluetoothLeScanner?.stopScan(scanCallback) } catch (_: Exception) {}
   scanning = false
  }
  private val scanCallback = object : ScanCallback() {
   override fun onScanResult(callbackType: Int, result: ScanResult) { runOnUiThread {
-   if (!scanning || devices.size >= 40) return@runOnUiThread
+   if (!scanning || (devices.size >= 40 && !devices.containsKey(result.device.address))) return@runOnUiThread
    devices[result.device.address] = result.device; redraw()
   } }
   override fun onScanFailed(errorCode: Int) { runOnUiThread { scanning = false; status.text = "Scan failed: $errorCode" } }
