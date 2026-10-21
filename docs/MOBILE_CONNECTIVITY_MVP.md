@@ -18,17 +18,19 @@ The apps also include a second, manually invoked **Broad scan nearby BLE** optio
 
 ## Device-free functional checks (after installing a native app)
 
-- Open the native app; enter the Render HTTPS **origin**, selected G01–G05 and that Gateway's credential. Tap Apply.
+- Open the native app; enter the Render HTTPS **origin**, selected G01–G05 and that Gateway's credential. Tap Apply. On Android, the app now additionally fetches **only that Gateway\'s authorized anonymous slot IDs** from `GET /api/gateway/provision` and displays how many slots Render has configured. This requires updated Render code and a correct bearer secret; it is NOT Bluetooth pairing. If the existing Render service is still on an older commit, this returns HTTP 404 until manually redeployed.
 - Tap **Test HTTPS Gateway (no BPM)**. Wait for a separate success/failure status. A cold Render Free host may take longer to respond; this probe makes one long attempt and transfers zero BPM.
 - A successful probe confirms HTTPS connectivity and gateway credential only. On the separate STEVE LIVE Dashboard the gateway may briefly appear online, while all provisioned recruits must remain **NO DATA** until actual BLE readings arrive.
 - On Android/iOS, test **Scan HR devices** (15 seconds). If no device appears and an approved test band is available, try **Broad scan nearby BLE**. Scanning without any BLE band available should naturally show no useful devices.
-- To connect a physical band later, assign the exact operator-provisioned opaque slot/device ID, verify standard 180D/2A37, then observe a live BPM and Render Dashboard matching the slot. Start one band at a time.
+- On **Android**: tap **Reload authorized R-slots** if needed, then assign each *physical* band to a chosen authorized R-slot in STEVE; the app fills the matching anonymous ID automatically from Render. There is deliberately no manual fallback when provisioning cannot be authenticated. The selected R-slot is NOT automatically verified against the wearer: an operator must check the physical person + band separately. The app shows **assigned / BLE subscribed / fresh BPM** counts. For two bands the gateway\'s Render map must include BOTH R01 and R02; the example user-hosted map currently included R01 only. Update it privately (without using real identities), then re-fetch before assigning.
+- On **iOS**: still assign the exact operator-provisioned opaque slot/device ID manually in the signed native app. Verify 180D/2A37, then observe a LIVE BPM matching the selected slot. Start one band at a time.
 
 ## Acceptance tests that do not need real sensors
 
 - Swift simulator compiles in GitHub Actions and Swift HR packet fixtures pass.
 - Kotlin unit tests compile and Android debug APK artifact is produced by CI.
 - Server strict-production integration checks that an empty G01 heartbeat returns accepted=0, G01 becomes online, R01 remains NO DATA, and a G02 token cannot act as G01.
+- Server production integration now checks that G01 can see only its own authorized R01–R03 opaque IDs, G02 only R04, and a LIVE viewer cookie/unprivileged request cannot enumerate any Gateway mappings.
 - Existing synthetic 5-Gateway/15-recruit API/SSE tests remain green, and public Safari simulation remains separate from LIVE.
 
 ## Deferred until physical equipment exists

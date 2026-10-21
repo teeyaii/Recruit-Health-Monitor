@@ -1,6 +1,6 @@
 import http from "node:http";
 import { randomUUID, randomBytes } from "node:crypto";
-import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway } from "./contract.js";
+import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway, provisionedDevicesForGateway } from "./contract.js";
 import { RosterStore } from "./roster.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
@@ -160,6 +160,14 @@ const server=http.createServer(async(req,res)=>{
   let data;try{data=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
   if(!demoControl(data?.action)){send(res,422,{error:"invalid demo action"});return;}
   send(res,200,{ok:true,active:demoActive,droppedR03:demoDropR03,droppedG03:demoDropG03,source:"SIMULATED"});return;
+ }
+ // Gateway-only provisioning preflight: an HTTPS/Bearer-authenticated Android phone
+ // sees only its OWN anonymous slots. This is not a sensor or wearer verification.
+ if(req.method==="GET" && url.pathname==="/api/gateway/provision"){
+  if(!isGateway){send(res,403,{error:"gateway credential required"});return;}
+  const slots=provisionedDevicesForGateway(gatewayId);
+  if(slots===null){send(res,503,{error:"provisioning unavailable; configure STEVE_SLOT_MAP_JSON"});return;}
+  send(res,200,{gateway:gatewayId,slots,kind:"anonymous_device_ids",sensor_verified:false});return;
  }
  if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}

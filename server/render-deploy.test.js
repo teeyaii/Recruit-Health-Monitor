@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 const viewer="render-synthetic-viewer-secret-32-characters-minimum";
 const gateway="render-synthetic-g01-secret-32-characters-minimum";
 const gateway2="render-synthetic-g02-secret-32-characters-minimum";
-const map={G01:{R01:"demo-opaque-device-01"},G02:{R04:"demo-opaque-device-04"}};
+const map={G01:{R01:"demo-opaque-device-01",R02:"demo-opaque-device-02",R03:"demo-opaque-device-03"},G02:{R04:"demo-opaque-device-04"}};
 const port=26000+Math.floor(Math.random()*900);
 const base="http://127.0.0.1:"+port;
 const config={...process.env,PORT:String(port),NODE_ENV:"production",COOKIE_SECURE:"1",
@@ -28,6 +28,28 @@ test("Render-style generated environment secrets start LIVE backend without JSON
   let r=await post("/api/login",{token:viewer});assert.equal(r.status,200);
   const cookie=r.headers.get("set-cookie")?.split(";")[0];assert.ok(cookie);
   assert.match(r.headers.get("set-cookie")||"",/Secure/);
+  // G01 phone may list its authorized R01–R03 and anonymous IDs;
+  // neither the viewer session nor G02 bearer can read G01 mapping.
+  r=await fetch(base+"/api/gateway/provision",{headers:{Authorization:"Bearer "+gateway}});
+  assert.equal(r.status,200);
+  assert.match(r.headers.get("cache-control")||"",/no-store/);
+  let provision=await r.json();
+  assert.equal(provision.gateway,"G01");
+  assert.equal(provision.sensor_verified,false);
+  assert.deepEqual(provision.slots.map(x=>x.id),["R01","R02","R03"]);
+  assert.deepEqual(provision.slots.map(x=>x.device_id),Object.values(map.G01));
+  r=await fetch(base+"/api/gateway/provision",{headers:{Authorization:"Bearer "+gateway2}});
+  assert.equal(r.status,200);
+  provision=await r.json();
+  assert.equal(provision.gateway,"G02");
+  assert.deepEqual(provision.slots,[{id:"R04",device_id:"demo-opaque-device-04"}]);
+  assert.ok(!JSON.stringify(provision).includes("demo-opaque-device-01"));
+  r=await fetch(base+"/api/gateway/provision",{headers:{Cookie:cookie}});
+  assert.equal(r.status,403,"dashboard login cannot enumerate gateway provisioning");
+  r=await fetch(base+"/api/gateway/provision");
+  assert.equal(r.status,401,"unauthenticated request cannot read provisioning");
+  r=await fetch(base+"/api/gateway/provision",{headers:{Authorization:"Bearer invalid"}});
+  assert.equal(r.status,401);
   r=await fetch(base+"/api/snapshot",{headers:{Cookie:cookie}});assert.equal(r.status,200);
   let data=await r.json();assert.equal(data.recruits.length,15);
   assert.equal(data.recruits[0].gateway,"G01");assert.equal(data.recruits[0].hr,null);

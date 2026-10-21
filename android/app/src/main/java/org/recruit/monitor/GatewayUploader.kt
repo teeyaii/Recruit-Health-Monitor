@@ -76,6 +76,51 @@ class GatewayUploader(baseUrl: String, private val gatewayId: String,
     "Upload unavailable after 3 attempts; waiting for new data")
   }
  }
+ /** Retrieve only this G01–G05 Gateway's provisioned, NONIDENTIFYING slot IDs.
+  * This is not physical BLE pairing, proof of band identity, or a BPM upload.
+  * Never send credentials or device IDs into logs or status strings.
+  */
+ fun fetchProvisioning(onResult: (String, List<Pair<String,String>>?) -> Unit) {
+  if (jobs.isShutdown) { onResult("Gateway uploader stopped",null); return }
+  jobs.execute {
+   var connection: HttpURLConnection? = null
+   try {
+    connection = URL(endpoint.protocol+"://"+endpoint.authority+"/api/gateway/provision")
+     .openConnection() as HttpURLConnection
+    connection.instanceFollowRedirects = false
+    connection.requestMethod = "GET"
+    connection.connectTimeout = 15000
+    connection.readTimeout = 70000 // Render Free may take time to wake.
+    connection.setRequestProperty("Authorization","Bearer "+bearerToken)
+    connection.setRequestProperty("Accept","application/json")
+    val code=connection.responseCode
+    if(code!=200) {
+     onResult(if(code==401||code==403) "Gateway credentials rejected (HTTP $code)"
+      else "Provisioning unavailable (HTTP $code); check Render slot map",null)
+     return@execute
+    }
+    val data=JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+    if(data.optString("gateway")!=gatewayId || data.optString("kind")!="anonymous_device_ids") {
+     onResult("Unexpected provisioning response: gateway mismatch",null);return@execute
+    }
+    val rows=data.getJSONArray("slots")
+    val slots=mutableListOf<Pair<String,String>>()
+    for(i in 0 until rows.length()) {
+     val item=rows.getJSONObject(i)
+     val slot=item.getString("id")
+     val opaque=item.getString("device_id")
+     if(!AssignmentRules.allows(slot,opaque,slots)) {
+      onResult("Invalid or duplicate slot returned by server",null);return@execute
+     }
+     slots.add(slot to opaque)
+    }
+    onResult("Provisioned "+slots.size+" anonymous R-slots for "+gatewayId
+     +" (BLE reception NOT yet tested)",slots)
+   } catch (_: Exception) {
+    onResult("Cannot load authorized slots; check internet / Render wake-up",null)
+   } finally {connection?.disconnect()}
+  }
+ }
  fun shutdown() { jobs.shutdownNow() }
 }
 
