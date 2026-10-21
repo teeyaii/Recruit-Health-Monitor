@@ -29,7 +29,13 @@ struct GatewayHomeView: View {
                     Text(central.message)
                     Text(central.uploadStatus).font(.caption)
                     Text(central.bluetoothReady ? "Bluetooth ready" : "Bluetooth unavailable")
+                    Button("Test HTTPS Gateway (no BPM)") { central.testServerConnection() }
                     Button("Scan HR devices (15 seconds)") { central.start() }
+                    Button("Broad scan nearby BLE (if no HR device appears)") {
+                        central.start(allDevices: true)
+                    }
+                    Text("Broad Scan only discovers devices. It cannot prove the band broadcasts live heart rate.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Button("Stop and clear assignments") { central.clear() }
                 }
                 Section("Choose a device, then confirm its slot") {
