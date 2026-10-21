@@ -1,0 +1,10 @@
+{
+  "name": "recruit-health-monitor-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  }
+}
