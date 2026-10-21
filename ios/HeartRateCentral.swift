@@ -18,6 +18,7 @@ final class HeartRateCentral: NSObject, ObservableObject, CBCentralManagerDelega
     @Published private(set) var bluetoothReady = false
     @Published private(set) var message = "Configure upload, then scan and explicitly assign devices."
     @Published private(set) var uploadStatus = "Upload not configured"
+    @Published private(set) var connectionTestStatus = "HTTPS gateway test not run"
     private let serviceID = CBUUID(string: "180D")
     private let measurementID = CBUUID(string: "2A37")
     private var central: CBCentralManager!
@@ -76,15 +77,15 @@ final class HeartRateCentral: NSObject, ObservableObject, CBCentralManagerDelega
     /// End-to-end HTTPS/credential probe with ZERO heart-rate readings.
     /// Does not require a band and cannot validate actual BLE compatibility.
     func testServerConnection() {
-        guard let client = client else { uploadStatus = "Configure HTTPS and gateway credential first."; return }
-        guard foreground else { uploadStatus = "Open STEVE in the foreground to test."; return }
-        uploadStatus = "Testing Gateway -> HTTPS server (empty heartbeat)..."
+        guard let client = client else { connectionTestStatus = "Configure HTTPS and gateway credential first."; return }
+        guard foreground else { connectionTestStatus = "Open STEVE in the foreground to test."; return }
+        connectionTestStatus = "Testing Gateway -> HTTPS server (empty heartbeat)..."
         Task { @MainActor [weak self] in
             do {
                 try await client.testConnection()
-                self?.uploadStatus = "Gateway/credential verified; no BPM was sent."
+                self?.connectionTestStatus = "Gateway/credential verified; no BPM was sent."
             } catch {
-                self?.uploadStatus = "Gateway test failed: verify HTTPS, token, gateway ID, or Render wake-up."
+                self?.connectionTestStatus = "Gateway test failed: verify HTTPS, token, gateway ID, or Render wake-up."
             }
         }
     }
