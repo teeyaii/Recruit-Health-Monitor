@@ -6,6 +6,8 @@
 
 The published demonstration uses **SIMULATED** data only. Its existing design is preserved. Open it in iPhone Safari and press **เริ่มจำลอง**. No app, band, or backend is required.
 
+**Operator roster on LIVE:** [separate trainer and medical logins with equal privileges](docs/OPERATORS_EQUAL_ACCESS.md), anonymous R01–R15 codes, human-observed alerts/acknowledgments, auditable actions, revision checks, and pause-on-occupant-replacement. This is a prototype with in-memory default and no real health records. Existing Render Free will NOT update automatically; it requires two private operator secrets and manual deployment.
+
 **New prototype:** the public iPhone demo now includes [editable fictional recruit profiles and operator-observed alert states](docs/PROFILE_ALERTS_MVP.md). Use invented DEMO- codes, simulated weights/heights/conditions and selected symptoms only. A change of occupant invalidates prior readings and alerts. This UI does **not** persist data, send push notifications, score medical risk automatically or alter the separate Render LIVE backend. Never type real recruit identifiers or health information into the public demo.
 
 STEVE is not a clinically validated medical device or heat-injury detector. Missing measurements are unknown, never zero or evidence of safety.
