@@ -1,26 +1,22 @@
 import http from "node:http";
-import { randomUUID, timingSafeEqual, randomBytes } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
+import { gatewayForBearer, validViewerToken, slotIsAuthorized, strictMode } from "./contract.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 const PORT=Number(process.env.PORT||8080);
-const TOKEN=process.env.RECRUIT_MONITOR_TOKEN;
-if(!TOKEN || TOKEN.length<24) { console.error("Set RECRUIT_MONITOR_TOKEN (at least 24 characters)");process.exit(1); }
 const TTL_MS=15000;
 const MAX_AGE_MS=60000;
 const recruits=new Map();
 const clients=new Set();
 const sessions=new Map();
+const failedLogins=new Map();
+let conditions={wbgtC:null,timestamp:null,source:"not recorded"};
 const lastByGateway=new Map();
 const SESSION_MS=8*60*60*1000;
 const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
 const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/index.html");
-function auth(req){const provided=req.headers.authorization?.replace(/^Bearer /,"")||"";
- const a=Buffer.from(provided),b=Buffer.from(TOKEN);
- return a.length===b.length&&timingSafeEqual(a,b);
-}
-function validToken(value){const a=Buffer.from(value||""),b=Buffer.from(TOKEN);return a.length===b.length&&timingSafeEqual(a,b);}
 function viewer(req){const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!cookie)return false;const expiry=sessions.get(cookie);if(!expiry)return false;if(expiry<Date.now()){sessions.delete(cookie);return false;}return true;}
 function send(res,code,data){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(data));}
 function snapshot(){const now=Date.now();return Array.from({length:15},(_,i)=>{const id="R"+String(i+1).padStart(2,"0");const r=recruits.get(id);
@@ -32,8 +28,19 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==="POST"&&url.pathname==="/api/login"){
   let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>2048){send(res,413,{error:"too large"});return;}}
   let input;try{input=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
-  if(!validToken(input?.token)){send(res,401,{error:"unauthorized"});return;}
-  const session=randomBytes(32).toString("hex");sessions.set(session,Date.now()+SESSION_MS);
+  const ip=req.socket.remoteAddress||"unknown", now=Date.now();
+  for(const [key,record] of failedLogins) if(now-record.since>60000)failedLogins.delete(key);
+  const record=failedLogins.get(ip)||{since:now,count:0};
+  if(record.count>=8){send(res,429,{error:"try again later"});return;}
+  if(!validViewerToken(input?.token)){
+    failedLogins.set(ip,{since:record.since,count:record.count+1});
+    if(failedLogins.size>256)failedLogins.delete(failedLogins.keys().next().value);
+    send(res,401,{error:"unauthorized"});return;
+  }
+  failedLogins.delete(ip);
+  for(const [key,expiry] of sessions) if(expiry<now)sessions.delete(key);
+  if(sessions.size>=256){send(res,503,{error:"session capacity reached"});return;}
+  const session=randomBytes(32).toString("hex");sessions.set(session,now+SESSION_MS);
   res.setHeader("Set-Cookie",`rhm_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE==="1"?"; Secure":""}`);
   send(res,200,{ok:true});return;
  }
@@ -41,7 +48,7 @@ const server=http.createServer(async(req,res)=>{
   const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(cookie)sessions.delete(cookie);
   res.setHeader("Set-Cookie","rhm_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");send(res,200,{ok:true});return;
  }
- const isViewer=viewer(req),isGateway=auth(req);
+ const isViewer=viewer(req),gatewayId=gatewayForBearer(req),isGateway=Boolean(gatewayId);
  if(url.pathname==="/live"&&req.method==="GET"){
   res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(liveDashboard));return;
  }
@@ -49,6 +56,15 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==="GET"&&url.pathname==="/"){res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(dashboard));return;}
  if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}
+ if(req.method==="GET"&&url.pathname==="/api/context"){send(res,200,{...conditions,stale:!conditions.timestamp||Date.now()-conditions.timestamp>1800000});return;}
+ if(req.method==="POST"&&url.pathname==="/api/context"){
+  if(!isViewer){send(res,403,{error:"viewer authorization required"});return;}
+  let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>1024){send(res,413,{error:"payload too large"});return;}}
+  let body;try{body=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
+  if(!body||typeof body.wbgtC!=="number"||!Number.isFinite(body.wbgtC)||body.wbgtC<0||body.wbgtC>60){send(res,422,{error:"invalid WBGT reading"});return;}
+  conditions={wbgtC:body.wbgtC,timestamp:Date.now(),source:"manual entry"};
+  send(res,200,{ok:true,...conditions});return;
+ }
  if(req.method==="GET"&&url.pathname==="/api/events"){
   res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-store","Connection":"keep-alive","X-Accel-Buffering":"no"});
   res.write("retry: 3000\n\n");clients.add(res);res.write("data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n");
@@ -59,10 +75,12 @@ const server=http.createServer(async(req,res)=>{
   let raw="";try{for await(const chunk of req){raw+=chunk;if(raw.length>16384){send(res,413,{error:"payload too large"});return;}}}catch{send(res,400,{error:"invalid body"});return;}
   let body;try{body=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
   if(!body||typeof body.gateway!=="string"||!/^G0[1-5]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>15){send(res,422,{error:"invalid gateway or batch"});return;}
+  if(strictMode&&gatewayId!==body.gateway){send(res,403,{error:"gateway identity mismatch"});return;}
   const now=Date.now();let accepted=0;
   const seen=new Set();
   for(const item of body.readings){
    if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)||!Number.isInteger(item.hr)||item.hr<25||item.hr>240||!Number.isFinite(item.timestamp)||item.timestamp>now+5000||item.timestamp<now-MAX_AGE_MS)continue;
+   if(!slotIsAuthorized(body.gateway,item))continue;
    if(seen.has(item.id))continue;
    seen.add(item.id);
    const prior=recruits.get(item.id);if(prior&&prior.timestamp>=item.timestamp)continue;
@@ -75,4 +93,4 @@ const server=http.createServer(async(req,res)=>{
  send(res,404,{error:"not found"});
 });
 setInterval(publish,5000).unref();
-server.listen(PORT,()=>console.log("Recruit monitor listening on",PORT));
+server.listen(PORT,()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
