@@ -38,15 +38,19 @@ final class GatewayUploadClient: NSObject, URLSessionTaskDelegate {
         try await send([reading], recordedAt: recordedAt)
     }
     func heartbeat() async throws { try await send([], recordedAt: Date()) }
-    private func send(_ readings: [[String: Any]], recordedAt: Date) async throws {
+    /// Pre-pairing HTTPS/credential check: zero BPM readings.
+    /// Tolerates a sleeping free cloud instance; normal readings remain strictly time bounded.
+    func testConnection() async throws { try await send([], recordedAt: Date(), probe: true) }
+    private func send(_ readings: [[String: Any]], recordedAt: Date, probe: Bool = false) async throws {
         var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"; request.timeoutInterval = 4
+        request.httpMethod = "POST"; request.timeoutInterval = probe ? 75 : 4
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["gateway": gatewayID, "readings": readings])
-        for attempt in 0..<3 {
+        let maxAttempts = probe ? 1 : 3
+        for attempt in 0..<maxAttempts {
             try Task.checkCancellation()
-            guard Date().timeIntervalSince(recordedAt) < 12 else { throw UploadError.expired }
+            guard probe || Date().timeIntervalSince(recordedAt) < 12 else { throw UploadError.expired }
             do {
                 let (data, response) = try await session.data(for: request)
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -56,9 +60,9 @@ final class GatewayUploadClient: NSObject, URLSessionTaskDelegate {
                     return
                 }
                 if code != 429 && code < 500 { throw UploadError.rejected(code) }
-                if attempt == 2 { throw UploadError.rejected(code) }
+                if attempt == maxAttempts - 1 { throw UploadError.rejected(code) }
             } catch let error as UploadError { throw error }
-              catch { if attempt == 2 || Task.isCancelled { throw error } }
+              catch { if attempt == maxAttempts - 1 || Task.isCancelled { throw error } }
             try await Task.sleep(nanoseconds: UInt64(attempt + 1) * 500_000_000)
         }
     }

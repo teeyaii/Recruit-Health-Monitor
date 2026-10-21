@@ -32,6 +32,19 @@ test("Render-style generated environment secrets start LIVE backend without JSON
   let data=await r.json();assert.equal(data.recruits.length,15);
   assert.equal(data.recruits[0].gateway,"G01");assert.equal(data.recruits[0].hr,null);
   assert.equal(data.recruits[0].state,"NO DATA");
+  // The native Test HTTPS Gateway button sends only an empty heartbeat.
+  // Server auth + gateway-online must work without fabricating a recruit reading.
+  r=await post("/api/ingest",{gateway:"G01",readings:[]},gateway);
+  assert.equal(r.status,200);
+  assert.deepEqual(((await r.json()).accepted),0);
+  r=await fetch(base+"/api/gateways",{headers:{Cookie:cookie}});
+  assert.equal((await r.json()).gateways.find(g=>g.id==="G01").online,true);
+  r=await fetch(base+"/api/snapshot",{headers:{Cookie:cookie}});
+  data=await r.json();
+  assert.equal(data.recruits[0].state,"NO DATA");
+  assert.equal(data.recruits[0].hr,null);
+  r=await post("/api/ingest",{gateway:"G01",readings:[]},gateway2);
+  assert.equal(r.status,403,"G02 credential cannot probe G01");
   r=await post("/api/ingest",{gateway:"G01",readings:[{id:"R01",device_id:"demo-opaque-device-01",hr:86,timestamp:Date.now()}]},gateway);
   assert.equal(r.status,200);assert.equal((await r.json()).accepted,1);
   r=await fetch(base+"/api/snapshot",{headers:{Cookie:cookie}});

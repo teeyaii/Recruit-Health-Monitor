@@ -13,6 +13,7 @@ STEVE is not a clinically validated medical device or heat-injury detector. Miss
 ## Implemented
 
 - Android Kotlin and iOS CoreBluetooth: scan standard 180D devices, select one, explicitly assign a provisioned slot and opaque device ID, subscribe to 2A37 notifications, decode 8/16-bit BPM, and upload to HTTPS.
+- Mobile-first HTTPS gateway test sends **zero BPM readings** and confirms endpoint/gateway credential even before a physical band is available. Opt-in broad BLE scan can discover devices not advertising 180D, but cannot prove they support standard HR notifications. [Phone-only setup](docs/MOBILE_CONNECTIVITY_MVP.md).
 - Runtime gateway URL/G01–G05/credential configuration. Credentials and pairings are memory-only.
 - Duplicate local slot/device rejection; server-side slot/device/gateway enforcement. Discovery order never identifies a recruit.
 - Three controlled reconnect attempts per pairing session, explicit Retry, 12-second connection/subscription timeout. Foreground operation only: leaving the app disconnects devices.
