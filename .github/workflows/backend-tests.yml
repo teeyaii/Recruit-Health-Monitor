@@ -6,6 +6,9 @@ on:
       - 'dashboard/live.html'
       - 'dashboard/index.html'
       - 'README.md'
+      - 'render.yaml'
+      - 'Dockerfile'
+      - '.dockerignore'
       - '.github/workflows/backend-tests.yml'
   pull_request:
     paths:
@@ -13,6 +16,9 @@ on:
       - 'dashboard/live.html'
       - 'dashboard/index.html'
       - 'README.md'
+      - 'render.yaml'
+      - 'Dockerfile'
+      - '.dockerignore'
       - '.github/workflows/backend-tests.yml'
   workflow_dispatch:
 jobs:
@@ -42,3 +48,30 @@ jobs:
           done
           node server/simulate-five-gateways.js
 
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build LIVE backend Docker image
+        run: docker build --tag steve-live-smoke .
+      - name: Verify production container health and private API
+        run: |
+          docker run --rm --detach --name steve-live-smoke -p 127.0.0.1:18082:8080 \
+            -e NODE_ENV=production -e COOKIE_SECURE=1 -e PORT=8080 \
+            -e STEVE_VIEWER_TOKEN=ci-viewer-long-enough-for-render-style-example-123 \
+            -e STEVE_GATEWAY_TOKEN_G01=ci-g01-long-enough-for-render-style-example-123 \
+            -e 'STEVE_SLOT_MAP_JSON={"G01":{"R01":"demo-opaque-001"}}' \
+            steve-live-smoke
+          trap 'docker stop steve-live-smoke >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18082/health | grep -q '"ok":true'; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          status=$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/api/snapshot)
+          test "$status" = 401
