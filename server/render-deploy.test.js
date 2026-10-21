@@ -71,7 +71,9 @@ test("Render blueprint is opt-in free Docker with generated secrets and no perso
  assert.match(yaml,/runtime: docker/);
  assert.match(yaml,/autoDeployTrigger: off/);
  assert.match(yaml,/healthCheckPath: \/health/);
- assert.equal((yaml.match(/generateValue: true/g)||[]).length,6);
+ assert.equal((yaml.match(/generateValue: true/g)||[]).length,8);
+ assert.match(yaml,/STEVE_TRAINER_TOKEN/);
+ assert.match(yaml,/STEVE_MEDIC_TOKEN/);
  assert.match(yaml,/STEVE_SLOT_MAP_JSON\s*\n\s*sync: false/);
  assert.doesNotMatch(yaml,/RECRUIT_MONITOR_TOKEN|demo-opaque-device-01|real-person/i);
 });
