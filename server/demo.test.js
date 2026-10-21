@@ -20,7 +20,7 @@ test("operator-controlled synthetic 15-slot demo is gated, labeled and supports 
   STEVE_DEMO_MODE:"1"},stdio:"ignore"});
  try {
   await ready();
-  let response=await fetch(base+"/api/demo");assert.equal(response.status,403);
+  let response=await fetch(base+"/api/demo");assert.equal(response.status,401);
   response=await fetch(base+"/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
    body:JSON.stringify({token})});
   assert.equal(response.status,200);
