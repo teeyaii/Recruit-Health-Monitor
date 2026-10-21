@@ -1,0 +1,35 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recruit HR — Live</title><style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#111827;color:#f3f4f6}body{margin:0 auto;max-width:1050px;padding:18px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h1{font-size:1.4rem}p,small{color:#b8c4d5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.card{padding:16px;background:#1f2937;border-radius:12px;border-left:5px solid #64748b}.fresh{border-left-color:#38bdf8}.stale{border-left-color:#ef4444}.bpm{font-size:2rem;font-weight:bold}.notice{padding:12px;border:1px solid #64748b;border-radius:8px;margin:12px 0}button,input{padding:11px;border-radius:8px;background:#334155;color:white;border:1px solid #64748b}input{min-width:220px}form{display:flex;gap:8px;flex-wrap:wrap}
+</style></head><body>
+<header><h1>Recruit Health Monitor — Live</h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
+<div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
+<form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
+<div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
+<p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div>
+<script>
+"use strict";
+let events=null,last=null;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
+const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
+ const now=Date.now();let fresh=0;
+ cards.innerHTML=data.recruits.map(r=>{
+  const age=Number.isFinite(r.timestamp)?Math.max(0,now-r.timestamp):Infinity;
+  const stale=r.stale||age>15000||!Number.isInteger(r.hr);
+  if(!stale)fresh++;
+  return '<article class="card '+(stale?'stale':'fresh')+'"><strong>'+escapeHtml(r.id)+'</strong><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(stale?'STALE':'BPM')+'</small></div><small>'+(stale?'ไม่มีข้อมูลปัจจุบัน':Math.round(age/1000)+' วินาทีที่แล้ว')+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+'</small></div></article>';
+ }).join("");
+ summary.textContent='มีข้อมูลปัจจุบัน '+fresh+'/15 • ข้อมูลขาด '+(15-fresh)+'/15 • '+new Date().toLocaleTimeString("th-TH");
+}
+async function snapshot(){try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);draw(await r.json());}catch(e){conn.textContent='โหลดข้อมูลไม่สำเร็จ';}}
+function disconnect(){if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;cards.innerHTML='';summary.textContent='กรุณาเข้าสู่ระบบ';}
+function connect(){if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;events=new EventSource('/api/events');
+ events.onopen=()=>{conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
+ events.onmessage=e=>{try{draw(JSON.parse(e.data))}catch{}};
+ snapshot();
+}
+document.getElementById('login').onsubmit=async e=>{e.preventDefault();const token=document.getElementById('token').value;const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});document.getElementById('token').value='';if(r.ok)connect();else summary.textContent='รหัสไม่ถูกต้อง';};
+document.getElementById('logout').onclick=async()=>{await fetch('/api/logout',{method:'POST'});disconnect();};
+document.getElementById('refresh').onclick=snapshot;
+setInterval(()=>{if(last)draw(last);},1000);
+snapshot().then(()=>{if(last)connect();});
+</script></body></html>
