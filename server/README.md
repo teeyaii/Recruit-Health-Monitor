@@ -18,6 +18,6 @@ POST `/api/ingest` with `Authorization: Bearer <token>` and JSON:
 {"gateway":"G01","readings":[{"id":"R01","hr":92,"timestamp":1792560000000}]}
 ```
 
-`timestamp` must be epoch milliseconds within the last 60 seconds. Each request supports up to five readings. Gateways G01–G03 are accepted. Duplicate or older timestamps are ignored. Missing/stale values become null after 15 seconds. `GET /api/snapshot` and `GET /api/events` use the same authorization header. Browser EventSource cannot supply Authorization headers, so an authenticated browser-facing gateway or session mechanism must be added before wiring the web dashboard.
+`timestamp` must be epoch milliseconds within the last 60 seconds. Each request supports up to 15 readings (API batch ceiling, not a tested BLE connection capacity). Gateways G01–G05 are accepted. The actual maximum number of simultaneous Xiaomi bands per Android phone is unknown pending hardware validation. Duplicate or older timestamps are ignored. Missing/stale values become null after 15 seconds. `GET /api/snapshot` and `GET /api/events` use the same authorization header. Browser EventSource cannot supply Authorization headers, so an authenticated browser-facing gateway or session mechanism must be added before wiring the web dashboard.
 
 The existing dashboard is still an offline **simulation**, not connected to this backend. This backend has not been deployed or integration-tested with an Android device.
