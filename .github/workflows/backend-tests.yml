@@ -6,6 +6,12 @@ on:
       - 'dashboard/live.html'
       - 'README.md'
       - '.github/workflows/backend-tests.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'dashboard/live.html'
+      - 'README.md'
+      - '.github/workflows/backend-tests.yml'
   workflow_dispatch:
 jobs:
   test:

@@ -31,3 +31,10 @@
 - https://github.com/VishnuMavawala/BLE-Connection-Flow — MIT Swift CoreBluetooth lifecycle.
 
 Decision: implement a small native Swift BLE gateway rather than port an entire unrelated app. Preserve upstream notices if actual source is later copied.
+
+## 2026-10-21 implementation checkpoint
+- Strict per-gateway authentication and server-authorized R-slot/device bindings implemented for synthetic integration. Legacy shared-token mode is development only.
+- Added source-only HTTPS upload clients for Kotlin and Swift. BLE readers are not wired to them until human-confirmed pairing UX and safe runtime provisioning are available.
+- Dashboard supports manually entered WBGT context with a 30-minute freshness indicator, without medical risk rules.
+- CI includes API negative tests and 5-gateway synthetic smoke simulation. No field device validation or production deployment claimed.
+- Next gates: UI-assisted physical-device pairing, secure secret injection on signed phone builds, native BLE-to-HTTPS upload, reconnect/background tests, TLS infrastructure, data protection/retention policy and human-led field trials.

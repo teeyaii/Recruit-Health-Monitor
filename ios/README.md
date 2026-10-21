@@ -5,3 +5,6 @@ Swift CoreBluetooth source prototype. The code scans for standard BLE Heart Rate
 To run on an iPhone, create an iOS SwiftUI app in Xcode, add `HeartRateCentral.swift` to the target, set `NSBluetoothAlwaysUsageDescription` in Info.plist, and call `start()` from the UI. iOS app signing/build requires a macOS/Xcode environment or compatible hosted build service; GitHub alone does not install an iOS app onto a phone.
 
 This is **not** an operational gateway yet: no pairing/identity map, backend upload, reconnect, background restoration, or verified multi-band limit. A single iPhone cannot validate multiple Xiaomi bands without the bands.
+
+
+GatewayUploadClient.swift is an HTTPS-only transport building block. Provision its URL, gateway credential and pseudonymous slot/device binding at runtime; the iOS HeartRateCentral reader is NOT yet wired to it. No Xcode project, signing, install, or physical BLE validation is claimed. Never put bearer credentials or names in source code.

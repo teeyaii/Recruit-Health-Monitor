@@ -22,3 +22,8 @@ Android 1 phone, initially 1 then 2 then 3 Xiaomi Smart Band 10 devices. Standar
 - The scan filter assumes the band advertises standard 0x180D. If not discoverable, broaden scan only after checking identity and permissions.
 - A disconnected reading is not zero. Old values are invalid.
 - This is NOT a clinical heat-stroke detector. Continue WBGT controls, hydration/rest, observation and emergency protocols.
+
+## Software gate before BLE field tests
+- CI must demonstrate distinct G01/G02 bearer authorization, server-side slot/device enforcement, viewer isolation, missing reading null, context write permission, failed-login throttling, duplicate-slot startup rejection and all 15 synthetic slots via five gateways.
+- Simulate disconnect, stale reading, duplicate ownership and service restart. Volatile memory reset must not falsely mark missing measurements safe.
+- **No actual Band 10 test has been carried out**. All API packets and identifiers used in CI are invented fixtures, not health records.
