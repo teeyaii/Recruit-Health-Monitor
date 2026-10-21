@@ -30,3 +30,16 @@ Private Android proof-of-concept for Xiaomi Smart Band 10 **Heart Rate Broadcast
 - [Heart-rate-comparison](https://github.com/xinxiangjueming/Heart-rate-comparison): architectural inspiration; no upstream source copied because no root LICENSE was confirmed.
 - [xioami_heart_rate](https://github.com/Xianggeok/xioami_heart_rate): Xiaomi HR broadcast protocol reference (Apache-2.0; check notices before reuse).
 - This Android prototype is independently authored, not a direct fork.
+
+
+## Dashboard prototype (simulated data)
+
+Open `dashboard/index.html` in a browser (download or serve as static HTML). It displays 15 anonymous recruit slots R01–R15 with synthetic HR, stale-data detection (>15 seconds), a simulated connection-loss toggle, and CSV export explicitly marked SIMULATED. It is **not connected to Android, BLE, or a cloud backend**. GitHub's file viewer is not a live hosted dashboard.
+
+## Verified milestones and open blockers
+
+- GitHub Actions Android debug APK build #8: SUCCESS (compilation only; no hardware test).
+- Dashboard UI: implemented as standalone static demo.
+- Still required: reliable multi-device BLE discovery and reconnection, per-device pairing/identity, gateway-to-server authenticated transport, access-controlled live dashboard, consent/privacy/retention policy, operational tests, and real Xiaomi Smart Band 10 hardware validation.
+- No source code from closed-source commercial apps has been copied.
+- Never store identifiable recruit health data or secrets in this repository. HR is not a clinical heat-injury diagnostic; continue WBGT monitoring and trained human supervision.
