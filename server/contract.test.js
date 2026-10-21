@@ -31,7 +31,7 @@ test("strict gateway isolation, mapping, viewer permissions, manual WBGT and sta
   let r=await post("/api/ingest",{gateway:"G01",readings:[]},headers("G02"));
   assert.equal(r.status,403,"gateway G02 cannot impersonate G01");
   r=await post("/api/ingest",{gateway:"G01",readings:[]},{Authorization:"Bearer "+viewerSecret});
-  assert.equal(r.status,403,"viewer cannot inject measurements");
+  assert.equal(r.status,401,"viewer token cannot be used as a gateway credential");
   r=await post("/api/ingest",{gateway:"G01",readings:[
    {id:"R01",device_id:"wrong-device",hr:88,timestamp:Date.now()},
    {id:"R02",device_id:"synthetic-device-02",hr:75,timestamp:Date.now()}
@@ -54,6 +54,8 @@ test("strict gateway isolation, mapping, viewer permissions, manual WBGT and sta
   assert.equal(r.status,200);
   const cookie=r.headers.get("set-cookie")?.split(";")[0];
   assert.ok(cookie);
+  r=await post("/api/ingest",{gateway:"G01",readings:[]},{Cookie:cookie});
+  assert.equal(r.status,403,"logged-in viewer cannot inject measurements");
   r=await post("/api/context",{wbgtC:29.5},{Cookie:cookie});
   assert.equal(r.status,200);
   r=await fetch(base+"/api/context",{headers:{Cookie:cookie}});
