@@ -18,3 +18,17 @@ jobs:
       - name: Test backend
         working-directory: server
         run: npm test
+      - name: Simulate 5 gateways and 15 recruits
+        env:
+          RECRUIT_MONITOR_TOKEN: ci-only-long-random-placeholder-token-12345
+          PORT: '18080'
+          MONITOR_URL: http://127.0.0.1:18080
+        run: |
+          node server/index.js &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/health >/dev/null; then break; fi
+            sleep 1
+          done
+          node server/simulate-five-gateways.js
