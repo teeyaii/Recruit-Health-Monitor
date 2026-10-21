@@ -104,6 +104,12 @@ export function slotIsAuthorized(gateway, item) {
 export function provisionedSlots(gateway) {
   return assignments ? Array.from(assignments.get(gateway)?.keys()||[]) : null;
 }
+// Per-gateway anonymous provisioning; never return another gateway's slot map.
+// Calling this requires authentication with that same gateway's bearer token.
+export function provisionedDevicesForGateway(gateway) {
+  if (!assignments) return null;
+  return Array.from(assignments.get(gateway)?.entries()||[]).map(([id,device_id])=>({id,device_id}));
+}
 export function provisionedGateway(slot) {
   if (assignments) for (const [gateway, slots] of assignments) if (slots.has(slot)) return gateway;
   return null;
