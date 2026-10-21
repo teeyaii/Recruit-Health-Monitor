@@ -19,7 +19,9 @@ const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),".
 const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/index.html");
 function viewer(req){const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!cookie)return false;const expiry=sessions.get(cookie);if(!expiry)return false;if(expiry<Date.now()){sessions.delete(cookie);return false;}return true;}
 function send(res,code,data){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(data));}
-function snapshot(){const now=Date.now();return Array.from({length:15},(_,i)=>{const id="R"+String(i+1).padStart(2,"0");const r=recruits.get(id);
+function snapshot(){const now=Date.now();
+ for(const [id,reading] of recruits)if(now-reading.timestamp>MAX_AGE_MS)recruits.delete(id);
+ return Array.from({length:15},(_,i)=>{const id="R"+String(i+1).padStart(2,"0");const r=recruits.get(id);
 return {id,hr:r&&now-r.timestamp<=TTL_MS?r.hr:null,timestamp:r?.timestamp??null,stale:!r||now-r.timestamp>TTL_MS,gateway:r?.gateway??null};});}
 function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
 const server=http.createServer(async(req,res)=>{
