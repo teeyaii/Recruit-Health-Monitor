@@ -238,13 +238,19 @@ byId("profile-save").addEventListener("click",()=>{
   ||!Object.hasOwn(conditionLabel,condition)||!["none","watch"].includes(caution)||!["none","dizzy","confused"].includes(observation)){
    byId("profile-message").textContent="กรอกเฉพาะรหัสสมมติ DEMO-..., น้ำหนัก 20–250 กก. และส่วนสูง 100–230 ซม.";return;
  }
- if(slot.profile.code!==code){
+ const isNewOccupant=slot.profile.code!==code;
+ if(isNewOccupant){
   slot.hr=null;slot.ts=null;
   for(let i=history.length-1;i>=0;i--)if(history[i][1]===slot.id)history.splice(i,1);
-  // A new code means a new occupant. Never reuse an old occupant's measurements or alerts.
+  // A new code means a new occupant; reset previous observation and medical restrictions.
+  // The operator must select a new person's reports after confirming the reassignment.
+  byId("profile-caution").value="none";
+  byId("profile-observation").value="none";
  }
- slot.profile={code,weight,height,condition,caution,observation};
- byId("profile-message").textContent="บันทึกข้อมูลสมมติ "+slot.id+" แล้ว • "+(alertFor(slot)?.title||"ไม่มีเหตุที่ผู้สังเกตเลือก");
+ slot.profile={code,weight,height,condition:isNewOccupant?"none":condition,
+  caution:isNewOccupant?"none":caution,observation:isNewOccupant?"none":observation};
+ if(isNewOccupant)loadProfile();
+ byId("profile-message").textContent="บันทึกข้อมูลสมมติ "+slot.id+(isNewOccupant?" (เปลี่ยนผู้ฝึก: ล้างค่าชีพจรและเหตุเดิม กรุณาประเมินข้อควรระวังใหม่)":" • "+(alertFor(slot)?.title||"ไม่มีเหตุที่ผู้สังเกตเลือก"));
  render();
 });
 byId("profile-replace").addEventListener("click",()=>{
