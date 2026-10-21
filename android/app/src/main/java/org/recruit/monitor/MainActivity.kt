@@ -25,6 +25,7 @@ class MainActivity : Activity() {
   var bpm: Int? = null, var measured: Long = 0, var sent: Long = 0, var attempts: Int = 0)
  private val pairs = mutableMapOf<String,Pairing>()
  private var uploader: GatewayUploader? = null
+ private var provisionedSlots: Map<String,String>? = null
  private var scanning = false
  private var scanGeneration = 0
  private var foreground = false
@@ -33,6 +34,8 @@ class MainActivity : Activity() {
  private lateinit var status: TextView
  private lateinit var uploadStatus: TextView
  private lateinit var connectionTestStatus: TextView
+ private lateinit var provisioningStatus: TextView
+ private lateinit var pilotSummary: TextView
  private lateinit var url: EditText
  private lateinit var token: EditText
  private lateinit var gateway: Spinner
@@ -53,13 +56,24 @@ class MainActivity : Activity() {
      runOnUiThread { uploadStatus.text = message }
     }
     uploader?.shutdown(); uploader = next; token.text.clear()
+    provisionedSlots=null
     connectionTestStatus.text = "HTTPS gateway test not run"
-    status.text = "Configured. Scan, choose device, then assign a provisioned slot."
+    status.text = "Configured. Loading authorized R-slots from Gateway..."
+    provisioningStatus.text = "Loading allowed slots... (no BLE readings)"
+    loadProvisioning()
    } catch (_: Exception) { status.text = "Use an HTTPS origin, G01–G05 and a 32+ character credential" }
   } })
   status = TextView(this); uploadStatus = TextView(this).apply { text = "Upload not configured" }
   connectionTestStatus = TextView(this).apply { text = "HTTPS gateway test not run" }
+  provisioningStatus = TextView(this).apply { text = "Authorized slots not loaded" }
+  pilotSummary = TextView(this).apply { text = "Pilot: 0 assigned / 0 BLE subscribed / 0 fresh BPM" }
   layout.addView(status); layout.addView(uploadStatus); layout.addView(connectionTestStatus)
+  layout.addView(provisioningStatus)
+  layout.addView(pilotSummary)
+  layout.addView(Button(this).apply { text = "Reload authorized R-slots (Gateway access)"; setOnClickListener {
+   if (pairs.isNotEmpty()) { provisioningStatus.text="Stop and clear assignments before reloading authorized slots"; return@setOnClickListener }
+   loadProvisioning()
+  } })
   layout.addView(Button(this).apply { text = "Test HTTPS Gateway (no BPM)"; setOnClickListener {
    if (pairs.isNotEmpty()) { connectionTestStatus.text = "Clear assignments before running the standalone gateway test"; return@setOnClickListener }
    val sender = uploader ?: run { connectionTestStatus.text = "Configure HTTPS and gateway credential first"; return@setOnClickListener }
@@ -75,6 +89,19 @@ class MainActivity : Activity() {
   rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
   layout.addView(rows)
   setContentView(ScrollView(this).apply { addView(layout) })
+ }
+ /** Server-provisioned anonymous slot ID is NOT the radio address or band identity. */
+ private fun loadProvisioning() {
+  val sender=uploader ?: run { provisioningStatus.text="Configure the Gateway first"; return }
+  provisionedSlots=null
+  provisioningStatus.text="Checking private Gateway slot map over HTTPS... (wait if Render is asleep)"
+  sender.fetchProvisioning { message,slots -> runOnUiThread {
+   // Do not re-enable assignment for a stale configuration or after a reset.
+   if (sender !== uploader || pairs.isNotEmpty()) return@runOnUiThread
+   provisionedSlots=slots?.toMap()
+   provisioningStatus.text=message
+   redraw()
+  } }
  }
  private fun permitted(): Boolean {
   val needed = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT)
@@ -112,19 +139,35 @@ class MainActivity : Activity() {
   override fun onScanFailed(errorCode: Int) { runOnUiThread { scanning = false; status.text = "Scan failed: $errorCode" } }
  }
  private fun assign(address: String) {
-  if (uploader == null) { status.text = "Configure HTTPS upload first"; return }
-  if (pairs.containsKey(address)) { pairs[address]?.attempts = 0; connect(address); return }
-  val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24,16,24,16) }
-  val slots = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,(1..15).map { "R" + it.toString().padStart(2,'0') }) }
-  val opaque = EditText(this).apply { hint = "Provisioned opaque device ID (not MAC/name)" }
-  form.addView(slots); form.addView(opaque)
-  AlertDialog.Builder(this).setTitle("Confirm device → recruit slot").setView(form)
-   .setNegativeButton("Cancel",null).setPositiveButton("Assign and connect") { _,_ ->
-    val slot = slots.selectedItem.toString(); val id = opaque.text.toString().trim()
-    if (!AssignmentRules.allows(slot,id,pairs.values.map { it.slot to it.opaque })) {
-     status.text = "Invalid or duplicate slot/device ID"; return@setPositiveButton
+  if (uploader == null) { status.text="Configure HTTPS upload first"; return }
+  if (pairs.containsKey(address)) { pairs[address]?.attempts=0; connect(address); return }
+  val known=provisionedSlots ?: run {
+   status.text="Load authorized R-slots from Render first, then assign the physical band"
+   return
+  }
+  val available=known.keys.sorted().filter { id -> pairs.values.none { it.slot==id } }
+  if (available.isEmpty()) {
+   status.text="No unassigned R-slots for this Gateway; update Render STEVE_SLOT_MAP_JSON before adding bands"
+   return
+  }
+  val form=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(24,16,24,16) }
+  val slots=Spinner(this).apply {
+   adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,available)
+  }
+  form.addView(TextView(this).apply {
+   text="Choose which PERSON is wearing THIS band. Authorized slot IDs came from Render; they do not verify the wearer."
+  })
+  form.addView(slots)
+  AlertDialog.Builder(this).setTitle("Confirm physical band -> authorized recruit")
+   .setView(form).setNegativeButton("Cancel",null)
+   .setPositiveButton("Assign and connect"){_,_->
+    val slot=slots.selectedItem.toString()
+    val id=provisionedSlots?.get(slot)
+    if(id==null || !AssignmentRules.allows(slot,id,pairs.values.map { it.slot to it.opaque })) {
+     status.text="Invalid, changed or duplicate authorized slot; reload map";return@setPositiveButton
     }
-    pairs[address] = Pairing(slot,id); connect(address)
+    pairs[address]=Pairing(slot,id)
+    connect(address)
    }.show()
  }
  private fun connect(address: String) {
@@ -200,6 +243,12 @@ class MainActivity : Activity() {
   redraw()
  }
  private fun redraw() {
+  if(::pilotSummary.isInitialized) {
+   val now=System.currentTimeMillis()
+   val subscribed=pairs.values.count { it.state=="CONNECTED" }
+   val fresh=pairs.values.count { it.state=="CONNECTED" && it.bpm!=null && now-it.measured<=15000 }
+   pilotSummary.text="Pilot: ${pairs.size} assigned / $subscribed BLE subscribed / $fresh fresh BPM"
+  }
   rows.removeAllViews()
   devices.forEach { (address,device) ->
    val pair = pairs[address]
