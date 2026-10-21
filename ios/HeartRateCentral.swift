@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import CoreBluetooth
 
 /// Experimental iOS BLE reader. No networking, no recruit identity, no medical use.
