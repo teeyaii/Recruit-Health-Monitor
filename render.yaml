@@ -20,6 +20,11 @@ services:
         value: "8080"
       - key: STEVE_VIEWER_TOKEN
         generateValue: true
+      # Separate logins, identical permissions, actor role recorded in private audit.
+      - key: STEVE_TRAINER_TOKEN
+        generateValue: true
+      - key: STEVE_MEDIC_TOKEN
+        generateValue: true
       - key: STEVE_GATEWAY_TOKEN_G01
         generateValue: true
       - key: STEVE_GATEWAY_TOKEN_G02
