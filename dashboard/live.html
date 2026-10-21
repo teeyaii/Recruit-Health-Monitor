@@ -114,7 +114,7 @@ async function rosterAction(action){
  }catch(e){byId("rosterStatus").textContent="บันทึกไม่ได้: "+e.message+" • กรุณาโหลดข้อมูลล่าสุดก่อนลองใหม่";}
  finally{button.disabled=false;}
 }
-byId("rosterSlot").addEventListener("change",fillRoster);
+byId("rosterSlot").onchange=fillRoster;
 byId("rosterSave").onclick=()=>rosterAction("save");
 byId("rosterReplace").onclick=()=>rosterAction("replace");
 byId("rosterResume").onclick=()=>rosterAction("resume");
