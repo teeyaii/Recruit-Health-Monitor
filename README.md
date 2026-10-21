@@ -57,3 +57,26 @@ The Dashboard viewer cookie cannot write to ingest. Gateways cannot edit operato
 Android \`GatewayUploader.kt\` and iOS \`GatewayUploadClient.swift\` are **unconnected transport building blocks** until an operator pairing UI and signed mobile builds exist. They intentionally do not store credentials or upload without explicit runtime setup. Continue direct human supervision, WBGT procedures and emergency protocols.
 
 Run synthetic checks with \`cd server && npm test\`; the GitHub workflow also runs the simulated 5-gateway / 15-slot smoke test. Hardware BLE, signed iOS app, lock-screen resilience and clinical safety are **not** covered by CI.
+
+
+## 10-day demonstrator: STEVE operator live simulation
+
+**MVP focus:** show G01–G05 delivering fake BPM to 15 anonymous R-slots on a mobile-friendly dashboard. Hardware pairing, medical alarm logic and operational security hardening are later gates.
+
+With Node.js 22+ in a trusted development environment:
+
+\`\`\`sh
+cd server
+RECRUIT_MONITOR_TOKEN=demo-only-long-random-token-not-for-production STEVE_DEMO_MODE=1 npm start
+\`\`\`
+
+Open \`http://localhost:8080/live\`, sign in with the same demo-only token, then use:
+- **เริ่มจำลอง 15 นาย** to inject explicitly labeled fake measurements for R01–R15.
+- **จำลองสัญญาณ R03 ขาด** to freeze R03, which must become stale after 15 seconds while the other slots continue.
+- **คืนสัญญาณ R03** to resume the stream.
+- **หยุดจำลอง** to end updates; all old readings must become stale.
+- Enter a manually measured WBGT via the dashboard when testing operator workflow (use synthetic values for demos).
+
+Enable \`STEVE_DEMO_MODE=1\` only in an isolated test environment; demo commands are disabled under \`NODE_ENV=production\`. An iPhone can view the dashboard **after** a server is hosted over a reachable HTTPS URL. This repository does not supply a live hosted URL. A standalone synthetic-only HTML demo also exists at \`dashboard/index.html\`.
+
+Before showing with actual wearables: complete mobile app-to-API wiring, human-confirmed pairing, physical BLE reconnection/range tests, and separate handling and consent for real data. **No actual BLE or real medical measurements were used for the demo or CI.**
