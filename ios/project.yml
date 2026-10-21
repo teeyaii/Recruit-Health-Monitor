@@ -1,0 +1,24 @@
+name: STEVEGateway
+options:
+  bundleIdPrefix: org.recruit
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  STEVEGateway:
+    type: application
+    platform: iOS
+    sources:
+      - HeartRateCentral.swift
+      - GatewayUploadClient.swift
+      - STEVEGatewayApp.swift
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: org.recruit.stevegateway
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGNING_ALLOWED: "NO"
+    info:
+      path: Info.plist
+      properties:
+        NSBluetoothAlwaysUsageDescription: "STEVE uses Bluetooth to read a heart rate broadcaster when the operator starts a scan."
+        UILaunchScreen: {}
