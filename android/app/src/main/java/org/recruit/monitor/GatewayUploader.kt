@@ -31,15 +31,21 @@ class GatewayUploader(baseUrl: String, private val gatewayId: String,
  /** Empty heartbeat validates gateway credential over HTTPS; sends no health reading.
   * Render Free may need ~60 s to wake after idle. Normal BPM sends stay bounded to 12 s.
   */
- fun testConnection() = enqueue(JSONArray(),System.currentTimeMillis(),probe = true)
- private fun enqueue(readings: JSONArray, timestamp: Long, probe: Boolean = false) {
+ fun testConnection(onResult: (String) -> Unit) =
+  enqueue(JSONArray(),System.currentTimeMillis(),probe = true, probeResult = onResult)
+ private fun enqueue(readings: JSONArray, timestamp: Long, probe: Boolean = false,
+  probeResult: ((String) -> Unit)? = null) {
   if (jobs.isShutdown) return
   val body = JSONObject().put("gateway",gatewayId).put("readings",readings).toString()
+  // Keep explicit connection-test results visible instead of overwriting them with periodic heartbeats.
+  val report: (String) -> Unit = { message ->
+   if (probe && probeResult != null) probeResult(message) else onStatus(message)
+  }
   jobs.execute {
    val attempts = if (probe) 1 else 3
    for (attempt in 0 until attempts) {
     if (Thread.currentThread().isInterrupted || (!probe && System.currentTimeMillis()-timestamp > 12000)) {
-     onStatus("Upload expired; awaiting a new measurement"); return@execute
+     report("Upload expired; awaiting a new measurement"); return@execute
     }
     var connection: HttpURLConnection? = null
     try {
@@ -55,18 +61,18 @@ class GatewayUploader(baseUrl: String, private val gatewayId: String,
      val code = connection.responseCode
      if (code == 200) {
       val result = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-      onStatus(if (result.optInt("accepted",-1) == readings.length())
+      report(if (result.optInt("accepted",-1) == readings.length())
        if (probe) "Gateway -> HTTPS server OK (zero BPM sent)" else "Server acknowledged"
        else "Not accepted: check mapping / timestamp; duplicate retries are ignored")
       return@execute
      }
-     if (code != 429 && code < 500) { onStatus("Upload rejected (HTTP $code); check configuration"); return@execute }
+     if (code != 429 && code < 500) { report("Upload rejected (HTTP $code); check configuration"); return@execute }
     } catch (_: Exception) {
      if (Thread.currentThread().isInterrupted) return@execute
     } finally { connection?.disconnect() }
     if (attempt < attempts-1) try { Thread.sleep(500L * (attempt+1)) } catch (_: InterruptedException) { return@execute }
    }
-   onStatus(if (probe) "Gateway test failed; check internet, Render wake-up or credential" else
+   report(if (probe) "Gateway test failed; check internet, Render wake-up or credential" else
     "Upload unavailable after 3 attempts; waiting for new data")
   }
  }
