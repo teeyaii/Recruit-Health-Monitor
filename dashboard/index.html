@@ -1,50 +1,178 @@
 <!doctype html>
-<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Recruit Health Monitor — Demo</title>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<title>STEVE 1.0 — DEMO ทหารใหม่ 15 นาย</title>
 <style>
-:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#101722;color:#eef2f7}body{margin:0;padding:20px;max-width:1150px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}h1{font-size:1.5rem;margin:0}p{color:#abb8c9}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}button{background:#24354a;border:1px solid #52667e;border-radius:8px;color:white;padding:10px 14px;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px}.card{background:#1b2736;border:1px solid #34465b;border-radius:12px;padding:16px}.card h2{font-size:1rem;margin:0 0 10px}.bpm{font-size:2rem;font-weight:700}.meta{font-size:.8rem;color:#aebbc9}.normal{border-left:5px solid #4bbd90}.review{border-left:5px solid #efbd5b}.missing{border-left:5px solid #9ca3af}.critical{border-left:5px solid #e77373}.note{padding:12px;border:1px solid #52667e;border-radius:8px;margin:15px 0}small{color:#aebbc9}
-</style></head><body>
-<header><div><h1>Recruit Health Monitor</h1><p>แดชบอร์ดตัวอย่าง • ทหารใหม่ R01–R15 • ไม่มีข้อมูลบุคคลจริง</p></div><strong id="clock"></strong></header>
-<div class="note"><strong>DEMO / SIMULATED DATA ONLY</strong> — ตัวเลขสร้างขึ้นเพื่อทดสอบหน้าจอ ไม่ใช่ชีพจรจริงหรือระบบเตือนภัยทางการแพทย์ ห้ามใช้ตัดสินความปลอดภัยระหว่างฝึก</div>
-<div class="controls"><button id="toggle">หยุดข้อมูลจำลอง</button><button id="drop">จำลองสัญญาณ R03 ขาด</button><button id="restore">คืนสัญญาณทั้งหมด</button><button id="csv">ส่งออก CSV จำลอง</button></div>
-<p id="summary" role="status"></p><div id="cards" class="grid" aria-live="polite"></div>
-<p><small>สถานะ stale เมื่อไม่มีข้อมูลใหม่เกิน 15 วินาที • เกณฑ์ HR ในตัวอย่างใช้แสดง UI เท่านั้น ไม่ใช่เกณฑ์การแพทย์ • ไม่มีการเชื่อมต่อ BLE หรือเซิร์ฟเวอร์ในหน้านี้</small></p>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#0b1220;color:#f1f5fa;font-size:15px}
+*{box-sizing:border-box}body{margin:0}main{max-width:1160px;margin:auto;padding:16px}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+h1{font-size:1.5rem;margin:0}.subtitle{color:#9bb2cf;margin:5px 0 0}.pill{font-size:.75rem;font-weight:800;padding:6px 10px;background:#3e2830;color:#ffd0d7;border-radius:20px;letter-spacing:.05em}
+.notice{border:1px solid #8f5f34;background:#302417;border-radius:14px;padding:14px;margin:15px 0;color:#ffe6c9;line-height:1.6}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:15px 0}
+.stat,.panel,.card,.gateway{background:#162237;border:1px solid #2a405c;border-radius:14px}
+.stat{padding:13px}.stat b{font-size:1.75rem;display:block}.label{font-size:.8rem;color:#a8bdd7}
+.panels{display:grid;grid-template-columns:2fr 1fr;gap:12px;align-items:start}
+.panel{padding:14px;margin-bottom:14px}.panel h2{margin:0 0 12px;font-size:1.05rem}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+button{border:1px solid #4b6584;background:#243b58;color:#eff6ff;font:inherit;font-weight:600;border-radius:9px;padding:11px 13px;cursor:pointer;min-height:44px}
+button:focus-visible,input:focus-visible{outline:3px solid #80bffa;outline-offset:2px}
+button.primary{background:#1d75bd;border-color:#4499db}button.danger{background:#542c38;border-color:#956276}
+button:hover{filter:brightness(1.1)}input{font:inherit;background:#0d1727;color:white;border:1px solid #4b6584;border-radius:9px;padding:11px;width:115px;max-width:100%}
+.note-small{color:#abc0da;font-size:.82rem;margin:10px 0 0;line-height:1.5}
+.gateways{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.gateway{padding:11px;text-align:center;min-width:0}.gateway b{display:block;font-size:1.04rem}
+.gateway small{display:block;color:#a6bcd4;line-height:1.5}
+.gateway.down{border-color:#e08c72;background:#34222c}
+.roster-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin:13px 0}
+.roster-heading h2{margin:0;font-size:1.12rem}.roster{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.card{padding:12px;border-left:4px solid #49afd7;min-width:0}
+.card.stale{border-left-color:#ef977d;background:#30222c}
+.card .id{display:flex;justify-content:space-between;gap:4px;align-items:center;font-weight:800}
+.card .tag{font-size:.58rem;border-radius:8px;padding:3px 5px;color:#d7edff;background:#34506c}
+.card.stale .tag{background:#764b4c;color:#ffe5dc}
+.card .bpm{font-size:1.85rem;font-weight:800;margin-top:7px;font-variant-numeric:tabular-nums}
+.card .bpm small{font-size:.7rem;font-weight:500;color:#aebdd0}
+.card .detail{font-size:.76rem;color:#a9bbd4;line-height:1.5;margin-top:4px}
+footer{font-size:.78rem;color:#8ea6c6;line-height:1.6;margin:20px 0}
+@media(max-width:800px){.panels{grid-template-columns:1fr}.roster{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:540px){main{padding:12px}.roster{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gateways{grid-template-columns:repeat(3,minmax(0,1fr))}.stat{padding:10px}.stat b{font-size:1.4rem}.card .bpm{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<main>
+<header>
+ <div><h1>STEVE 1.0 <span aria-hidden="true">♥</span></h1><p class="subtitle">Smart Training & Exercise Vital-sign Evaluation</p></div>
+ <div><span class="pill">SIMULATED • DEMO ONLY</span><div class="label" id="clock" style="text-align:right;margin-top:6px"></div></div>
+</header>
+<section class="notice" role="note"><strong>ข้อมูลจำลอง 100% ไม่ใช่ชีพจรทหารจริง</strong> — ใช้สาธิตการจัดการ 15 นาย / 5 Gateway เท่านั้น ไม่มีการอ่าน Bluetooth ไม่มีการเชื่อม Server และไม่ใช่ระบบวินิจฉัยหรือตรวจจับภาวะเจ็บป่วยจากความร้อน ข้อมูลขาดต้องแสดงว่าไม่ทราบค่า ไม่ใช่ 0 หรือปลอดภัย</section>
+<section class="stats" aria-live="polite">
+ <div class="stat"><span class="label">ข้อมูลจำลองปัจจุบัน</span><b id="fresh">0/15</b></div>
+ <div class="stat"><span class="label">ข้อมูลขาด / เก่า</span><b id="missing">15</b></div>
+ <div class="stat"><span class="label">Gateway จำลองออนไลน์</span><b id="gate-count">0/5</b></div>
+</section>
+<div class="panels">
+ <section class="panel">
+  <h2>ควบคุมการสาธิต</h2>
+  <div class="controls">
+   <button id="toggle" class="primary" type="button">เริ่มจำลอง</button>
+   <button id="drop-one" type="button">ตัดสัญญาณ R03</button>
+   <button id="drop-gateway" type="button">ตัด Gateway G03</button>
+   <button id="restore" type="button">คืนสัญญาณทั้งหมด</button>
+   <button id="reset" class="danger" type="button">รีเซ็ต</button>
+   <button id="csv" type="button">ส่งออก CSV (จำลอง)</button>
+  </div>
+  <p id="scenario" class="note-small" role="status">พร้อมสาธิต กดเริ่มจำลองเพื่อสร้างข้อมูล</p>
+ </section>
+ <section class="panel">
+  <h2>สภาพแวดล้อมฝึก (ตัวอย่าง)</h2>
+  <div class="controls">
+   <label for="wbgt" class="label" style="align-self:center">WBGT จำลอง °C</label>
+   <input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="29.5">
+   <button id="save-wbgt" type="button">บันทึก</button>
+  </div>
+  <p id="wbgt-state" class="note-small" role="status">ยังไม่มีค่า WBGT จำลอง</p>
+  <p class="note-small">ไม่แปลผลเป็นเกณฑ์ความเสี่ยงทางการแพทย์</p>
+ </section>
+</div>
+<section class="panel" aria-labelledby="gateway-heading">
+ <h2 id="gateway-heading">Gateway ทั้ง 5 เครื่อง (จำลอง)</h2>
+ <div id="gateways" class="gateways"></div>
+</section>
+<div class="roster-heading"><h2>ชีพจรทหารใหม่ R01–R15 (จำลอง)</h2><span class="label">ข้อมูลใหม่ทุก 3 วินาที • ข้อมูลเก่าเมื่อเกิน 15 วินาที</span></div>
+<section id="roster" class="roster" aria-label="ข้อมูลชีพจรจำลอง 15 นาย"></section>
+<footer>STEVE 1.0 • Standalone offline demo • ใช้งานได้ผ่าน Safari บน iPhone หรือเบราว์เซอร์อื่นโดยไม่ต้องติดตั้งแอป • ไม่ใช้ข้อมูลบุคคล • ไม่เชื่อมต่อ BLE/API</footer>
+</main>
 <script>
 "use strict";
-const staleMs=15000;
-const records=Array.from({length:15},(_,i)=>({id:"R"+String(i+1).padStart(2,"0"),hr:null,last:null,offline:false}));
-const history=[];let running=true;
-const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function ingest(id,hr,ts=Date.now()){
- const r=records.find(x=>x.id===id);
- if(!r||!Number.isInteger(hr)||hr<25||hr>240||!Number.isFinite(ts))return false;
- if(r.last!==null&&ts<r.last)return false;
- r.hr=hr;r.last=ts;
- history.push({time:new Date(ts).toISOString(),id,hr,source:"SIMULATED"});
- return true;
+const STALE_MS=15000;
+const SLOT_COUNT=15;
+const ids=Array.from({length:SLOT_COUNT},(_,i)=>"R"+String(i+1).padStart(2,"0"));
+const slots=ids.map((id,i)=>({id,gw:"G0"+(Math.floor(i/3)+1),hr:null,ts:null}));
+const history=[];
+const byId=id=>document.getElementById(id);
+let running=false,round=0,droppedR03=false,droppedG03=false,wbgt=null,wbgtAt=null;
+function fresh(slot,now){return slot.ts!==null && now-slot.ts<=STALE_MS;}
+function receive(slot,hr,now){
+ if(!Number.isInteger(hr)||hr<25||hr>240)return;
+ slot.hr=hr;slot.ts=now;
+ history.push([new Date(now).toISOString(),slot.id,slot.gw,hr,"SIMULATED"]);
+ if(history.length>1200)history.shift();
 }
-function state(r,now){
- if(r.last===null||now-r.last>staleMs)return "missing";
- return r.hr>=170?"critical":r.hr>=140?"review":"normal";
+function tick(){
+ if(running){
+  const now=Date.now();
+  slots.forEach((slot,i)=>{
+   if(slot.id==="R03"&&droppedR03)return;
+   if(slot.gw==="G03"&&droppedG03)return;
+   const wave=Math.round(92+19*Math.sin(round*.45+i*.6)+((i*7)%15));
+   receive(slot,Math.max(55,Math.min(160,wave)),now);
+  });
+  round++;
+ }
+ render();
 }
 function render(){
- const now=Date.now();document.getElementById("clock").textContent=new Date(now).toLocaleTimeString("th-TH");
- const counts={normal:0,review:0,critical:0,missing:0};
- document.getElementById("cards").innerHTML=records.map(r=>{
- const s=state(r,now);counts[s]++;
- const age=r.last===null?"ไม่เคยรับข้อมูล":Math.max(0,Math.round((now-r.last)/1000))+" วินาทีที่แล้ว";
- return '<article class="card '+s+'"><h2>'+esc(r.id)+'</h2><div class="bpm">'+(s==="missing"?"—":r.hr)+' <small>'+(s==="missing"?"STALE":"BPM")+'</small></div><div class="meta">'+esc(age)+'</div><div class="meta">'+({normal:"ข้อมูลจำลอง",review:"เกณฑ์สาธิต",critical:"เกณฑ์สาธิต",missing:"ไม่มีข้อมูลปัจจุบัน"}[s])+'</div></article>';
+ const now=Date.now();
+ byId("clock").textContent=new Date(now).toLocaleTimeString("th-TH");
+ const n=slots.filter(s=>fresh(s,now)).length;
+ byId("fresh").textContent=n+"/15";
+ byId("missing").textContent=String(15-n);
+ const status=Array.from({length:5},(_,i)=>{
+  const id="G0"+(i+1),assigned=slots.filter(s=>s.gw===id);
+  const online=assigned.some(s=>fresh(s,now));
+  return {id,online,count:assigned.filter(s=>fresh(s,now)).length};
+ });
+ byId("gate-count").textContent=status.filter(s=>s.online).length+"/5";
+ byId("gateways").innerHTML=status.map(g=>'<div class="gateway '+(g.online?'':'down')+'"><b>'+g.id+'</b><small>'+(g.online?'รับข้อมูลจำลอง':'ไม่พบข้อมูลใหม่')+'</small><small>'+g.count+'/3 ช่อง</small></div>').join("");
+ byId("roster").innerHTML=slots.map(s=>{
+  const online=fresh(s,now);
+  const age=s.ts===null?'ไม่เคยรับข้อมูล':Math.max(0,Math.round((now-s.ts)/1000))+' วินาทีที่แล้ว';
+  return '<article class="card '+(online?'':'stale')+'"><div class="id"><span>'+s.id+'</span><span class="tag">'+(online?'SIMULATED':'STALE')+'</span></div><div class="bpm">'+(online?s.hr:'—')+' <small>'+(online?'BPM':'ไม่ทราบค่า')+'</small></div><div class="detail">'+s.gw+' • '+age+'</div></article>';
  }).join("");
- document.getElementById("summary").textContent="รับข้อมูลล่าสุด "+(15-counts.missing)+"/15 | ไม่มีข้อมูล "+counts.missing+" | เกณฑ์สาธิตระดับ 1 "+counts.review+" | ระดับ 2 "+counts.critical;
+ if(wbgtAt!==null){
+  const age=Math.round((now-wbgtAt)/60000),stale=age>=30;
+  byId("wbgt-state").textContent=stale?'WBGT จำลอง '+wbgt+' °C (ข้อมูลเก่าเกิน 30 นาที)':'WBGT จำลอง '+wbgt+' °C • บันทึกเมื่อ '+new Date(wbgtAt).toLocaleTimeString("th-TH");
+ }
 }
-function tick(){if(running){const now=Date.now();records.forEach((r,i)=>{if(!r.offline)ingest(r.id,Math.max(55,Math.min(185,Math.round(92+18*Math.sin(now/6500+i)+Math.random()*16))),now);});}render();}
-document.getElementById("toggle").onclick=()=>{running=!running;document.getElementById("toggle").textContent=running?"หยุดข้อมูลจำลอง":"เริ่มข้อมูลจำลอง";};
-document.getElementById("drop").onclick=()=>{records[2].offline=true;render();};
-document.getElementById("restore").onclick=()=>{records.forEach(r=>r.offline=false);tick();};
-document.getElementById("csv").onclick=()=>{
- const rows=[["timestamp_utc","recruit_id","heart_rate_bpm","source"],...history.map(x=>[x.time,x.id,x.hr,x.source])];
- const blob=new Blob([rows.map(r=>r.join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"});
- const a=document.createElement("a");const url=URL.createObjectURL(blob);a.href=url;a.download="recruit-demo-simulated.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-};
-tick();setInterval(tick,3000);
-</script></body></html>
+function describe(message){byId("scenario").textContent=message;}
+byId("toggle").addEventListener("click",()=>{
+ running=!running;
+ byId("toggle").textContent=running?"หยุดข้อมูลจำลอง":"เริ่มจำลอง";
+ describe(running?"กำลังสร้างข้อมูลชีพจรสมมติ ไม่ได้เชื่อมอุปกรณ์จริง":"หยุดจำลองแล้ว ข้อมูลจะกลายเป็น STALE เมื่อเกิน 15 วินาที");
+ tick();
+});
+byId("drop-one").addEventListener("click",()=>{
+ droppedR03=true;describe("จำลอง R03 ขาดสัญญาณ — รอ 15 วินาทีเพื่อเห็นสถานะ STALE");render();
+});
+byId("drop-gateway").addEventListener("click",()=>{
+ droppedG03=true;describe("จำลอง G03 ขาดสัญญาณ — R07, R08 และ R09 จะเป็น STALE เมื่อเกิน 15 วินาที");render();
+});
+byId("restore").addEventListener("click",()=>{
+ droppedR03=false;droppedG03=false;describe("คืนสัญญาณจำลองทั้งหมดแล้ว");tick();
+});
+byId("reset").addEventListener("click",()=>{
+ running=false;round=0;droppedR03=false;droppedG03=false;wbgt=null;wbgtAt=null;
+ slots.forEach(s=>{s.hr=null;s.ts=null;});history.length=0;byId("wbgt").value="";
+ byId("wbgt-state").textContent="ยังไม่มีค่า WBGT จำลอง";
+ byId("toggle").textContent="เริ่มจำลอง";describe("รีเซ็ตข้อมูลสมมติทั้งหมดแล้ว");render();
+});
+byId("save-wbgt").addEventListener("click",()=>{
+ const value=Number(byId("wbgt").value);
+ if(byId("wbgt").value.trim()==="" || !Number.isFinite(value) || value<0 || value>60){
+  byId("wbgt-state").textContent="กรุณาใส่ค่า WBGT จำลอง 0–60 °C";return;
+ }
+ wbgt=value;wbgtAt=Date.now();render();
+});
+byId("csv").addEventListener("click",()=>{
+ const lines=[["time_utc","slot_id","gateway","bpm","source"],...history];
+ const csv=lines.map(row=>row.join(",")).join("\r\n");
+ const url=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));
+ const a=document.createElement("a");a.href=url;a.download="steve-simulated-only.csv";a.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+setInterval(tick,3000);render();
+</script>
+</body></html>
