@@ -1,5 +1,15 @@
 # STEVE 1.0
 
+## iPhone-first 10-day MVP (synthetic demo)
+
+**Next practical output:** a one-file mobile-friendly, offline STEVE demo with 15 simulated recruits, 5 simulated gateways, start/stop, disconnect R03/G03, restore, manual **synthetic** WBGT and sample CSV. No backend, Bluetooth equipment or private data is required to view this offline demonstration.
+
+- Source: [dashboard/index.html](dashboard/index.html)
+- One-time manual GitHub Pages deployment: [iPhone demo guide](docs/DEMO_IPHONE.md)
+- Automatic checks: server/static-demo.test.js, Android compile, iOS simulator compile and backend integration.
+- **Only the demo file can be published** via the opt-in GitHub Pages workflow; this may make the static demo public even if the repository is private. No live deployment has been claimed.
+
+
 **Smart Training & Exercise Vital-sign Evaluation** — prototype hybrid Android/iPhone gateway and centralized heart-rate dashboard for 15 pseudonymous recruit slots (R01–R15) and five gateways (G01–G05).
 
 > STEVE 1.0 is a software prototype, **not** a medical device or heat-injury detector. Never treat missing measurements as zero or as evidence of safety. Continue direct human observation, WBGT/heat controls, rest, hydration and emergency procedures.

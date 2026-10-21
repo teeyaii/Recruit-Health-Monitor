@@ -4,12 +4,14 @@ on:
     paths:
       - 'server/**'
       - 'dashboard/live.html'
+      - 'dashboard/index.html'
       - 'README.md'
       - '.github/workflows/backend-tests.yml'
   pull_request:
     paths:
       - 'server/**'
       - 'dashboard/live.html'
+      - 'dashboard/index.html'
       - 'README.md'
       - '.github/workflows/backend-tests.yml'
   workflow_dispatch:
