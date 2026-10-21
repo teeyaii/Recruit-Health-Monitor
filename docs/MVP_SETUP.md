@@ -52,6 +52,12 @@ Signing identities, profiles, team access, and Apple processing are external req
 
 After installation the same configuration/scan/assignment workflow applies. iOS Bluetooth permission is requested by CoreBluetooth. Keep the app open; leaving the foreground disconnects devices and requires Retry when returning.
 
+## Phone-only Gateway connectivity test (new)
+
+Follow [mobile Gateway connectivity milestone](MOBILE_CONNECTIVITY_MVP.md). Native Android/iOS UI has **Test HTTPS Gateway (no BPM)**. It sends an authenticated empty batch, returns a distinct status and supports Render Free wake-up without relaxing normal 12-second reading expiry. For a physical band later, try filtered 180D scan first, then the opt-in Broad BLE scan when no HR broadcaster appears; discovery is not proof that 2A37 notifications will be available.
+
+Do not confuse the Safari demo with a signed native BLE application. The existing Apple Developer signing requirements still apply, and no physical device has been tested.
+
 ## Limits to verify with hardware
 
 Start with one band, then two, then three per gateway. Check identity, correct slot routing, radio loss and recovery, phone lock/background, range and interference. No physical band, signed iPhone installation or multi-device reliability test has been performed. Runtime assignments intentionally do not persist; after process termination, explicitly pair again.
