@@ -21,3 +21,9 @@ POST `/api/ingest` with `Authorization: Bearer <token>` and JSON:
 `timestamp` must be epoch milliseconds within the last 60 seconds. Each request supports up to 15 readings (API batch ceiling, not a tested BLE connection capacity). Gateways G01–G05 are accepted. The actual maximum number of simultaneous Xiaomi bands per Android phone is unknown pending hardware validation. Duplicate or older timestamps are ignored. Missing/stale values become null after 15 seconds. `GET /api/snapshot` and `GET /api/events` use the same authorization header. Browser EventSource cannot supply Authorization headers, so an authenticated browser-facing gateway or session mechanism must be added before wiring the web dashboard.
 
 The existing dashboard is still an offline **simulation**, not connected to this backend. This backend has not been deployed or integration-tested with an Android device.
+
+## Browser live dashboard (prototype)
+
+Run the server and open `http://localhost:8080/live` in a browser. Enter the shared prototype token to establish an HttpOnly SameSite=Strict cookie session, then view the 15-slot live SSE dashboard. For any remote deployment, **HTTPS is mandatory**, set `COOKIE_SECURE=1`, restrict access to authorized staff, and replace shared-token login with proper per-user accounts and per-gateway credentials. This demo is not suitable for real identifiable recruit data.
+
+Backend integration checks run in GitHub Actions (`Backend integration tests`). No real Android device or Xiaomi hardware has been tested. The Android app currently displays BLE data locally and does not yet POST to the backend. No public hosting has been configured.
