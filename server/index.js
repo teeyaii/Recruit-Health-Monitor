@@ -12,6 +12,7 @@ const MAX_AGE_MS=60000;
 const recruits=new Map();
 const clients=new Set();
 const sessions=new Map();
+const lastByGateway=new Map();
 const SESSION_MS=8*60*60*1000;
 const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
 const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/index.html");
@@ -20,7 +21,7 @@ function auth(req){const provided=req.headers.authorization?.replace(/^Bearer /,
  return a.length===b.length&&timingSafeEqual(a,b);
 }
 function validToken(value){const a=Buffer.from(value||""),b=Buffer.from(TOKEN);return a.length===b.length&&timingSafeEqual(a,b);}
-function viewer(req){const cookie=req.headers.cookie?.match(/(?:^|;\\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!cookie)return false;const expiry=sessions.get(cookie);if(!expiry)return false;if(expiry<Date.now()){sessions.delete(cookie);return false;}return true;}
+function viewer(req){const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!cookie)return false;const expiry=sessions.get(cookie);if(!expiry)return false;if(expiry<Date.now()){sessions.delete(cookie);return false;}return true;}
 function send(res,code,data){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(data));}
 function snapshot(){const now=Date.now();return Array.from({length:15},(_,i)=>{const id="R"+String(i+1).padStart(2,"0");const r=recruits.get(id);
 return {id,hr:r&&now-r.timestamp<=TTL_MS?r.hr:null,timestamp:r?.timestamp??null,stale:!r||now-r.timestamp>TTL_MS,gateway:r?.gateway??null};});}
@@ -37,7 +38,7 @@ const server=http.createServer(async(req,res)=>{
   send(res,200,{ok:true});return;
  }
  if(req.method==="POST"&&url.pathname==="/api/logout"){
-  const cookie=req.headers.cookie?.match(/(?:^|;\\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(cookie)sessions.delete(cookie);
+  const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(cookie)sessions.delete(cookie);
   res.setHeader("Set-Cookie","rhm_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");send(res,200,{ok:true});return;
  }
  const isViewer=viewer(req),isGateway=auth(req);
@@ -46,6 +47,7 @@ const server=http.createServer(async(req,res)=>{
  }
  if(!isViewer&&!isGateway){send(res,401,{error:"unauthorized"});return;}
  if(req.method==="GET"&&url.pathname==="/"){res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(dashboard));return;}
+ if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}
  if(req.method==="GET"&&url.pathname==="/api/events"){
   res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-store","Connection":"keep-alive","X-Accel-Buffering":"no"});
@@ -58,11 +60,16 @@ const server=http.createServer(async(req,res)=>{
   let body;try{body=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
   if(!body||typeof body.gateway!=="string"||!/^G0[1-5]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>15){send(res,422,{error:"invalid gateway or batch"});return;}
   const now=Date.now();let accepted=0;
+  const seen=new Set();
   for(const item of body.readings){
    if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)||!Number.isInteger(item.hr)||item.hr<25||item.hr>240||!Number.isFinite(item.timestamp)||item.timestamp>now+5000||item.timestamp<now-MAX_AGE_MS)continue;
+   if(seen.has(item.id))continue;
+   seen.add(item.id);
    const prior=recruits.get(item.id);if(prior&&prior.timestamp>=item.timestamp)continue;
+   if(prior && prior.gateway!==body.gateway && now-prior.timestamp<=TTL_MS)continue;
    recruits.set(item.id,{hr:item.hr,timestamp:item.timestamp,gateway:body.gateway});accepted++;
   }
+  lastByGateway.set(body.gateway,now);
   if(accepted)publish();send(res,200,{accepted,received:body.readings.length,request_id:randomUUID()});return;
  }
  send(res,404,{error:"not found"});
