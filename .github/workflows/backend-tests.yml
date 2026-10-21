@@ -1,9 +1,10 @@
-name: Backend integration tests
+name: STEVE 1.0 backend tests
 on:
   push:
     paths:
       - 'server/**'
       - 'dashboard/live.html'
+      - 'README.md'
       - '.github/workflows/backend-tests.yml'
   workflow_dispatch:
 jobs:
