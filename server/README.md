@@ -10,6 +10,7 @@ For LIVE/production provide all of:
 - `COOKIE_SECURE=1`, behind HTTPS termination
 - `STEVE_VIEWER_TOKEN`: 32+ character secret
 - `STEVE_GATEWAY_TOKENS_JSON`: JSON mapping G01–G05 to distinct 32+ character secrets
+- Alternatively, individually supplied `STEVE_GATEWAY_TOKEN_G01` through `STEVE_GATEWAY_TOKEN_G05`: each 32+ characters and unique (Render Blueprint generates these). Do not combine individual credentials with the JSON bundle.
 - `STEVE_SLOT_MAP_JSON`: JSON mapping gateways to slot → opaque-device-ID bindings
 
 A schematic mapping is `{"G01":{"R01":"opaque-device-01"}}`. Runtime IDs are 4–64 alphanumeric/underscore/hyphen characters; use opaque IDs, never names or Bluetooth addresses. Slots and device IDs must be globally unique. Strict mode fails closed without a map. Tokens belong in the hosting service's secret settings, never source or public screenshots.
@@ -47,3 +48,7 @@ Synthetic ingest requires top-level `"source":"SIMULATED"`; live servers reject 
 
 `npm test` includes a real HTTP/SSE integration test executing the actual dashboard script in a DOM harness; this is not a physical browser or BLE device test.
 
+
+## Optional Render Free one-tap provisioning
+
+See [Render Free setup](../docs/RENDER_FREE_SETUP.md) and root [render.yaml](../render.yaml). A manually approved Render deployment creates a Docker LIVE backend with six generated secrets, then prompts for the anonymous slot-map JSON. The repository and ChatGPT do not automatically deploy to an external account; the resulting Free service may sleep and is not intended for continuous human health/safety monitoring.
