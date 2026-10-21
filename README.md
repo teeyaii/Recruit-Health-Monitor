@@ -2,7 +2,7 @@
 
 **Smart Training & Exercise Vital-sign Evaluation** — foreground Android/iPhone BLE gateway prototype for 15 anonymous slots (R01–R15) and five gateways (G01–G05).
 
-[Open the iPhone demonstration](https://teeyaii.github.io/Recruit-Health-Monitor/) · [Phone setup](docs/MVP_SETUP.md) · [API](server/README.md) · [Hardware validation](TEST_PLAN.md)
+[Open the iPhone demonstration](https://teeyaii.github.io/Recruit-Health-Monitor/) · [Deploy LIVE backend on Render Free](docs/RENDER_FREE_SETUP.md) · [Phone setup](docs/MVP_SETUP.md) · [API](server/README.md) · [Hardware validation](TEST_PLAN.md)
 
 The published demonstration uses **SIMULATED** data only. Its existing design is preserved. Open it in iPhone Safari and press **เริ่มจำลอง**. No app, band, or backend is required.
 
@@ -20,13 +20,13 @@ STEVE is not a clinically validated medical device or heat-injury detector. Miss
 - Strict viewer/gateway credentials, runtime provisioning, in-memory data only.
 - Synthetic HTTP → backend → SSE → dashboard integration test covering all 15 slots and five gateways, failures, recovery and incorrect assignments.
 - GitHub Actions Android tests/debug APK artifact and hosted macOS iOS simulator build plus Swift packet/assignment fixtures.
-- Container hosting files. **No live backend has been deployed.**
+- Root Dockerfile and optional Render Free Blueprint with generated per-Gateway secrets, production-mode startup integration tests and manual phone deployment guide. **No live backend has been deployed or account configured.**
 
 ## Verification boundaries
 
 Native compilation and synthetic tests do not validate physical Bluetooth, Xiaomi firmware compatibility, background reliability, multi-band capacity, or medical suitability. The iOS simulator build is unsigned and cannot be installed on an iPhone. See [setup](docs/MVP_SETUP.md) for signing and hosting requirements.
 
-The repository's existing main and PRs #1/#2 were inspected before implementation. Existing backend tests and native compile workflows passed; the deployed Pages URL returned HTTP 200 and the demo reached 15/15 in a narrow browser view. Current development results belong to PR #3 and its Actions runs.
+CI includes previous native BLE compilation, synthetic end-to-end tests and Docker deployment checks. Native compilation is not proof of a physical Bluetooth connection. Check current GitHub Actions results for the latest commit.
 
 ## Synthetic backend demo
 
@@ -48,7 +48,7 @@ Run `cd server && npm test`. No external packages are required by the backend.
 
 1. Use the [public synthetic demo](https://teeyaii.github.io/Recruit-Health-Monitor/) now.
 2. In GitHub → Actions, inspect **STEVE Android compile (no BLE device)** and **STEVE iOS simulator build (unsigned)**. Android runs include a debug APK artifact for later authorized Android testing.
-3. Choose an existing HTTPS container host and provision runtime credentials/mappings privately using [MVP_SETUP](docs/MVP_SETUP.md). No paid account is created by this project.
+3. For an opt-in free HTTPS backend, follow [the Render Free iPhone setup](docs/RENDER_FREE_SETUP.md), or choose an existing compatible container host. Render generates individual Gateway secrets; supply an anonymous slot map privately. No paid account is created by this project.
 4. Supply Apple signing access through a trusted hosted macOS build service if native iPhone installation is needed. No personally owned Mac is required.
 5. Validate one physical band, then multiple bands, before field use.
 
