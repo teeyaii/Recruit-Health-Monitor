@@ -1,5 +1,5 @@
 import http from "node:http";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,11 +11,16 @@ const TTL_MS=15000;
 const MAX_AGE_MS=60000;
 const recruits=new Map();
 const clients=new Set();
+const sessions=new Map();
+const SESSION_MS=8*60*60*1000;
+const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
 const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/index.html");
 function auth(req){const provided=req.headers.authorization?.replace(/^Bearer /,"")||"";
  const a=Buffer.from(provided),b=Buffer.from(TOKEN);
  return a.length===b.length&&timingSafeEqual(a,b);
 }
+function validToken(value){const a=Buffer.from(value||""),b=Buffer.from(TOKEN);return a.length===b.length&&timingSafeEqual(a,b);}
+function viewer(req){const cookie=req.headers.cookie?.match(/(?:^|;\\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(!cookie)return false;const expiry=sessions.get(cookie);if(!expiry)return false;if(expiry<Date.now()){sessions.delete(cookie);return false;}return true;}
 function send(res,code,data){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(data));}
 function snapshot(){const now=Date.now();return Array.from({length:15},(_,i)=>{const id="R"+String(i+1).padStart(2,"0");const r=recruits.get(id);
 return {id,hr:r&&now-r.timestamp<=TTL_MS?r.hr:null,timestamp:r?.timestamp??null,stale:!r||now-r.timestamp>TTL_MS,gateway:r?.gateway??null};});}
@@ -23,7 +28,23 @@ function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:s
 const server=http.createServer(async(req,res)=>{
  const url=new URL(req.url,"http://localhost");
  if(url.pathname==="/health"){send(res,200,{ok:true});return;}
- if(!auth(req)){send(res,401,{error:"unauthorized"});return;}
+ if(req.method==="POST"&&url.pathname==="/api/login"){
+  let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>2048){send(res,413,{error:"too large"});return;}}
+  let input;try{input=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
+  if(!validToken(input?.token)){send(res,401,{error:"unauthorized"});return;}
+  const session=randomBytes(32).toString("hex");sessions.set(session,Date.now()+SESSION_MS);
+  res.setHeader("Set-Cookie",`rhm_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${process.env.COOKIE_SECURE==="1"?"; Secure":""}`);
+  send(res,200,{ok:true});return;
+ }
+ if(req.method==="POST"&&url.pathname==="/api/logout"){
+  const cookie=req.headers.cookie?.match(/(?:^|;\\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(cookie)sessions.delete(cookie);
+  res.setHeader("Set-Cookie","rhm_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");send(res,200,{ok:true});return;
+ }
+ const isViewer=viewer(req),isGateway=auth(req);
+ if(url.pathname==="/live"&&req.method==="GET"){
+  res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(liveDashboard));return;
+ }
+ if(!isViewer&&!isGateway){send(res,401,{error:"unauthorized"});return;}
  if(req.method==="GET"&&url.pathname==="/"){res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(dashboard));return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}
  if(req.method==="GET"&&url.pathname==="/api/events"){
@@ -32,6 +53,7 @@ const server=http.createServer(async(req,res)=>{
   req.on("close",()=>clients.delete(res));return;
  }
  if(req.method==="POST"&&url.pathname==="/api/ingest"){
+  if(!isGateway){send(res,403,{error:"gateway authorization required"});return;}
   let raw="";try{for await(const chunk of req){raw+=chunk;if(raw.length>16384){send(res,413,{error:"payload too large"});return;}}}catch{send(res,400,{error:"invalid body"});return;}
   let body;try{body=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
   if(!body||typeof body.gateway!=="string"||!/^G0[1-5]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>15){send(res,422,{error:"invalid gateway or batch"});return;}
