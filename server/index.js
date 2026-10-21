@@ -34,7 +34,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==="POST"&&url.pathname==="/api/ingest"){
   let raw="";try{for await(const chunk of req){raw+=chunk;if(raw.length>16384){send(res,413,{error:"payload too large"});return;}}}catch{send(res,400,{error:"invalid body"});return;}
   let body;try{body=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
-  if(!body||typeof body.gateway!=="string"||!/^G0[1-3]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>5){send(res,422,{error:"invalid gateway or batch"});return;}
+  if(!body||typeof body.gateway!=="string"||!/^G0[1-5]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>15){send(res,422,{error:"invalid gateway or batch"});return;}
   const now=Date.now();let accepted=0;
   for(const item of body.readings){
    if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)||!Number.isInteger(item.hr)||item.hr<25||item.hr>240||!Number.isFinite(item.timestamp)||item.timestamp>now+5000||item.timestamp<now-MAX_AGE_MS)continue;
