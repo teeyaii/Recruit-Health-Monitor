@@ -68,7 +68,7 @@ if (env.STEVE_SLOT_MAP_JSON) {
     assignments.set(gateway,assigned);
   }
 }
-if (env.NODE_ENV==="production" && !assignments) throw Error("Production requires STEVE_SLOT_MAP_JSON");
+if (strictMode && !assignments) throw Error("Strict mode requires STEVE_SLOT_MAP_JSON");
 export function slotIsAuthorized(gateway, item) {
   if (!assignments) return true; // synthetic-only, not fit for live operational use
   return assignments.get(gateway)?.get(item.id)===item.device_id;
@@ -76,3 +76,8 @@ export function slotIsAuthorized(gateway, item) {
 export function provisionedSlots(gateway) {
   return assignments ? Array.from(assignments.get(gateway)?.keys()||[]) : null;
 }
+export function provisionedGateway(slot) {
+  if (assignments) for (const [gateway, slots] of assignments) if (slots.has(slot)) return gateway;
+  return null;
+}
+

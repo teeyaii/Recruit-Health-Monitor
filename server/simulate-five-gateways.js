@@ -4,7 +4,7 @@ const token=process.env.RECRUIT_MONITOR_TOKEN;
 if(!token){console.error("Set RECRUIT_MONITOR_TOKEN");process.exit(1);}
 const ids=Array.from({length:15},(_,i)=>"R"+String(i+1).padStart(2,"0"));
 async function post(gateway,readings){
- const res=await fetch(url+"/api/ingest",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({gateway,readings})});
+ const res=await fetch(url+"/api/ingest",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({gateway,readings,source:"SIMULATED"})});
  if(!res.ok)throw Error(gateway+": "+res.status+" "+await res.text());
  return res.json();
 }
@@ -20,3 +20,4 @@ const data=await res.json();
 const fresh=data.recruits.filter(x=>!x.stale).length;
 console.log("fresh slots",fresh,"/15");
 if(fresh!==15)process.exitCode=1;
+

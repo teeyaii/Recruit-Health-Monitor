@@ -2,123 +2,216 @@ package org.recruit.monitor
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.pm.PackageManager
 import android.os.*
-import android.os.ParcelUuid
+import android.text.InputType
+import android.view.WindowManager
 import android.widget.*
 import java.util.UUID
 
+/** Foreground MVP. All Bluetooth state is serialized onto the main thread. */
 class MainActivity : Activity() {
  private val heartService = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
  private val heartMeasure = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
  private val cccd = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
- private val connections = mutableMapOf<String, BluetoothGatt>()
- private val values = mutableMapOf<String, String>()
- private lateinit var output: TextView
- private lateinit var status: TextView
+ private val handler = Handler(Looper.getMainLooper())
  private val adapter by lazy { (getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter }
+ private val devices = linkedMapOf<String,BluetoothDevice>()
+ private val connections = mutableMapOf<String,BluetoothGatt>()
+ private data class Pairing(val slot: String, val opaque: String, var state: String = "NO DATA",
+  var bpm: Int? = null, var measured: Long = 0, var sent: Long = 0, var attempts: Int = 0)
+ private val pairs = mutableMapOf<String,Pairing>()
+ private var uploader: GatewayUploader? = null
  private var scanning = false
+ private var foreground = false
+ private var generation = 0
+ private lateinit var rows: LinearLayout
+ private lateinit var status: TextView
+ private lateinit var uploadStatus: TextView
+ private lateinit var url: EditText
+ private lateinit var token: EditText
+ private lateinit var gateway: Spinner
 
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
-  val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24,36,24,24) }
-  status = TextView(this).apply { text = "Experimental Xiaomi HR broadcast reader (not medical monitoring)" }
-  output = TextView(this).apply { textSize = 20f; text = "No readings" }
-  val scan = Button(this).apply { text = "Scan for heart rate bands"; setOnClickListener { beginScan() } }
-  layout.addView(status); layout.addView(scan); layout.addView(output)
-  setContentView(layout)
- }
-
- private fun beginScan() {
-  if (Build.VERSION.SDK_INT >= 31) {
-   val missing = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-    .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-   if (missing.isNotEmpty()) { requestPermissions(missing.toTypedArray(), 101); return }
-  } else if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-   requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 101); return
-  }
-  if (!adapter.isEnabled) { status.text = "Please enable Bluetooth"; return }
-  val scanner = adapter.bluetoothLeScanner ?: run { status.text = "BLE scanner unavailable"; return }
-  try {
-   if (scanning) scanner.stopScan(scanCallback)
-   scanner.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(heartService)).build()),
-    ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback)
-   scanning = true
-   status.text = "Scanning for up to 5 BLE heart rate broadcasters..."
-  } catch (e: SecurityException) { status.text = "Bluetooth permission denied" }
- }
-
- private val scanCallback = object : ScanCallback() {
-  override fun onScanResult(callbackType: Int, result: ScanResult) {
-   val address = result.device.address
-   if (connections.containsKey(address) || connections.size >= 5) return
-   values[address] = "Connecting..."
-   try { connections[address] = result.device.connectGatt(this@MainActivity, false, callbacks) }
-   catch (e: Exception) { values[address] = "Connection error: ${e.javaClass.simpleName}" }
-   redraw()
-  }
-  override fun onScanFailed(errorCode: Int) { runOnUiThread { status.text = "Scan error $errorCode" } }
- }
-
- private val callbacks = object : BluetoothGattCallback() {
-  override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-   if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
-    try { gatt.discoverServices() } catch (_: SecurityException) {}
-   } else {
-    values[gatt.device.address] = "DISCONNECTED (last reading invalid)"
-    redraw()
-   }
-  }
-  override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-   val characteristic = gatt.getService(heartService)?.getCharacteristic(heartMeasure)
-   if (status != BluetoothGatt.GATT_SUCCESS || characteristic == null) {
-    values[gatt.device.address] = "HR characteristic unavailable"; redraw(); return
-   }
+  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+  val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24,30,24,24) }
+  layout.addView(TextView(this).apply { text = "STEVE 1.0 • LIVE gateway\nForeground prototype; not a medical monitor. Keep this screen open." })
+  url = EditText(this).apply { hint = "HTTPS server origin"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI }
+  token = EditText(this).apply { hint = "Gateway credential (32+ characters)"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; isSaveEnabled = false }
+  gateway = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,(1..5).map { "G0$it" }) }
+  layout.addView(url); layout.addView(gateway); layout.addView(token)
+  layout.addView(Button(this).apply { text = "Apply gateway configuration"; setOnClickListener {
+   if (pairs.isNotEmpty()) { status.text = "Stop and clear assignments before changing gateway"; return@setOnClickListener }
    try {
-    gatt.setCharacteristicNotification(characteristic, true)
-    val descriptor = characteristic.getDescriptor(cccd)
-    if (descriptor == null) { values[gatt.device.address] = "Notifications unavailable"; redraw(); return }
-    if (Build.VERSION.SDK_INT >= 33) {
-     gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-    } else {
-     @Suppress("DEPRECATION")
-     descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-     @Suppress("DEPRECATION")
-     gatt.writeDescriptor(descriptor)
+    val next = GatewayUploader(url.text.toString().trim(),gateway.selectedItem.toString(),token.text.toString()) { message ->
+     runOnUiThread { uploadStatus.text = message }
     }
-    values[gatt.device.address] = "Connected; waiting for HR..."
-   } catch (_: SecurityException) { values[gatt.device.address] = "Permission error" }
-   redraw()
-  }
-  override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-   parse(gatt.device.address, value)
-  }
-  @Deprecated("Android legacy BLE callback")
-  override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-   @Suppress("DEPRECATION")
-   val bytes = characteristic.value ?: return
-   parse(gatt.device.address, bytes)
-  }
+    uploader?.shutdown(); uploader = next; token.text.clear()
+    status.text = "Configured. Scan, choose device, then assign a provisioned slot."
+   } catch (_: Exception) { status.text = "Use an HTTPS origin, G01–G05 and a 32+ character credential" }
+  } })
+  status = TextView(this); uploadStatus = TextView(this).apply { text = "Upload not configured" }
+  layout.addView(status); layout.addView(uploadStatus)
+  layout.addView(Button(this).apply { text = "Scan HR devices (15 seconds)"; setOnClickListener { beginScan() } })
+  layout.addView(Button(this).apply { text = "Stop and clear assignments"; setOnClickListener { stopAll(); pairs.clear(); redraw() } })
+  rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+  layout.addView(rows)
+  setContentView(ScrollView(this).apply { addView(layout) })
  }
-
- private fun parse(address: String, bytes: ByteArray) {
-  if (bytes.size < 2) return
-  val flags = bytes[0].toInt() and 255
-  val hr = if (flags and 1 == 0) bytes[1].toInt() and 255
-           else if (bytes.size >= 3) (bytes[1].toInt() and 255) or ((bytes[2].toInt() and 255) shl 8)
-           else return
-  val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
-  values[address] = "$hr BPM | $time"
+ private fun permitted(): Boolean {
+  val needed = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT)
+   else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+  val missing = needed.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+  if (missing.isNotEmpty()) { requestPermissions(missing.toTypedArray(),101); return false }
+  return true
+ }
+ private fun beginScan() {
+  if (!permitted()) return
+  try {
+   if (adapter?.isEnabled != true) { status.text = "Enable Bluetooth first"; return }
+   stopScan()
+   devices.entries.removeAll { !pairs.containsKey(it.key) }
+   adapter.bluetoothLeScanner?.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(heartService)).build()),
+    ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),scanCallback)
+   scanning = true; status.text = "Scanning; no device connects until you assign it"
+   handler.postDelayed({ stopScan() },15000)
+  } catch (_: Exception) { status.text = "Scan unavailable; check Bluetooth permissions" }
+ }
+ private fun stopScan() {
+  try { if (scanning) adapter?.bluetoothLeScanner?.stopScan(scanCallback) } catch (_: Exception) {}
+  scanning = false
+ }
+ private val scanCallback = object : ScanCallback() {
+  override fun onScanResult(callbackType: Int, result: ScanResult) { runOnUiThread {
+   if (!scanning || devices.size >= 40) return@runOnUiThread
+   devices[result.device.address] = result.device; redraw()
+  } }
+  override fun onScanFailed(errorCode: Int) { runOnUiThread { scanning = false; status.text = "Scan failed: $errorCode" } }
+ }
+ private fun assign(address: String) {
+  if (uploader == null) { status.text = "Configure HTTPS upload first"; return }
+  if (pairs.containsKey(address)) { pairs[address]?.attempts = 0; connect(address); return }
+  val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24,16,24,16) }
+  val slots = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,(1..15).map { "R" + it.toString().padStart(2,'0') }) }
+  val opaque = EditText(this).apply { hint = "Provisioned opaque device ID (not MAC/name)" }
+  form.addView(slots); form.addView(opaque)
+  AlertDialog.Builder(this).setTitle("Confirm device → recruit slot").setView(form)
+   .setNegativeButton("Cancel",null).setPositiveButton("Assign and connect") { _,_ ->
+    val slot = slots.selectedItem.toString(); val id = opaque.text.toString().trim()
+    if (!Regex("[a-zA-Z0-9_-]{4,64}").matches(id) || pairs.values.any { it.slot == slot || it.opaque == id }) {
+     status.text = "Invalid or duplicate slot/device ID"; return@setPositiveButton
+    }
+    pairs[address] = Pairing(slot,id); connect(address)
+   }.show()
+ }
+ private fun connect(address: String) {
+  val pair = pairs[address] ?: return
+  if (!foreground || connections.containsKey(address)) return
+  pair.state = "CONNECTING"; pair.bpm = null
+  try {
+   val gatt = devices[address]?.connectGatt(this,false,callbacks,BluetoothDevice.TRANSPORT_LE) ?: return
+   connections[address] = gatt
+   handler.postDelayed({
+    if (connections[address] === gatt && pair.state != "CONNECTED") fail(gatt,"Connection/subscription timeout")
+   },12000)
+  } catch (_: Exception) { pair.state = "DISCONNECTED"; status.text = "Check Bluetooth and permissions" }
   redraw()
  }
- private fun redraw() = runOnUiThread {
-  output.text = if (values.isEmpty()) "No devices" else values.entries.joinToString("\n\n") { (id, value) -> "${id.takeLast(5)}: $value" }
+ private fun fail(gatt: BluetoothGatt, reason: String) {
+  val address = gatt.device.address
+  if (connections[address] !== gatt) return
+  connections.remove(address)
+  try { gatt.disconnect(); gatt.close() } catch (_: Exception) {}
+  val pair = pairs[address] ?: return
+  pair.bpm = null; pair.state = "DISCONNECTED • $reason"
+  uploader?.submit(pair.slot,pair.opaque,null)
+  if (foreground && pair.attempts < 3) {
+   pair.attempts++
+   val epoch = generation
+   handler.postDelayed({ if (epoch == generation && pairs[address] === pair) connect(address) },2000L * pair.attempts)
+  } else { pair.state += " • tap Retry" }
+  redraw()
  }
- override fun onDestroy() {
-  super.onDestroy()
-  try { if (scanning) adapter.bluetoothLeScanner?.stopScan(scanCallback) } catch (_: Exception) {}
-  connections.values.forEach { try { it.close() } catch (_: Exception) {} }
+ private val callbacks = object : BluetoothGattCallback() {
+  override fun onConnectionStateChange(gatt: BluetoothGatt, code: Int, newState: Int) { runOnUiThread {
+   if (connections[gatt.device.address] !== gatt) return@runOnUiThread
+   if (code == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
+    try { if (!gatt.discoverServices()) fail(gatt,"Service discovery failed") } catch (_: Exception) { fail(gatt,"Permission denied") }
+   } else if (newState == BluetoothProfile.STATE_DISCONNECTED || code != BluetoothGatt.GATT_SUCCESS) fail(gatt,"Link lost")
+  } }
+  override fun onServicesDiscovered(gatt: BluetoothGatt, code: Int) { runOnUiThread {
+   if (connections[gatt.device.address] !== gatt) return@runOnUiThread
+   val c = gatt.getService(heartService)?.getCharacteristic(heartMeasure)
+   val descriptor = c?.getDescriptor(cccd)
+   if (code != BluetoothGatt.GATT_SUCCESS || c == null || descriptor == null) { fail(gatt,"HR service unavailable"); return@runOnUiThread }
+   try {
+    if (!gatt.setCharacteristicNotification(c,true)) { fail(gatt,"Notifications unavailable"); return@runOnUiThread }
+    val started = if (Build.VERSION.SDK_INT >= 33) gatt.writeDescriptor(descriptor,BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
+     else { descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE; gatt.writeDescriptor(descriptor) }
+    if (!started) fail(gatt,"Subscription failed")
+   } catch (_: Exception) { fail(gatt,"Permission denied") }
+  } }
+  override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, code: Int) { runOnUiThread {
+   if (connections[gatt.device.address] !== gatt) return@runOnUiThread
+   if (code != BluetoothGatt.GATT_SUCCESS) fail(gatt,"Subscription rejected")
+   else { pairs[gatt.device.address]?.state = "CONNECTED"; redraw() }
+  } }
+  override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+   if (characteristic.uuid == heartMeasure) receive(gatt,value)
+  }
+  @Deprecated("Legacy Android BLE callback")
+  override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+   if (characteristic.uuid == heartMeasure) characteristic.value?.let { receive(gatt,it.copyOf()) }
+  }
  }
+ private fun receive(gatt: BluetoothGatt, bytes: ByteArray) = runOnUiThread {
+  val address = gatt.device.address
+  if (connections[address] !== gatt) return@runOnUiThread
+  val pair = pairs[address] ?: return@runOnUiThread
+  val bpm = HeartRatePacket.decode(bytes)
+  if (bpm == null) { pair.bpm = null; uploader?.submit(pair.slot,pair.opaque,null); redraw(); return@runOnUiThread }
+  val now = System.currentTimeMillis()
+  pair.bpm = bpm; pair.measured = now; pair.state = "CONNECTED"
+  // Reconnect budget is session-wide; operator can explicitly retry after 3 failures.
+  if (now-pair.sent >= 1000) { pair.sent = now; uploader?.submit(pair.slot,pair.opaque,bpm,now) }
+  redraw()
+ }
+ private fun redraw() {
+  rows.removeAllViews()
+  devices.forEach { (address,device) ->
+   val pair = pairs[address]
+   val label = try { device.name ?: "HR device" } catch (_: Exception) { "HR device" }
+   val fresh = pair?.bpm != null && System.currentTimeMillis()-pair.measured <= 15000
+   rows.addView(TextView(this).apply {
+    text = label + " • " + address.takeLast(5) + "\n" + (pair?.let {
+     it.slot + " • " + it.state + "\n" + (if (fresh) "${it.bpm} BPM" else if (it.measured == 0L) "NO DATA" else "STALE — unknown") +
+     "\nLast measurement: " + (if (it.measured == 0L) "never" else java.util.Date(it.measured).toString())
+    } ?: "Unassigned — confirm device before connecting")
+   })
+   rows.addView(Button(this).apply { text = if (pair == null) "Assign slot and connect" else "Retry connection"; setOnClickListener { assign(address) } })
+  }
+ }
+ private val refresh = object : Runnable {
+  override fun run() { if (foreground) { redraw(); handler.postDelayed(this,1000) } }
+ }
+ private val heartbeat = object : Runnable {
+  override fun run() { if (foreground) { uploader?.heartbeat(); handler.postDelayed(this,5000) } }
+ }
+ override fun onResume() { super.onResume(); foreground = true; handler.post(refresh); handler.post(heartbeat) }
+ private fun stopAll() {
+  generation++; stopScan()
+  pairs.values.forEach { it.bpm = null; it.state = "DISCONNECTED"; uploader?.submit(it.slot,it.opaque,null) }
+  val old = connections.values.toList(); connections.clear()
+  old.forEach { try { it.disconnect(); it.close() } catch (_: Exception) {} }
+ }
+ override fun onPause() {
+  foreground = false; handler.removeCallbacks(refresh); handler.removeCallbacks(heartbeat); stopAll()
+  super.onPause()
+ }
+ override fun onDestroy() { handler.removeCallbacksAndMessages(null); uploader?.shutdown(); super.onDestroy() }
 }
+

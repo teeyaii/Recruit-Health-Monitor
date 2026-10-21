@@ -14,6 +14,10 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Test synthetic BLE packet decoding
+        run: |
+          swiftc ios/HeartRatePacket.swift ios/tests/main.swift -o /tmp/steve-packet-tests
+          /tmp/steve-packet-tests
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate iOS simulator project
@@ -21,3 +25,4 @@ jobs:
         run: xcodegen generate
       - name: Compile unsigned iOS simulator app
         run: xcodebuild -project ios/STEVEGateway.xcodeproj -scheme STEVEGateway -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build
+
