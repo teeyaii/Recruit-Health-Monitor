@@ -1,0 +1,29 @@
+name: Publish STEVE iPhone standalone demo
+# Manual opt-in: a GitHub Pages deployment can make the DEMO publicly accessible.
+# Publishes only dashboard/index.html (SIMULATED ONLY), never source, API, secrets, or user data.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: steve-demo-pages
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate offline synthetic demo
+        run: |
+          node --test server/static-demo.test.js
+          mkdir -p _site
+          cp dashboard/index.html _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
