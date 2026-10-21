@@ -81,7 +81,7 @@ final class HeartRateCentral: NSObject, ObservableObject, CBCentralManagerDelega
         uploadStatus = "Testing Gateway -> HTTPS server (empty heartbeat)..."
         Task { @MainActor [weak self] in
             do {
-                try await client.heartbeat()
+                try await client.testConnection()
                 self?.uploadStatus = "Gateway/credential verified; no BPM was sent."
             } catch {
                 self?.uploadStatus = "Gateway test failed: verify HTTPS, token, gateway ID, or Render wake-up."
