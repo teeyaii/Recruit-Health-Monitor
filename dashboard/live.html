@@ -28,8 +28,34 @@ button{cursor:pointer;font-weight:700}button:hover{background:#34483d}
 @media(min-width:1100px){.grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media(max-width:600px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.card{padding:13px;min-height:170px}.card .bpm{font-size:1.85rem}.card small{font-size:.72rem}h1{font-size:1.35rem}}
 @media(max-width:390px){.grid{grid-template-columns:1fr}}
+
+/* Operational command overview and presentation controls */
+.command-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0}
+.command-eyebrow{font-size:.72rem;letter-spacing:.19em;font-weight:800;color:#a8c49d}
+.command-bar button{background:#273a30;border-color:#6a846c}
+.command-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0}
+.stat{background:#192520;border:1px solid #3b4f42;border-radius:12px;padding:14px}
+.stat b{display:block;font-size:clamp(1.45rem,2.5vw,2.25rem);font-variant-numeric:tabular-nums}
+.stat span{color:#b7c8b8;font-size:.75rem;letter-spacing:.06em}
+.stat.live b{color:#a1dfb4}.stat.lost b{color:#edaaa2}.stat.watch b{color:#e5c280}.stat.paused b{color:#c7b5eb}
+.card .status-chip{display:inline-block;border:1px solid #607567;border-radius:100px;padding:3px 9px;font-size:.69rem;font-weight:800;letter-spacing:.08em;margin-top:8px;color:#e0e9de}
+.card.stale .status-chip{color:#f1aaa4;border-color:#a65c57}.card.alert-emergency .status-chip{color:#ff8c8c;border-color:#db5e5e}.card.alert-stop .status-chip,.card.watch .status-chip{color:#e9c17a;border-color:#b89152}.card.pause .status-chip{color:#c9b6f0;border-color:#8f78bb}
+.card.watch{border-left-color:#e8bd70}
+body.presentation #rosterBox,body.presentation #wbgtForm,body.presentation #controls,body.presentation #demo,body.presentation #login{display:none!important}
+body.presentation .grid{gap:16px}
+body.presentation .card{min-height:210px}
+@media(max-width:800px){.command-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:480px){.command-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat{padding:11px}.command-bar{align-items:stretch}.command-bar button{width:100%}}
 </style></head><body>
 <header><h1>STEVE 1.0 <span style="color:#a8c49d">/ TACTICAL COMMAND</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
+<div class="command-bar"><div><div class="command-eyebrow">FIELD OPERATIONS / HEALTH TELEMETRY</div><small>STEVE • RECRUIT MONITORING / 15 SLOTS</small></div><button id="presentationToggle" type="button" aria-pressed="false">เปิดโหมดนำเสนอ</button></div>
+<section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
+<div class="stat"><span>กำลังพล / SLOTS</span><b id="statTotal">15</b></div>
+<div class="stat live"><span>LIVE DATA</span><b id="statLive">0</b></div>
+<div class="stat lost"><span>NO DATA</span><b id="statNoData">15</b></div>
+<div class="stat watch"><span>WATCH / STOP</span><b id="statWatch">0</b></div>
+<div class="stat paused"><span>PAUSED / EMERGENCY</span><b id="statPaused">0</b></div>
+</section>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
 <div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
@@ -71,7 +97,7 @@ button{cursor:pointer;font-weight:700}button:hover{background:#34483d}
 let events=null,last=null,transportUp=false,rosterData=null;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
- const now=Date.now();let fresh=0;
+ const now=Date.now();let fresh=0,watchCount=0,pausedCount=0;
  cards.innerHTML=data.recruits.map(r=>{
   const age=Number.isFinite(r.timestamp)?Math.max(0,now-r.timestamp):Infinity;
   const stale=!transportUp||r.stale||age>15000||!Number.isInteger(r.hr);
@@ -80,14 +106,27 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const severity=profile?.observation==="confusion_collapse_seizure"?"emergency":profile?.observation==="dizzy_weak_nausea"?"stop":null;
   const safetyNote=severity==="emergency"?"ฉุกเฉิน: เรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
     profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังตามผู้รับผิดชอบ":"";
-  const alertClass=r.paused?"pause":severity==="emergency"?"alert-emergency":severity==="stop"?"alert-stop":stale?"stale":"fresh";
+  const watchFlag=profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop";
+  if(watchFlag)watchCount++;if(r.paused||severity==="emergency")pausedCount++;
+  const alertClass=r.paused?"pause":severity==="emergency"?"alert-emergency":severity==="stop"?"alert-stop":stale?"stale":watchFlag?"watch":"fresh";
   if(!stale)fresh++;
-  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><small>'+(stale?'ไม่มีข้อมูลปัจจุบัน':Math.round(age/1000)+' วินาทีที่แล้ว')+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  const chip=r.paused?"PAUSED":severity==="emergency"?"EMERGENCY":severity==="stop"?"STOP / ASSESS":stale?"NO DATA":watchFlag?"WATCH":"LIVE";
+  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><small>'+(stale?'ไม่มีข้อมูลปัจจุบัน':Math.round(age/1000)+' วินาทีที่แล้ว')+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
+ byId("statTotal").textContent=data.recruits.length;
+ byId("statLive").textContent=fresh;
+ byId("statNoData").textContent=data.recruits.length-fresh;
+ byId("statWatch").textContent=watchCount;
+ byId("statPaused").textContent=pausedCount;
  summary.textContent='มีข้อมูลปัจจุบัน '+fresh+'/15 • ข้อมูลขาด '+(15-fresh)+'/15 • '+new Date().toLocaleTimeString("th-TH");
 }
 
 const byId=id=>document.getElementById(id);
+byId("presentationToggle").onclick=()=>{
+ const on=document.body.classList.toggle("presentation");
+ byId("presentationToggle").textContent=on?"ออกจากโหมดนำเสนอ":"เปิดโหมดนำเสนอ";
+ byId("presentationToggle").setAttribute("aria-pressed",String(on));
+};
 function selectedRecord(){return rosterData?.slots?.find(p=>p.id===byId("rosterSlot").value);}
 function fillRoster(){
  const p=selectedRecord();if(!p)return;
