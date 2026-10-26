@@ -217,5 +217,5 @@ const server=http.createServer(async(req,res)=>{
  send(res,404,{error:"not found"});
 });
 setInterval(publish,5000).unref();
-server.listen(PORT,()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
+server.listen(PORT,"0.0.0.0",()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
 
