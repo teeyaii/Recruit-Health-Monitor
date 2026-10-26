@@ -2,7 +2,7 @@
 
 **Smart Training & Exercise Vital-sign Evaluation** — foreground Android/iPhone BLE gateway prototype for 15 anonymous slots (R01–R15) and five gateways (G01–G05).
 
-[Open the iPhone demonstration](https://teeyaii.github.io/Recruit-Health-Monitor/) · [Deploy LIVE backend on Render Free](docs/RENDER_FREE_SETUP.md) · [Phone setup](docs/MVP_SETUP.md) · [API](server/README.md) · [Hardware validation](TEST_PLAN.md)
+[Open the iPhone demonstration](https://teeyaii.github.io/Recruit-Health-Monitor/) · [Bluefy Web BLE Gateway pilot](docs/BLUEFY_WEB_GATEWAY_PILOT.md) · [Deploy LIVE backend on Render Free](docs/RENDER_FREE_SETUP.md) · [Phone setup](docs/MVP_SETUP.md) · [API](server/README.md) · [Hardware validation](TEST_PLAN.md)
 
 The published demonstration uses **SIMULATED** data only. Its existing design is preserved. Open it in iPhone Safari and press **เริ่มจำลอง**. No app, band, or backend is required.
 
@@ -26,11 +26,11 @@ STEVE is not a clinically validated medical device or heat-injury detector. Miss
 - Strict viewer/gateway credentials, runtime provisioning, in-memory data only.
 - Synthetic HTTP → backend → SSE → dashboard integration test covering all 15 slots and five gateways, failures, recovery and incorrect assignments.
 - GitHub Actions Android tests/debug APK artifact and hosted macOS iOS simulator build plus Swift packet/assignment fixtures.
-- Root Dockerfile and optional Render Free Blueprint with generated per-Gateway secrets, production-mode startup integration tests and manual phone deployment guide. **No live backend has been deployed or account configured.**
+- Root Dockerfile and optional Render Free Blueprint with generated per-Gateway secrets, production-mode startup integration tests and manual phone deployment guide. **Current third-party host/account deployment is not verified by repository CI; Render configuration and backend redeploy remain owner-managed.**
 
 ## Verification boundaries
 
-Native compilation and synthetic tests do not validate physical Bluetooth, Xiaomi firmware compatibility, background reliability, multi-band capacity, or medical suitability. The iOS simulator build is unsigned and cannot be installed on an iPhone. See [setup](docs/MVP_SETUP.md) for signing and hosting requirements.
+On 26 October 2026, the operator's iPhone manually received standard HR notifications from two Xiaomi Band 10 devices separately in nRF Connect, and from one through Bluefy. This is **not** evidence of two concurrent Bluefy streams, STEVE end-to-end upload, background reliability, multi-band capacity, or medical suitability. Native compilation and synthetic tests cannot establish those properties. The iOS simulator build is unsigned and cannot be installed on an iPhone. See [setup](docs/MVP_SETUP.md) for signing and hosting requirements.
 
 CI includes previous native BLE compilation, synthetic end-to-end tests and Docker deployment checks. Native compilation is not proof of a physical Bluetooth connection. Check current GitHub Actions results for the latest commit.
 
