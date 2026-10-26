@@ -109,3 +109,8 @@ test("Render blueprint is opt-in free Docker with generated secrets and no perso
  assert.match(yaml,/STEVE_SLOT_MAP_JSON\s*\n\s*sync: false/);
  assert.doesNotMatch(yaml,/RECRUIT_MONITOR_TOKEN|demo-opaque-device-01|real-person/i);
 });
+
+test("Render uses explicit IPv4 binding for platform health checks",async()=>{
+ const source=await readFile(new URL("./index.js",import.meta.url),"utf8");
+ assert.ok(source.includes('server.listen(PORT,"0.0.0.0",'));
+});
