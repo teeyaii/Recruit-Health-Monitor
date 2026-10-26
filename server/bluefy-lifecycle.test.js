@@ -153,9 +153,46 @@ test('native chooser timeout releases attempt but requires reset before a second
  const h=harness();await h.login();h.select(()=>new Promise(()=>{}));const p=h.api.connectBand('R01','AB12','standard');h.tick(20001);await p;
  assert.match(h.get('bleStatus').textContent,/TimeoutError/);assert.equal(h.api.live.size,0);
  await h.api.connectBand('R01','AB12','broad');assert.equal(h.calls.length,1);
- let reloaded=false;h.window.location={reload(){reloaded=true;}};h.get('resetBle').click();assert.equal(reloaded,true);
+ let reloaded=false;h.window.location={reload(){reloaded=true;}};h.get('resetBle').click();assert.equal(reloaded,false);assert.match(h.get("bleStatus").textContent,/Manual action required/);
 });
 test('failed R01 GATT retry leaves R02 data live',async()=>{
  const h=harness();await h.login();const b=device('two','CD34');await h.connect(b,'R02','CD34');await h.connect(device('one','AB12','gatt'));b.emit([6,57]);await flush();
  assert.equal(h.api.live.get('R02').bpm,57);assert.equal(b.gatt.connected,true);
+});
+const drain=async()=>{for(let i=0;i<150;i++)await Promise.resolve();};
+function foreground(h){h.document.hidden=false;h.document.listeners.visibilitychange();}
+test('foreground automatically restores two authorized handles without chooser or stale BPM',async()=>{
+ const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();
+ for(let i=0;i<3;i++){
+  h.hide();await drain();foreground(h);await drain();assert.equal(h.calls.length,2);assert.equal(h.api.live.size,2);
+  assert.equal(h.api.live.get('R01').bpm,null);assert.equal(h.api.live.get('R02').bpm,null);
+  h.tick(1001);a.emit([6,52]);b.emit([6,58]);await drain();assert.equal(h.api.live.get('R01').bpm,52);assert.equal(h.api.live.get('R02').bpm,58);
+ }
+});
+test('soft reset keeps G01 credentials and bindings without a provisioning request',async()=>{
+ const h=harness();await h.login();const a=device();await h.connect(a);h.get('resetBle').click();await drain();
+ assert.equal(h.api.live.size,1);assert.equal(h.api.bindings.size,1);assert.equal(h.fetches.filter(x=>x.url==='/api/gateway/provision').length,1);
+ h.tick(1001);a.emit();await drain();assert.match(h.api.live.get('R01').state,/Server acknowledged/);
+});
+test('explicit operator disconnect and logout suppress foreground restoration',async()=>{
+ const h=harness();await h.login();await h.connect(device());h.api.live.get('R01').stop.click();await drain();h.hide();foreground(h);await drain();assert.equal(h.api.live.size,0);
+ await h.connect(device());await h.get('clear').click();h.hide();foreground(h);await drain();assert.equal(h.api.live.size,0);assert.equal(h.calls.length,2);
+});
+test('discarded handle uses getDevices and validates old binding without chooser',async()=>{
+ const h=harness();await h.login();const a=device();await h.connect(a);h.hide();await drain();h.api.bindings.get('R01').device=null;
+ h.context.navigator.bluetooth.getDevices=async()=>[a];foreground(h);await drain();assert.equal(h.calls.length,1);assert.equal(h.api.live.get('R01').device,a);
+});
+test('missing handles or native permission failure require manual action with bounded retries',async()=>{
+ for(const supported of [true,false]){
+  const h=harness();await h.login();const a=device();await h.connect(a);h.hide();await drain();let attempts=0,lookups=0;
+  a.gatt.connect=async()=>{attempts++;throw {name:'NotAllowedError'};};
+  if(supported)h.context.navigator.bluetooth.getDevices=async()=>{lookups++;return [a];};
+  foreground(h);await drain();assert.equal(h.calls.length,1);assert.equal(attempts,supported?2:1);assert.equal(lookups,supported?1:0);assert.equal(h.api.live.size,0);
+  assert.match(h.get('slots').children.at(-1).children[2].textContent,/Manual action required/);
+ }
+});
+test('R01 auto failure leaves R02 restored; background cancels in-progress auto connect',async()=>{
+ const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');h.hide();await drain();
+ a.gatt.connect=async()=>{throw {name:'NetworkError'};};foreground(h);await drain();assert.equal(h.api.live.has('R01'),false);assert.equal(h.api.live.get('R02').ready,true);
+ h.hide();await drain();let resolve;b.gatt.connect=()=>new Promise(r=>resolve=r);foreground(h);await drain();h.hide();await drain();b.gatt.connected=true;resolve(b.gatt);await drain();assert.equal(h.api.live.size,0);assert.equal(b.gatt.connected,false);
 });

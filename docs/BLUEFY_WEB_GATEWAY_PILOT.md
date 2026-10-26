@@ -171,3 +171,32 @@ Primary sources:
 - https://developer.apple.com/documentation/technotes/tn3115-bluetooth-state-restoration-app-relaunch-rules
 - https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html
 - https://developer.apple.com/help/account/basics/about-your-developer-account
+
+## Focused foreground auto-reconnect v4
+
+Supersedes v3 manual-only foreground recovery and reload-based reset guidance.
+Operator has now confirmed simultaneous R01/R02 readings with server acknowledgements;
+physical automatic recovery is still unverified.
+
+On background, clear BPM, abort uploads and detach subscriptions as before. Keep G01
+credentials, provisioned mappings and successfully bound BluetoothDevice references only
+in page memory. On foreground, try eligible slots sequentially, at most two attempts per
+slot per recovery cycle: first the stored device handle (or feature-detected getDevices
+if missing), then getDevices lookup by exact existing ID/suffix. Never call requestDevice
+from automatic recovery. GATT/service/characteristic/notify waits retain the 20-second
+bound. Failed slots show NO DATA / Manual action required and a user-gesture reconnect
+button. Explicit operator disconnect disables restoration for that slot; logout clears
+bindings and cancels recovery. No timer-based ongoing retries.
+
+Soft BLE Reset now preserves auth/provisioning/bindings in the current page and restarts
+eligible known devices. It does not reload or log out. A native chooser that never settles
+cannot safely be cancelled from JS: close its UI first; if still stuck, a manual page reload
+is the last resort and requires authentication again. The page never opens overlapping
+native choosers. Browser reload, OS page eviction and force-quit lose memory; no automatic
+recovery is promised in those cases or where Bluefy requires fresh user permission.
+
+Deploy merged SHA manually to the existing Render service; verify `Bluefy auto-reconnect
+v4`. Connect both physical bands, verify independent fresh BPM/acks, switch away then back,
+and observe automatic reconnection. Repeat three times. Also verify manual Disconnect
+stays disconnected, Soft Reset keeps G01, and native permission failure offers manual
+recovery without automatically opening a chooser. Keep NO DATA during interruption.

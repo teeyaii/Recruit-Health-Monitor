@@ -17,7 +17,7 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 .status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
 </style></head><body>
 <h1>STEVE 1.0</h1>
-<p class="muted">Web BLE Gateway Pilot • Bluefy recovery v3 • foreground only</p>
+<p class="muted">Web BLE Gateway Pilot • Bluefy auto-reconnect v4 • foreground only</p>
 <div class="card warning" role="alert">
 <strong>ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น — ไม่ใช่อุปกรณ์แพทย์</strong>
 <p>ต้องเปิดหน้านี้ค้างไว้ใน Bluefy ห้ามล็อกหน้าจอระหว่างทดสอบ ถ้าออกจากแอปหรือขาดข้อมูล ให้ถือว่าไม่มีข้อมูลสด ห้ามใช้ตัดสินว่าผู้ฝึกปลอดภัย</p>
@@ -37,7 +37,7 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 <label for="expected">รหัสท้ายชื่อ Band จากเรือนจริง (4 ตัว)<input id="expected" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="กรอกรหัสของเรือนที่จะผูกกับช่องนี้"></label>
 <label for="scanMode">โหมดสแกน<select id="scanMode"><option value="standard">A. Standard Heart Rate Scan</option><option value="broad">B. Broad BLE Scan — สแกนทั้งหมดเพื่อแก้ปัญหา</option><option value="known">C. เชื่อมอุปกรณ์ที่เคยอนุญาต (ถ้ารองรับ)</option></select></label>
 <p class="muted">ต้องเลือกชื่ออุปกรณ์ที่ตรงกับรหัสที่กรอก ระบบไม่จับคู่จากลำดับสแกน หากชื่อไม่แสดงรหัส จะยังไม่รับข้อมูล</p>
-<button id="resetBle" class="secondary">รีเซ็ต BLE ของหน้านี้</button>
+<button id="resetBle" class="secondary">Soft BLE Reset</button>
 <button id="connect" disabled>เชื่อมต่อ Band 10</button>
 <p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
 <div id="slots" aria-live="polite"></div>
@@ -48,7 +48,7 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 const $=id=>document.getElementById(id);
 const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
-let chooserPending=false;
+let chooserPending=false, recoveryRunning=false, recoveryRequested=false;
 let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
 const stages={capability:"1/9 ตรวจ Web Bluetooth",chooser:"2/9 เปิดหน้าต่างเลือกอุปกรณ์",selected:"3/9 ตรวจอุปกรณ์และช่อง",gatt:"4/9 เชื่อม GATT",service:"5/9 ค้นหา Heart Rate Service 180D",characteristic:"6/9 ค้นหา Characteristic 2A37",subscribe:"7/9 สมัครรับ Notifications",receiving:"8/9 รับข้อมูลหัวใจ",upload:"9/9 ส่ง HTTPS และรอ Server"};
 function status(message){$("bleStatus").textContent=message;}
@@ -154,8 +154,8 @@ function addTile(slot,expected,mode){
  const measure=element("div","bpm","NO DATA"),indicator=element("p","status","กำลังเชื่อมต่อ"),age=element("small","","ยังไม่มีข้อมูล");
  const notify=element("p","status"),backend=element("p","status"),errorNode=element("p","status");
  const retry=element("button","secondary","เชื่อมต่อใหม่ "+slot),stop=element("button","secondary","ตัดการเชื่อมต่อ "+slot);
- retry.addEventListener("click",()=>connectBand(slot,expected,mode));
- stop.addEventListener("click",()=>stopped(live.get(slot),"หยุดโดยผู้ทดสอบ / NO DATA"));
+ retry.addEventListener("click",()=>connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"standard":mode));
+ stop.addEventListener("click",()=>{const b=bindings.get(slot);if(b)b.autoEnabled=false;stopped(live.get(slot),"หยุดโดยผู้ทดสอบ / NO DATA");});
  div.append(head,measure,indicator,age,notify,backend,errorNode,retry,stop);$("slots").append(div);tiles.set(slot,div);
  return {indicator,measure,age,notify,backend,errorNode,retry,stop};
 }
@@ -177,7 +177,8 @@ function matchesExpected(device,expected){
  return words.includes(expected);
 }
 async function connectBand(slot,expected,mode){
- if(connecting||chooserPending){status("หน้าต่างเลือกยังไม่จบ • ปิดหน้าต่างเลือกก่อน หากค้างให้รีเซ็ต BLE ของหน้านี้");return;}
+ const automatic=mode==="auto"||mode==="autoLookup";
+ if(connecting||chooserPending){status("หน้าต่างเลือกยังไม่จบ • ปิดหน้าต่างเลือกก่อน หากค้างให้Soft BLE Reset");return;}
  if(!auth||!provision.some(p=>p.id===slot)||live.has(slot)){status("ช่องนี้เชื่อมต่ออยู่แล้ว หรือไม่ได้รับอนุญาต");return;}
  if(!/^[A-F0-9]{4}$/.test(expected)){status("กรอกรหัสท้ายชื่อ Band 4 ตัวที่ตรวจจากเรือนจริงก่อนเลือกอุปกรณ์");return;}
  connecting=true;controls();
@@ -189,7 +190,9 @@ async function connectBand(slot,expected,mode){
   step(s,"chooser");
   // No asynchronous work before requestDevice: preserve the button's user gesture.
   const options=mode==="broad"?{acceptAllDevices:true,optionalServices:[HR_SERVICE]}:{filters:[{services:[HR_SERVICE]}]};
-  if(mode==="known"){
+  if(mode==="auto"&&bindings.get(slot)?.device){
+   s.device=bindings.get(slot).device;
+  }else if(mode==="known"||automatic){
    if(typeof navigator.bluetooth.getDevices!=="function"){
     s.error="เบราว์เซอร์ไม่รองรับอุปกรณ์ที่เคยอนุญาต • เลือก A หรือ B แล้วกดเชื่อมต่ออีกครั้ง";throw {name:"NotSupportedError"};
    }
@@ -256,7 +259,7 @@ async function connectBand(slot,expected,mode){
   await bounded(s,s.characteristic.startNotifications());
   validAttempt(s);
   s.characteristic.addEventListener("characteristicvaluechanged",s.onValue);
-  bindings.set(slot,{id:s.device.id,expected});
+  bindings.set(slot,{id:s.device.id,expected,device:s.device,autoEnabled:true});
   s.ready=true;s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
@@ -264,7 +267,7 @@ async function connectBand(slot,expected,mode){
   await stopped(s,"เชื่อมต่อไม่สำเร็จ / NO DATA");
   if(sessions.get(slot)!==s)return;
   paint(s);status(slot+" • "+s.error+" • กดลองใหม่ หรือเลือกโหมดสแกน BLE ทั้งหมด");
- }finally{if(attemptOwner===s){attemptOwner=null;connecting=false;controls();}}
+ }finally{if(attemptOwner===s){attemptOwner=null;connecting=false;controls();if(recoveryRequested&&!recoveryRunning&&!document.hidden)Promise.resolve().then(recoverKnown);}}
 }
 
 $("load").addEventListener("click",async()=>{
@@ -296,12 +299,13 @@ $("load").addEventListener("click",async()=>{
 $("connect").addEventListener("click",()=>connectBand($("slot").value,$("expected").value.trim().toUpperCase(),$("scanMode").value));
 $("slot").addEventListener("change",()=>{$("expected").value=bindings.get($("slot").value)?.expected||"";});
 $("resetBle").addEventListener("click",()=>{
- // A Web Bluetooth chooser has no standard abort API. Reload is explicit and
- // user initiated; never overlap another native chooser in this page.
- suspend();auth=null;provision=[];bindings.clear();
- window.location.reload();
+ suspend();
+ // Keep auth and bindings in this page; a native chooser cannot be cancelled by JS.
+ if(chooserPending){status("NO DATA • Manual action required: ปิดหน้าต่างเลือกที่ค้างก่อน หากยังค้างต้องโหลดหน้าใหม่และตรวจสิทธิ์อีกครั้ง");return;}
+ recoveryRequested=true;Promise.resolve().then(recoverKnown);
 });
 $("clear").addEventListener("click",async()=>{
+ recoveryRequested=false;
  generation++;
  const stops=Array.from(live.values(),s=>stopped(s,"STOPPED / NO DATA"));
  auth=null;provision=[];bindings.clear();$("token").value="";$("slot").replaceChildren();
@@ -310,11 +314,39 @@ $("clear").addEventListener("click",async()=>{
  await Promise.all(stops);controls();
 });
 function suspend(){
+ recoveryRequested=true;
  generation++;
  for(const s of Array.from(live.values()))stopped(s,"BACKGROUND / NO DATA");
  controls();
 }
-document.addEventListener("visibilitychange",()=>{if(document.hidden)suspend();else {controls();status("กลับสู่หน้าจอแล้ว • กดเชื่อมต่อใหม่รายช่อง หากหน้าต่างเลือกค้าง ให้ปิดหน้าต่างเลือกก่อน");}});
+async function recoverKnown(){
+ if(!recoveryRequested||recoveryRunning||connecting||document.hidden||!auth)return;
+ if(chooserPending){status("NO DATA • Manual action required: ปิดหน้าต่างเลือกที่ค้างก่อน แล้วกด Soft BLE Reset");return;}
+ recoveryRequested=false;recoveryRunning=true;
+ const epoch=generation;
+ try{
+  for(const [slot,binding] of bindings){
+   if(epoch!==generation||document.hidden||!auth)break;
+   if(!binding.autoEnabled||live.has(slot))continue;
+   status(slot+" • Reconnecting — กำลังเชื่อมต่อใหม่");
+   for(let attempt=0;attempt<2;attempt++){
+    if(epoch!==generation||document.hidden||!auth||!bindings.get(slot)?.autoEnabled)break;
+    await connectBand(slot,binding.expected,attempt===0?"auto":"autoLookup");
+    if(live.get(slot)?.ready)break;
+   }
+   if(epoch===generation&&!document.hidden&&!live.get(slot)?.ready){
+    const session=sessions.get(slot);
+    if(session){session.state="NO DATA • Manual action required — กดเชื่อมต่อใหม่";paint(session);}
+   }
+  }
+ }finally{
+  recoveryRunning=false;controls();
+  if(recoveryRequested&&!document.hidden&&auth)Promise.resolve().then(recoverKnown);
+ }
+}
+document.addEventListener("visibilitychange",()=>{
+ if(document.hidden)suspend();else {controls();Promise.resolve().then(recoverKnown);}
+});
 window.addEventListener("pagehide",suspend);
 setInterval(()=>{
  for(const s of live.values()){
