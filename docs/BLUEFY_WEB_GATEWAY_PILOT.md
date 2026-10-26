@@ -94,3 +94,80 @@ Do not create another service or change secrets/slot maps.
 Acceptance remains pending operator confirmation. Automated mocks cannot verify
 Bluefy's native bridge, chooser behavior, device names or two physical BLE links.
 If a step fails, report slot, mode and stage/error only; do not include credentials.
+
+## Recovery v3 — engineering and physical acceptance
+
+Confirmed code defects in v2:
+- Closed cards were removed from `live`; foreground `controls()` did not refresh
+  their retry buttons. A card painted while another connection was pending could
+  remain disabled after that connection ended.
+- The global connecting flag waited indefinitely for an unresolved native promise.
+- Cleanup could not cancel a pending JS wait. A stale attempt's finalizer lacked
+  ownership checks, making future recovery changes vulnerable to unlocking a newer attempt.
+
+V3 retains closed card models separately, refreshes controls on foreground, gives
+attempts ownership, and bounds chooser/GATT/discovery/subscription waits to 20 seconds.
+Cleanup cancels JS waits, aborts uploads and removes listeners. The explicit lifecycle
+is IDLE, CHOOSING, CONNECTING, SUBSCRIBING, LIVE, STALE, DISCONNECTED, RECOVERABLE or
+ERROR; fresh sessions start without BPM or acknowledgement. LIVE BLE reception and
+server acknowledgement remain separate fields. Errors and interruption remain NO DATA.
+
+A native requestDevice dialog has no standard abort API. A JS timeout does NOT cancel
+that dialog. The page keeps a separate chooser lock until its native promise settles,
+preventing overlapping prompts. Close the dialog; if it remains unresolved, use
+**รีเซ็ต BLE ของหน้านี้**. This explicitly disconnects all bands and reloads the page,
+clearing the in-memory credential; authenticate G01 again. It does not reset iOS
+Bluetooth or change Render. Ordinary per-slot reconnect leaves the other slot alone.
+
+Mode C calls feature-detected getDevices and accepts only the exact previously bound
+ID and physical suffix. If unsupported, rejected, or missing, it instructs a new
+user tap on A/B; it never launches requestDevice after an asynchronous getDevices call.
+There is no timer-driven chooser or automatic background restoration.
+
+The native empty chooser / stage 2 NativeError is still unresolved. JavaScript cannot
+force advertisements to appear or repair Bluefy's native bridge. Both individual
+bands have operator-confirmed BPM and acknowledgements; simultaneous STEVE streams
+and repeatable recovery are NOT yet physically verified. Background operation remains
+unsupported; server TTL is authoritative if a disconnect upload cannot complete.
+
+Manual deployment: existing Render service > Deploys > Manual Deploy > Deploy a
+specific commit > paste merged SHA > Deploy Commit. No variable changes. Confirm
+`Bluefy recovery v3` at the existing /gateway URL. Commits use [skip render].
+
+Physical acceptance (iPhone only):
+A. In Bluefy authenticate G01, connect R01 to its verified physical band; confirm
+fresh BPM and Server acknowledged.
+B. Connect R02 to its different band without stopping R01. Confirm independent values.
+C. Keep gateway visible for ten minutes; both measurement and ack times must advance.
+D. Background intentionally. On return, both must show NO DATA (server expires after
+15 seconds if disconnect upload was suspended).
+E. Press each card's reconnect. Mode C is available through the main selector if
+supported; otherwise use A/B with a new tap. Reset page only for an unresolved chooser.
+F. Repeat D/E three times. Record slot, mode, phase, duration, and failure text without
+credentials. A JS state violation is a website defect; empty native prompts remain
+unresolved browser behavior unless further evidence proves otherwise.
+
+### Native iOS evaluation (not a replacement in this change)
+The existing HeartRateCentral initializes CBCentralManager without a restoration
+identifier; project.yml lacks UIBackgroundModes/bluetooth-central. Existing CI builds
+an unsigned simulator target, not an installable signed iPhone app. GatewayUploadClient
+already enforces HTTPS, rejects redirects, uses ephemeral sessions and bounds stale uploads.
+
+For background requirements, extend the existing native project with bluetooth-central,
+a stable CBCentralManagerOptionRestoreIdentifierKey, willRestoreState handling, secure
+persisted slot bindings/Keychain credentials, peripheral delegate reattachment and fresh
+subscription checks. Preserve per-peripheral isolation and server TTL. iOS controls
+wake time; restoration does not guarantee continuous networking or recovery after
+user force-quit. Two-band capacity must still be measured on the actual iPhone.
+
+No personal Mac is necessary if a hosted macOS build signs using an authorized team's
+certificates/profiles and distributes through TestFlight. TestFlight distribution needs
+an Apple Developer Program team; the tester does not need their own paid membership.
+Free Personal Team development is available via Xcode but profiles expire in seven days;
+it is not the existing iPhone-only unsigned-CI installation path. Do not buy membership
+until selecting a distribution team/method. Keep the web gateway for foreground tests.
+
+Primary sources:
+- https://developer.apple.com/documentation/technotes/tn3115-bluetooth-state-restoration-app-relaunch-rules
+- https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html
+- https://developer.apple.com/help/account/basics/about-your-developer-account
