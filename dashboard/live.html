@@ -46,7 +46,21 @@ body.presentation .grid{gap:16px}
 body.presentation .card{min-height:210px}
 @media(max-width:800px){.command-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:480px){.command-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat{padding:11px}.command-bar{align-items:stretch}.command-bar button{width:100%}}
-.signal-line{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px;font-size:.78rem}.signal-line span:last-child{font-weight:800}.signal-ok{color:#a1dfb4}.signal-lost{color:#f2aaa4}.risk-watch{color:#edc783}.risk-emergency{color:#ff8585}.risk-normal{color:#b8cbb8}.alert-panel{border:2px solid #d76d68;background:#382124;border-radius:14px;padding:14px 18px;margin:14px 0}.alert-panel strong{color:#ffb0aa}.alert-panel button{margin:7px 8px 0 0}.alert-panel small{display:block;margin-top:6px}.status-note{color:#a9baa9;font-size:.78rem}.command-stats{scroll-margin-top:12px}body.presentation #gateways,body.presentation #conditions{display:block}body.presentation .notice{font-size:.8rem;padding:8px}body.presentation #summary{margin:8px 0}body.presentation .card{min-height:190px}@media(min-width:1100px){body.presentation .card{padding:14px}}</style></head><body>
+.signal-line{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px;font-size:.78rem}.signal-line span:last-child{font-weight:800}.signal-ok{color:#a1dfb4}.signal-lost{color:#f2aaa4}.risk-watch{color:#edc783}.risk-emergency{color:#ff8585}.risk-normal{color:#b8cbb8}.alert-panel{border:2px solid #d76d68;background:#382124;border-radius:14px;padding:14px 18px;margin:14px 0}.alert-panel strong{color:#ffb0aa}.alert-panel button{margin:7px 8px 0 0}.alert-panel small{display:block;margin-top:6px}.status-note{color:#a9baa9;font-size:.78rem}.command-stats{scroll-margin-top:12px}body.presentation #gateways,body.presentation #conditions{display:block}body.presentation .notice{font-size:.8rem;padding:8px}body.presentation #summary{margin:8px 0}body.presentation .card{min-height:190px}@media(min-width:1100px){body.presentation .card{padding:14px}}
+/* Refined tactical presentation polish */
+:root{--tactical-edge:#3e5548;--tactical-glow:#b4d6a6}
+header h1{line-height:1.25;text-wrap:balance}
+.command-bar{padding:4px 0 8px}
+.command-stats .stat{background:linear-gradient(160deg,#1f3028,#151f1b);box-shadow:inset 0 1px 0 #ffffff0c,0 6px 20px #0003;transition:border-color .2s,transform .2s}
+.command-stats .stat:hover{border-color:#7c9b80;transform:translateY(-2px)}
+.card{position:relative;overflow:hidden}
+.card:before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,#9bc39b50,transparent);pointer-events:none}
+.card .status-chip{letter-spacing:.11em}
+.alert-panel{box-shadow:0 0 0 1px #ff969622,0 8px 28px #0005}
+#gateways,#conditions{padding:5px 0}
+button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
+</style></head><body>
 <header><h1>STEVE 1.0 <span style="color:#a8c49d">/ TACTICAL COMMAND</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="command-bar"><div><div class="command-eyebrow">FIELD OPERATIONS / HEALTH TELEMETRY</div><small>STEVE • RECRUIT MONITORING / 15 SLOTS</small></div><button id="presentationToggle" type="button" aria-pressed="false">เปิดโหมดนำเสนอ</button></div>
 <section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
@@ -129,13 +143,13 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
 }
 
 const byId=id=>document.getElementById(id);
-byId("emergencyAlerts").addEventListener("click",async e=>{
+byId("emergencyAlerts").onclick=async e=>{
  const slot=e.target.closest("button[data-ack-slot]")?.dataset.ackSlot;
  if(!slot)return;
  if(!rosterData){alert("กรุณาเข้าสู่ระบบด้วยสิทธิ์ผู้ฝึกหรือแพทย์ก่อนรับทราบเหตุ");return;}
  const selector=byId("rosterSlot");selector.value=slot;fillRoster();
  try{await byId("rosterAcknowledge").click();}catch{byId("rosterStatus").textContent="รับทราบเหตุไม่สำเร็จ กรุณาตรวจสอบสิทธิ์";}
-});
+};
 byId("presentationToggle").onclick=()=>{
  const on=document.body.classList.toggle("presentation");
  byId("presentationToggle").textContent=on?"ออกจากโหมดนำเสนอ":"เปิดโหมดนำเสนอ";
