@@ -21,6 +21,7 @@ let demoActive=false,demoDropR03=false,demoDropG03=false,demoRound=0,demoTimer=n
 const lastByGateway=new Map();
 const SESSION_MS=8*60*60*1000;
 const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
+const webGateway=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/gateway.html");
 const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/index.html");
 function viewer(req){
  const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -111,6 +112,11 @@ const server=http.createServer(async(req,res)=>{
   res.setHeader("Set-Cookie","rhm_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");send(res,200,{ok:true});return;
  }
  const isViewer=viewer(req),gatewayId=gatewayForBearer(req),isGateway=Boolean(gatewayId);
+ // Public HTML shell only: provisioned slots, secrets and BPM still require a Gateway bearer token.
+ if(url.pathname==="/gateway"&&req.method==="GET"){
+  res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});
+  res.end(await readFile(webGateway));return;
+ }
  if(url.pathname==="/live"&&req.method==="GET"){
   res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(liveDashboard));return;
  }
