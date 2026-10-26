@@ -25,6 +25,16 @@ test("Render-style generated environment secrets start LIVE backend without JSON
  const proc=spawn(process.execPath,["index.js"],{cwd:new URL(".",import.meta.url),env:config,stdio:"ignore"});
  try{
   await ready();
+  // The Web BLE HTML shell has no secrets, but only an authenticated Gateway can
+  // retrieve slot mapping or send BPM. It is served on the same HTTPS origin.
+  let shell=await fetch(base+"/gateway");
+  assert.equal(shell.status,200);
+  assert.match(shell.headers.get("cache-control")||"",/no-store/);
+  assert.match(shell.headers.get("content-security-policy")||"",/connect-src 'self'/);
+  const page=await shell.text();
+  assert.match(page,/STEVE 1\.0/);
+  assert.match(page,/navigator\.bluetooth\.requestDevice/);
+  assert.doesNotMatch(page,/render-synthetic-g01-secret-32-characters-minimum/);
   let r=await post("/api/login",{token:viewer});assert.equal(r.status,200);
   const cookie=r.headers.get("set-cookie")?.split(";")[0];assert.ok(cookie);
   assert.match(r.headers.get("set-cookie")||"",/Secure/);
