@@ -37,7 +37,7 @@ button{cursor:pointer;font-weight:700}button:hover{background:#34483d}
 .stat{background:#192520;border:1px solid #3b4f42;border-radius:12px;padding:14px}
 .stat b{display:block;font-size:clamp(1.45rem,2.5vw,2.25rem);font-variant-numeric:tabular-nums}
 .stat span{color:#b7c8b8;font-size:.75rem;letter-spacing:.06em}
-.stat.live b{color:#a1dfb4}.stat.lost b{color:#edaaa2}.stat.watch b{color:#e5c280}.stat.paused b{color:#c7b5eb}
+.stat.live b{color:#a1dfb4}.stat.lost b{color:#edaaa2}.stat.watch b{color:#e5c280}.stat.paused b{color:#ff8888}
 .card .status-chip{display:inline-block;border:1px solid #607567;border-radius:100px;padding:3px 9px;font-size:.69rem;font-weight:800;letter-spacing:.08em;margin-top:8px;color:#e0e9de}
 .card.stale .status-chip{color:#f1aaa4;border-color:#a65c57}.card.alert-emergency .status-chip{color:#ff8c8c;border-color:#db5e5e}.card.alert-stop .status-chip,.card.watch .status-chip{color:#e9c17a;border-color:#b89152}.card.pause .status-chip{color:#c9b6f0;border-color:#8f78bb}
 .card.watch{border-left-color:#e8bd70}
@@ -53,8 +53,8 @@ body.presentation .card{min-height:210px}
 <div class="stat"><span>กำลังพล / SLOTS</span><b id="statTotal">15</b></div>
 <div class="stat live"><span>LIVE DATA</span><b id="statLive">0</b></div>
 <div class="stat lost"><span>NO DATA</span><b id="statNoData">15</b></div>
-<div class="stat watch"><span>WATCH / STOP</span><b id="statWatch">0</b></div>
-<div class="stat paused"><span>PAUSED / EMERGENCY</span><b id="statPaused">0</b></div>
+<div class="stat watch"><span>WATCH / เฝ้าระวังใกล้ชิด</span><b id="statWatch">0</b></div>
+<div class="stat paused"><span>EMERGENCY / อันตราย</span><b id="statPaused">0</b></div>
 </section>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
@@ -106,11 +106,12 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const severity=profile?.observation==="confusion_collapse_seizure"?"emergency":profile?.observation==="dizzy_weak_nausea"?"stop":null;
   const safetyNote=severity==="emergency"?"ฉุกเฉิน: เรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
     profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังตามผู้รับผิดชอบ":"";
-  const watchFlag=profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop";
-  if(watchFlag)watchCount++;if(r.paused||severity==="emergency")pausedCount++;
-  const alertClass=r.paused?"pause":severity==="emergency"?"alert-emergency":severity==="stop"?"alert-stop":stale?"stale":watchFlag?"watch":"fresh";
+  const emergencyFlag=severity==="emergency";
+  const watchFlag=!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
+  if(watchFlag)watchCount++;if(emergencyFlag)pausedCount++;
+  const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   if(!stale)fresh++;
-  const chip=r.paused?"PAUSED":severity==="emergency"?"EMERGENCY":severity==="stop"?"STOP / ASSESS":stale?"NO DATA":watchFlag?"WATCH":"LIVE";
+  const chip=emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":stale?"NO DATA":"LIVE";
   return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><small>'+(stale?'ไม่มีข้อมูลปัจจุบัน':Math.round(age/1000)+' วินาทีที่แล้ว')+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  byId("statTotal").textContent=data.recruits.length;
