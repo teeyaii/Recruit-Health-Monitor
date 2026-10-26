@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="th"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STEVE 1.0 — Web BLE Gateway Pilot</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#0c1526;color:#f3f7fc}
+body{max-width:760px;margin:auto;padding:18px 14px 48px;line-height:1.5}
+h1{margin:6px 0}h2{font-size:1.15rem}small,.muted{color:#a7b5cd}
+.card{border:1px solid #35445d;background:#17243a;border-radius:14px;padding:16px;margin:14px 0}
+.warning{border-color:#957e38;background:#282416}
+label{display:block;margin:10px 0}
+input,select,button{font:inherit;max-width:100%;border-radius:10px;padding:12px;box-sizing:border-box}
+input,select{width:100%;background:#0e192b;color:#fff;border:1px solid #596a83}
+button{background:#41a6eb;color:#071526;border:0;font-weight:700;margin:6px 6px 6px 0}
+button.secondary{background:#324760;color:#fff}
+button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.03em}
+.status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
+</style></head><body>
+<h1>STEVE 1.0</h1>
+<p class="muted">Web BLE Gateway Pilot • iPhone/Bluefy • foreground only</p>
+<div class="card warning" role="alert">
+<strong>ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น — ไม่ใช่อุปกรณ์แพทย์</strong>
+<p>ต้องเปิดหน้านี้ค้างไว้ใน Bluefy ห้ามล็อกหน้าจอระหว่างทดสอบ ถ้าออกจากแอปหรือขาดข้อมูล ให้ถือว่าไม่มีข้อมูลสด ห้ามใช้ตัดสินว่าผู้ฝึกปลอดภัย</p>
+<p>ใช้รหัส R01–R15 แบบไม่ระบุตัวตนเท่านั้น ห้ามใส่ชื่อหรือข้อมูลสุขภาพจริงในการทดสอบ</p>
+</div>
+<section class="card">
+<h2>1. เชื่อมต่อเซิร์ฟเวอร์ทดลอง</h2>
+<label for="gateway">Gateway<select id="gateway"><option>G01</option><option>G02</option><option>G03</option><option>G04</option><option>G05</option></select></label>
+<label for="token">Gateway credential (จาก Render — ไม่ใช่รหัสผู้ฝึก)<input id="token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ใส่เฉพาะในหน้า HTTPS ของ STEVE"></label>
+<button id="load">ตรวจสิทธิ์และโหลดช่อง</button><button id="clear" class="secondary">หยุดและล้างรหัส</button>
+<p id="serverStatus" class="status" role="status">ยังไม่ได้ตรวจสอบสิทธิ์</p>
+</section>
+<section class="card">
+<h2>2. เลือกสายรัดทีละเรือน</h2>
+<p>บน Band 10 เปิด Share HR ก่อน แล้วกดเชื่อมต่อแต่ละช่อง R-slot ตามที่ผู้ทดสอบจับคู่อุปกรณ์จริงไว้ ห้ามกำหนดช่องจากลำดับที่สแกนพบ</p>
+<label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
+<button id="connect" disabled>เชื่อมต่อ Band 10</button>
+<p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
+<div id="slots" aria-live="polite"></div>
+</section>
+<p class="muted">ข้อมูล BPM ส่งด้วย HTTPS ไปยัง Backend เดียวกันแบบมีการตรวจสิทธิ์ ไม่บันทึก token หรือ BPM ลง localStorage, คุกกี้, URL หรือ GitHub ข้อมูลเกิน 15 วินาทีต้องถือว่าเก่า</p>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const HR_SERVICE=0x180D, HR_MEASUREMENT=0x2A37;
+const live=new Map(), pairedDevices=new Set();
+let auth=null, provision=[];
+function status(message){$("bleStatus").textContent=message;}
+function serverStatus(message){$("serverStatus").textContent=message;}
+function decodeHeartRate(data){
+ if(!data || data.byteLength<2)return null;
+ const flags=data.getUint8(0),is16=Boolean(flags&1);
+ if(data.byteLength<(is16?3:2))return null;
+ // Contact supported + not detected: a measurement cannot be treated as safe/current.
+ if((flags&4) && !(flags&2))return null;
+ const bpm=is16?data.getUint16(1,true):data.getUint8(1);
+ return Number.isInteger(bpm)&&bpm>=25&&bpm<=240?bpm:null;
+}
+async function upload(slot,bpm,timestamp,disconnect=false){
+ if(!auth)return false;
+ if(!disconnect && Date.now()-timestamp>14000)return false;
+ const pair=provision.find(x=>x.id===slot);
+ if(!pair)return false;
+ const item={id:slot,device_id:pair.device_id,timestamp};
+ if(disconnect)item.state="DISCONNECTED";else item.hr=bpm;
+ const abort=new AbortController();
+ const timeout=setTimeout(()=>abort.abort(),4000);
+ try{
+  const r=await fetch("/api/ingest",{method:"POST",cache:"no-store",signal:abort.signal,
+   headers:{"Authorization":"Bearer "+auth.token,"Content-Type":"application/json"},
+   body:JSON.stringify({gateway:auth.gateway,source:"GATEWAY",readings:[item]})});
+  if(!r.ok)return false;
+  const payload=await r.json();
+  return payload.accepted===1;
+ }catch{return false;}finally{clearTimeout(timeout);}
+}
+function paint(slot){
+ const session=live.get(slot);
+ if(!session)return;
+ session.indicator.textContent=session.state;
+ session.measure.textContent=session.bpm===null?"—":String(session.bpm)+" BPM";
+ session.age.textContent=session.lastAt?Math.round((Date.now()-session.lastAt)/1000)+" วินาทีจากข้อมูลล่าสุด":"ยังไม่มีข้อมูล";
+}
+async function stopped(slot,reason){
+ const session=live.get(slot);if(!session || session.closed)return;
+ session.closed=true;
+ session.state=reason||"DISCONNECTED";session.bpm=null;
+ try{session.characteristic?.removeEventListener("characteristicvaluechanged",session.onValue)}catch{}
+ try{session.device?.removeEventListener("gattserverdisconnected",session.onDisconnect)}catch{}
+ try{if(session.device?.gatt?.connected)session.device.gatt.disconnect()}catch{}
+ pairedDevices.delete(session.device?.id);
+ paint(slot);
+ await upload(slot,null,Date.now(),true);
+ live.delete(slot);
+ $("connect").disabled=false;
+}
+function element(tag,cls,textValue){
+ const node=document.createElement(tag);
+ if(cls)node.className=cls;
+ if(textValue!==undefined)node.textContent=textValue;
+ return node;
+}
+function addTile(slot){
+ const div=element("div","card");
+ const head=element("strong","",slot+" • อุปกรณ์ทดสอบ");
+ const bpm=element("div","bpm","—");
+ const state=element("p","status","กำลังเชื่อมต่อ");
+ const age=element("small","","ยังไม่มีข้อมูล");
+ const stop=element("button","secondary","ตัดการเชื่อมต่อ "+slot);
+ stop.addEventListener("click",()=>stopped(slot,"หยุดโดยผู้ทดสอบ"));
+ div.append(head,bpm,state,age,element("br"),stop);
+ $("slots").append(div);
+ return {indicator:state,measure:bpm,age};
+}
+$("load").addEventListener("click",async()=>{
+ if(live.size){serverStatus("ต้องหยุดสายรัดทั้งหมดก่อนเปลี่ยน Gateway");return;}
+ const gateway=$("gateway").value,token=$("token").value.trim();
+ if(token.length<32){serverStatus("กรอกรหัส Gateway ที่ได้รับอนุญาต (อย่างน้อย 32 ตัวอักษร)");return;}
+ const button=$("load");button.disabled=true;serverStatus("กำลังตรวจสิทธิ์...");
+ try{
+  const r=await fetch("/api/gateway/provision",{headers:{"Authorization":"Bearer "+token},cache:"no-store"});
+  if(!r.ok)throw Error("HTTP "+r.status+" — ตรวจรหัส Gateway และการตั้งค่า Render");
+  const payload=await r.json();
+  if(payload.gateway!==gateway || !Array.isArray(payload.slots))throw Error("Gateway/slot map ไม่ตรง");
+  const valid=payload.slots.every(s=>/^R(0[1-9]|1[0-5])$/.test(s.id)&&/^[a-zA-Z0-9_-]{4,64}$/.test(s.device_id));
+  if(!valid)throw Error("ข้อมูลช่องไม่ถูกต้อง");
+  auth={gateway,token};provision=payload.slots;
+  $("token").value="";
+  $("slot").replaceChildren();
+  for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}
+  $("slot").disabled=!provision.length;$("connect").disabled=!provision.length;
+  $("gateway").disabled=true;
+  serverStatus("ยืนยันสิทธิ์ "+gateway+" แล้ว • "+provision.length+" ช่องที่อนุญาต • รหัสอยู่ในหน่วยความจำชั่วคราว");
+  if(!provision.length)status("ไม่มีช่องที่ได้รับอนุญาต กรุณาตั้งค่า R-slot ที่ Render ก่อน");
+ }catch(e){auth=null;provision=[];$("slot").disabled=true;$("connect").disabled=true;serverStatus("เชื่อมเซิร์ฟเวอร์ไม่สำเร็จ: "+e.message);}
+ finally{button.disabled=false;}
+});
+$("connect").addEventListener("click",async()=>{
+ if(!auth || !navigator.bluetooth){status("ต้องเปิดใน Bluefy ที่รองรับ Web Bluetooth และตรวจสิทธิ์ก่อน");return;}
+ const slot=$("slot").value;
+ if(!provision.some(s=>s.id===slot)||live.has(slot)){status("ช่องนี้เชื่อมต่ออยู่แล้ว หรือไม่ได้รับอนุญาต");return;}
+ const button=$("connect");button.disabled=true;
+ let device,session=null;
+ try{
+  // Call requestDevice from the user click gesture; Bluefy requires explicit selection.
+  device=await navigator.bluetooth.requestDevice({filters:[{services:[HR_SERVICE]}],optionalServices:[HR_SERVICE]});
+  if(pairedDevices.has(device.id))throw Error("เรือนนี้ถูกกำหนดให้ช่องอื่นแล้ว");
+  const gatt=await device.gatt.connect();
+  const service=await gatt.getPrimaryService(HR_SERVICE);
+  const characteristic=await service.getCharacteristic(HR_MEASUREMENT);
+  session={device,characteristic,closed:false,state:"SUBSCRIBING",bpm:null,lastAt:null,busy:false,sentAt:0,...addTile(slot)};
+  live.set(slot,session);pairedDevices.add(device.id);
+  session.onDisconnect=()=>stopped(slot,"BLE DISCONNECTED");
+  device.addEventListener("gattserverdisconnected",session.onDisconnect);
+  session.onValue=event=>{
+   if(session.closed || document.hidden)return;
+   const bpm=decodeHeartRate(event.target.value);
+   const now=Date.now();
+   session.lastAt=now;session.bpm=bpm;
+   session.state=bpm===null?"CONTACT LOST / NO DATA":"BLE "+bpm+" BPM • รอ Server";
+   paint(slot);
+   if(session.busy || now-session.sentAt<1000)return;
+   session.sentAt=now;session.busy=true;
+   upload(slot,bpm,now,bpm===null).then(ok=>{
+    if(session.closed)return;
+    session.state=ok?(bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged"):"SERVER REJECTED / OFFLINE";
+    paint(slot);
+   }).finally(()=>{session.busy=false;});
+  };
+  characteristic.addEventListener("characteristicvaluechanged",session.onValue);
+  await characteristic.startNotifications();
+  session.state="BLE CONNECTED • รอ BPM";paint(slot);
+  status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
+ }catch(e){
+  if(session)await stopped(slot,"FAILED");
+  else if(device?.gatt?.connected && !pairedDevices.has(device.id))device.gatt.disconnect();
+  status("เชื่อมต่อไม่ได้: "+(e?.message||"unknown")+" • ตรวจ Share HR หรือแอป BLE อื่น");
+ }finally{button.disabled=false;}
+});
+async function stopAll(){
+ for(const slot of Array.from(live.keys()))await stopped(slot,"STOPPED / NO DATA");
+}
+$("clear").addEventListener("click",async()=>{
+ await stopAll();auth=null;provision=[];$("token").value="";$("slot").replaceChildren();
+ $("slot").disabled=true;$("connect").disabled=true;$("gateway").disabled=false;
+ $("slots").replaceChildren();serverStatus("ล้างข้อมูล Gateway จากหน้าเว็บแล้ว");
+ status("หยุดทั้งหมด");
+});
+function suspend(){
+ for(const [slot,s] of live){
+  s.bpm=null;s.state="BACKGROUND / NO DATA";paint(slot);
+  // The page can be suspended before this request finishes. Server TTL remains authoritative.
+  stopped(slot,"BACKGROUND / DISCONNECTED");
+ }
+}
+document.addEventListener("visibilitychange",()=>{if(document.hidden)suspend();});
+window.addEventListener("pagehide",suspend);
+setInterval(()=>{
+ for(const [slot,s] of live){
+  if(!s.closed && s.lastAt && Date.now()-s.lastAt>15000){s.bpm=null;s.state="STALE / NO DATA";}
+  paint(slot);
+ }
+},1000);
+if(!navigator.bluetooth)status("เบราว์เซอร์นี้ไม่มี Web Bluetooth — เปิดลิงก์นี้ใน Bluefy");
+</script></body></html>
