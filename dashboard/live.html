@@ -1,8 +1,35 @@
 <!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>STEVE 1.0 — Live</title><style>
 :root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#111827;color:#f3f4f6}body{margin:0 auto;max-width:1050px;padding:18px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h1{font-size:1.4rem}p,small{color:#b8c4d5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.card{padding:16px;background:#1f2937;border-radius:12px;border-left:5px solid #64748b}.fresh{border-left-color:#38bdf8}.stale{border-left-color:#ef4444}.bpm{font-size:2rem;font-weight:bold}.notice{padding:12px;border:1px solid #64748b;border-radius:8px;margin:12px 0}button,input{padding:11px;border-radius:8px;background:#334155;color:white;border:1px solid #64748b}input{min-width:220px}form{display:flex;gap:8px;flex-wrap:wrap}
 [hidden]{display:none!important}*{box-sizing:border-box}input{max-width:100%}select{padding:11px;border-radius:8px;background:#334155;color:#fff;border:1px solid #64748b;min-width:130px}label{display:grid;gap:5px;font-size:.87rem}.operator-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.operator-box{margin:16px 0;padding:15px;border:1px solid #64748b;border-radius:12px}.operator-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}.operator-actions button{min-height:44px}.safety{color:#fcd34d}.alert-stop{border-left-color:#f59e0b}.alert-emergency{border-left-color:#fb7185}.pause{border-left-color:#a78bfa}#rosterStatus{color:#fcd34d;white-space:pre-wrap}#rosterAudit{font-size:.85rem;color:#a6b7cf}
+
+/* STEVE Tactical Command UI — presentation-first, operational semantics unchanged */
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;background:#0b1113;color:#edf1ea;color-scheme:dark}
+body{max-width:1600px;padding:clamp(14px,2.5vw,36px);background:radial-gradient(ellipse at top right,#192824 0%,#0b1113 45%);min-height:100vh}
+header{border-bottom:1px solid #35453d;padding:10px 0 22px;margin-bottom:18px}
+h1{font-size:clamp(1.5rem,2.5vw,2.4rem);font-weight:850;letter-spacing:.09em;text-transform:uppercase;margin:0}
+#connection{font-size:.83rem;color:#b9d49a;border:1px solid #536a4a;border-radius:100px;padding:9px 14px;background:#1a291f}
+.notice{background:#1a211e;border:1px solid #39453d;color:#d1d9ce;border-radius:12px;line-height:1.6}
+#summary{font-size:1.2rem;font-weight:800;letter-spacing:.02em;color:#dce9d2;margin:22px 0 16px}
+#gateways,#conditions{font-size:.87rem;color:#b2bfb2}
+.grid{grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px}
+.card{background:linear-gradient(145deg,#202b28,#17211f);border:1px solid #37443d;border-left:5px solid #718579;border-radius:14px;padding:20px;min-height:188px;box-shadow:0 8px 22px #0003;transition:transform .2s,border-color .2s}
+.card:hover{transform:translateY(-2px);border-color:#758a73}
+.card strong{font-size:1.15rem;letter-spacing:.1em}
+.card .bpm{font-size:clamp(2rem,3vw,2.8rem);font-variant-numeric:tabular-nums;letter-spacing:-.04em;margin:12px 0 6px}
+.card small{font-size:.82rem;color:#aebdb3;line-height:1.7}
+.card.fresh{border-left-color:#83bfa5}.card.stale{border-left-color:#c76b67}
+.card.pause{border-left-color:#b8a6d9}.card.alert-stop{border-left-color:#e8ad5e}.card.alert-emergency{border-left-color:#ff6666;background:#302022}
+button,select,input{background:#25332e;border:1px solid #506054;color:#f1f5ec;border-radius:9px;min-height:44px}
+button{cursor:pointer;font-weight:700}button:hover{background:#34483d}
+.operator-box{background:#141e1b;border:1px solid #46594c;border-radius:16px;padding:clamp(16px,2vw,28px)}
+.operator-box h2{letter-spacing:.025em}.operator-fields{gap:14px}
+#controls{display:flex;gap:10px;flex-wrap:wrap}
+#rosterBox{margin-top:20px}
+@media(min-width:1100px){.grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:600px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.card{padding:13px;min-height:170px}.card .bpm{font-size:1.85rem}.card small{font-size:.72rem}h1{font-size:1.35rem}}
+@media(max-width:390px){.grid{grid-template-columns:1fr}}
 </style></head><body>
-<header><h1>STEVE 1.0 — Live</h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
+<header><h1>STEVE 1.0 <span style="color:#a8c49d">/ TACTICAL COMMAND</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
 <div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
