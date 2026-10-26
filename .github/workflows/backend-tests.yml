@@ -4,6 +4,7 @@ on:
     paths:
       - 'server/**'
       - 'dashboard/live.html'
+      - 'dashboard/gateway.html'
       - 'dashboard/index.html'
       - 'README.md'
       - 'render.yaml'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'server/**'
       - 'dashboard/live.html'
+      - 'dashboard/gateway.html'
       - 'dashboard/index.html'
       - 'README.md'
       - 'render.yaml'
