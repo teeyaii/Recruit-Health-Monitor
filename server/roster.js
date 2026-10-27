@@ -54,6 +54,20 @@ export class RosterStore {
  all(){return slotIDs.map(id=>this.get(id));}
  get(id){if(!slotSet.has(id))problem(404,"unknown slot");return {activity:"not_reported",...this.data.slots[id]};}
  getAudit(){return this.data.audit.slice(-100).map(item=>({...item}));}
+ // Operator-entered whole-cohort phase transitions only; no fabricated past phase.
+ // A phase predating the four-hour window can seed the window's left edge.
+ getTrainingTimeline(since,now=Date.now()){
+  const events=this.data.audit.filter(e=>e.id==="GROUP"&&
+   (e.action==="phase_training"||e.action==="phase_hourly_rest")&&
+   Number.isSafeInteger(e.at)&&e.at<=now).sort((a,b)=>a.at-b.at);
+  const before=events.filter(e=>e.at<since).at(-1);
+  const current=this.getGroupPhase();
+  const seed=before?before.action.slice(6):
+   current.changedAt!==null&&current.changedAt<since?current.phase:null;
+  const timeline=seed&&seed!=="not_started"?[{at:since,phase:seed}]:[];
+  for(const e of events)if(e.at>=since)timeline.push({at:e.at,phase:e.action.slice(6)});
+  return timeline;
+ }
  // One operational training/rest phase applies to the whole supervised cohort.
  // It never overwrites a member's medical restriction, WATCH or EMERGENCY.
  getGroupPhase(){return {...{phase:"not_started",version:0,changedAt:null,changedBy:null},...(this.data.groupPhase||{})};}
