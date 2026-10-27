@@ -551,7 +551,7 @@ function paintGroupPhase(){
  const changedAt=groupPhaseData?.changedAt;
  byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมงทั้งกลุ่ม":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
  const elapsed=Number.isSafeInteger(changedAt)?Math.max(0,now-changedAt):null;
- byId("phaseClock").innerHTML=elapsed===null?'— <small>นาทีในช่วงปัจจุบัน</small>':
+ if(byId("phaseClock"))byId("phaseClock").innerHTML=elapsed===null?'— <small>นาทีในช่วงปัจจุบัน</small>':
   prettyDuration(elapsed)+' <small>ในช่วงปัจจุบัน</small>';
  byId("groupPhaseTime").textContent=changedAt?
   "เริ่ม "+new Date(changedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
@@ -567,9 +567,9 @@ function paintGroupPhase(){
  if(elapsed!==null&&phase!=="not_started")last[phase]={ms:elapsed,active:true};
  for(const [key,id,container,note] of [["training","trainingDuration","trainingMetric","trainingDurationNote"],
   ["hourly_rest","restDuration","restMetric","restDurationNote"]]){
-  byId(id).textContent=last[key]?prettyDuration(last[key].ms):"—";
-  byId(note).textContent=!last[key]?"ยังไม่มีบันทึก":last[key].active?"กำลังนับเวลา":"ช่วงที่บันทึกล่าสุด";
-  byId(container).dataset.active=String(key===phase);
+  if(byId(id))byId(id).textContent=last[key]?prettyDuration(last[key].ms):"—";
+  if(byId(note))byId(note).textContent=!last[key]?"ยังไม่มีบันทึก":last[key].active?"กำลังนับเวลา":"ช่วงที่บันทึกล่าสุด";
+  if(byId(container)?.dataset)byId(container).dataset.active=String(key===phase);
  }
  for(const [id,value] of [["startTraining","training"],["startHourlyRest","hourly_rest"]]){
   const button=byId(id);
