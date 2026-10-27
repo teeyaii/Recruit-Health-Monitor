@@ -17,9 +17,55 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 .status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
 .reserved-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.reserved-slots .card{margin:0;border-style:dashed}.reserved-slots h3{font-size:1rem;margin:0 0 12px}.reserved-slots .waiting{font-size:1.2rem;font-weight:700;color:#c3d5a6}.reserved-slots p{margin:8px 0}.reserved-slots small{display:block}@media(max-width:540px){.reserved-slots{grid-template-columns:1fr}}
 [hidden]{display:none!important}summary{cursor:pointer;color:#b7c4af;padding:10px 0}.quick{display:flex;gap:10px;flex-wrap:wrap}.quick button{flex:1;min-width:130px}.technical{font-size:.8rem;color:#abb5a5}body{background:#131813}:root{background:#131813;color:#eff2e9}.card{background:#20271f;border-color:#414c3b}button{background:#c3d5a6;color:#182014}button.secondary{background:#3a4734}input,select{background:#161d16;border-color:#67735f}.bpm{font-size:2.8rem}.presentation .setup,.presentation .advanced{display:none}.presentation .bpm{font-size:3.5rem}
+
+/* Polished mobile Gateway: visual-only; BLE lifecycle, auth and upload unchanged. */
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0c1714;color:#f1f8f2}
+body{max-width:840px;padding:22px 16px 64px;background:radial-gradient(ellipse at 8% 0%,#234033 0%,#111e19 37%,#0e1713 78%);min-height:100vh}
+h1{font-size:clamp(1.8rem,5vw,2.7rem);line-height:1.15;letter-spacing:-.045em}
+h2{font-size:1.06rem;margin:0 0 10px;letter-spacing:-.012em}
+button{min-height:46px;border-radius:11px;transition:filter .15s,transform .15s;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.12)}
+button:hover:not(:disabled){filter:brightness(1.05)}button:active:not(:disabled){transform:translateY(1px)}
+input,select{min-height:45px;border:1px solid #526b57;background:#14261c}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid #add8a6;outline-offset:2px}
+.card{background:linear-gradient(145deg,#21382a,#18281e);border:1px solid #405d48;border-radius:17px;padding:clamp(15px,3vw,22px);box-shadow:0 9px 30px rgba(0,0,0,.13)}
+.warning{border-color:#8c814d;background:#302d1d}.warning p{color:#dfddc7}
+.hero{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:2px 0 12px}
+.hero .eyebrow{font-size:.75rem;font-weight:750;letter-spacing:.14em;color:#b1d5ba}
+.hero p{margin:8px 0 0;color:#b6cbbd}
+.hero button{margin:0}
+.overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0 21px}
+.overview .metric{border:1px solid #45644d;background:linear-gradient(155deg,#254434,#1b3025);border-radius:13px;padding:13px 14px;min-width:0}
+.overview .metric-label{display:block;color:#b9cebf;font-size:.75rem}
+.overview .metric-value{display:block;color:#edfaef;font-weight:850;font-size:clamp(1rem,2.8vw,1.4rem);letter-spacing:-.02em;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;margin-top:4px}
+.overview .metric-hint{display:block;color:#9eb9a7;font-size:.69rem;margin-top:3px}
+#slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,285px),1fr));gap:12px}
+#slots .card{margin:0;background:linear-gradient(150deg,#203a2a,#14281f);border:1px solid #496750;padding:17px}
+#slots .card[data-status="LIVE"]{border-color:#78b59a;box-shadow:inset 3px 0 #79d2a7,0 6px 24px rgba(0,0,0,.12)}
+#slots .card[data-status="NO_DATA"]{border-color:#6b6d4c;box-shadow:inset 3px 0 #b7a96a,0 6px 24px rgba(0,0,0,.12)}
+#slots .bpm{font-size:clamp(2.3rem,6vw,3.5rem);color:#e2f6df;font-variant-numeric:tabular-nums;letter-spacing:-.05em}
+#slots .status{line-height:1.42}
+#slots .card > strong{color:#bde5cc}
+#slots .card > small{display:block;color:#bdcfc0;padding:3px 0 10px}
+#slots details{border-top:1px solid #3e5b44;margin:10px 0}
+#slots details p{margin:6px 0}
+#slots button{width:100%;margin:5px 0}
+.quick button{background:#bce0ac;color:#11291c;min-height:50px}
+.reserved-slots .card{background:#1b2a20;border-style:dashed;box-shadow:none}
+.reserved-slots .waiting{color:#bed1b7;font-size:1rem}
+.technical,.muted{color:#adc3b4}
+#simpleStatus,#serverStatus{padding:10px 12px;border-radius:9px;background:rgba(107,149,111,.12);border:1px solid rgba(143,181,151,.23)}
+@media(max-width:540px){.overview{grid-template-columns:repeat(2,minmax(0,1fr))}.overview .metric:last-child{grid-column:1/-1}.hero{align-items:center}.hero button{min-width:120px}}
+@media(prefers-reduced-motion:reduce){button{transition:none}}
 </style></head><body>
-<h1>STEVE 1.0</h1><button id="presentation" class="secondary">โหมดนำเสนอ</button>
-<p class="muted">สายรัดหัวใจ • เปิดหน้านี้ค้างไว้ใน Bluefy</p>
+<header class="hero">
+ <div><div class="eyebrow">STEVE / SENSOR GATEWAY</div><h1>STEVE 1.0 <span style="color:#a8d0b5">Gateway</span></h1><p>Heart-rate telemetry • เชื่อมต่อผ่าน Bluefy บน iPhone</p></div>
+ <button id="presentation" class="secondary">โหมดนำเสนอ</button>
+</header>
+<section class="overview" aria-label="สถานะ Gateway แบบสด">
+ <div class="metric"><span class="metric-label">GATEWAY</span><strong class="metric-value" id="gatewayBadge">ยังไม่เข้าสู่ระบบ</strong><small class="metric-hint">ใช้สิทธิ์เฉพาะเครื่องนี้</small></div>
+ <div class="metric"><span class="metric-label">LIVE BANDS</span><strong class="metric-value" id="gatewayDevices">0 เรือน</strong><small class="metric-hint">สัญญาณ BPM ไม่เกิน 15 วินาที</small></div>
+ <div class="metric"><span class="metric-label">SERVER ACK</span><strong class="metric-value" id="gatewayUpload">ยังไม่มีข้อมูล</strong><small class="metric-hint">ยืนยันการรับข้อมูลโดยเซิร์ฟเวอร์</small></div>
+</section>
 <div class="card warning" role="alert">
 <strong>ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น — ไม่ใช่อุปกรณ์แพทย์</strong>
 <p>ต้องเปิดหน้านี้ค้างไว้ใน Bluefy ห้ามล็อกหน้าจอระหว่างทดสอบ ถ้าออกจากแอปหรือขาดข้อมูล ให้ถือว่าไม่มีข้อมูลสด ห้ามใช้ตัดสินว่าผู้ฝึกปลอดภัย</p>
@@ -54,7 +100,7 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 </div>
 </section>
 </section>
-<p class="muted">จำการเข้าใช้งานได้นานสูงสุด 2 ชั่วโมงบนเครื่องนี้ แล้วต้องเข้าใหม่ ข้อมูลเกิน 15 วินาทีแสดง NO DATA • Gateway v8</p>
+<p id="gatewaySessionNote" class="muted">Gateway G01–G03 ใช้งานได้สูงสุด 10 ชั่วโมง, G04–G05 สูงสุด 2 ชั่วโมง • ข้อมูลเกิน 15 วินาทีเป็น NO DATA</p>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
@@ -71,7 +117,17 @@ function expireSession(){
  $("loginFields").hidden=false;$("gateway").disabled=false;
  serverStatus("หมดเวลาเข้าใช้งาน • กรอกรหัสเพื่อเข้าใหม่");controls();
 }
+function paintGatewayOverview(){
+ const now=Date.now(),fresh=[...live.values()].filter(x=>
+  !x.closed&&x.bpm!==null&&Number.isSafeInteger(x.lastAt)&&now-x.lastAt<=15000);
+ $("gatewayBadge").textContent=auth?.gateway||"ยังไม่เข้าสู่ระบบ";
+ $("gatewayDevices").textContent=fresh.length+" เรือน";
+ const acknowledged=fresh.filter(x=>x.ackAt&&now-x.ackAt<=15000).length;
+ $("gatewayUpload").textContent=!auth?"ยังไม่เชื่อมต่อ":
+  acknowledged?"รับแล้ว "+acknowledged+" เรือน":fresh.length?"กำลังส่งข้อมูล":"รอ BPM จริง";
+}
 function controls(){
+ paintGatewayOverview();
  for(const slot of ["R01","R02"])$("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||live.has(slot)||connecting||chooserPending||document.hidden;
  $("connect").disabled=!auth||!provision.length||connecting||chooserPending||document.hidden;
  $("load").disabled=loginPending||connecting||live.size>0;
@@ -137,6 +193,8 @@ async function upload(s,bpm,timestamp,disconnect=false){
  finally{clearTimeout(timeout);if(s.uploadAbort===abort)s.uploadAbort=null;}
 }
 function paint(s){
+ const tile=tiles.get(s.slot);
+ if(tile)tile.dataset.status=s.closed||s.bpm===null||!s.lastAt||Date.now()-s.lastAt>15000?"NO_DATA":"LIVE";
  s.indicator.textContent=s.closed?"NO DATA • กดเชื่อมต่อใหม่":s.bpm===null?"NO DATA • รอสัญญาณใหม่":s.error?"ส่งข้อมูลไม่สำเร็จ":"กำลังรับข้อมูล";
  s.diagnostics.textContent=s.lifecycle+" • "+s.state;
  s.measure.textContent=s.bpm===null?"NO DATA":String(s.bpm)+" BPM";
@@ -302,7 +360,11 @@ function applyProvision(payload){
  $("token").value="";$("gateway").value=payload.gateway;$("gateway").disabled=true;$("loginFields").hidden=true;
  $("slot").replaceChildren();
  for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}
- $("slot").disabled=!provision.length;serverStatus("พร้อมใช้งาน "+payload.gateway+" • จำการเข้าใช้สูงสุด 2 ชั่วโมง");controls();
+ $("slot").disabled=!provision.length;serverStatus("พร้อมใช้งาน "+payload.gateway+" • เชื่อม Band ได้เลย");
+ $("gatewaySessionNote").textContent=["G01","G02","G03"].includes(payload.gateway)?
+  "เซสชัน Gateway นี้สูงสุด 10 ชั่วโมง • เปิด Bluefy ด้านหน้าเพื่อรับ BLE ต่อเนื่อง":
+  "เซสชัน Gateway นี้สูงสุด 2 ชั่วโมง • เปิด Bluefy ด้านหน้าเพื่อรับ BLE ต่อเนื่อง";
+ controls();
 }
 async function loadProvision(epoch){
  const r=await fetch("/api/gateway/provision",{headers:{"X-STEVE-Gateway":"1"},credentials:"same-origin",cache:"no-store"});
@@ -394,6 +456,7 @@ setInterval(()=>{
   if(s.lastAt && Date.now()-s.lastAt>15000){s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";}
   paint(s);
  }
+ paintGatewayOverview();
 },1000);
 if(!navigator.bluetooth)status("เบราว์เซอร์นี้ไม่มี Web Bluetooth — เปิดลิงก์นี้ใน Bluefy");
 </script></body></html>
