@@ -30,7 +30,9 @@ STEVE is not a clinically validated medical device or heat-injury detector. Miss
 
 ## Verification boundaries
 
-On 26 October 2026, the operator's iPhone manually received standard HR notifications from two Xiaomi Band 10 devices separately in nRF Connect, and from one through Bluefy. This is **not** evidence of two concurrent Bluefy streams, STEVE end-to-end upload, background reliability, multi-band capacity, or medical suitability. Native compilation and synthetic tests cannot establish those properties. The iOS simulator build is unsigned and cannot be installed on an iPhone. See [setup](docs/MVP_SETUP.md) for signing and hosting requirements.
+On 27 October 2026, the owner confirmed all six physical Gateway v8 checks PASS on iPhone / Bluefy 2.01 / two Xiaomi Smart Band 10 units: R01 fresh BPM, simultaneous R02 fresh BPM, automatic foreground recovery, Soft Reset credential retention, reload within the two-hour session, and correct Dashboard LIVE / NO DATA. Accepted baseline: PR #22, main `cddfad8c5ea0b572fcc5449c595a032b3e375f17`. This is owner-reported physical evidence, distinct from automated mocks.
+
+Ten-minute and sixty-minute measured stability are still pending; neither background reliability nor medical suitability is established. The native iOS build remains an unsigned simulator build. See the [commander demonstration checklist](docs/COMMANDER_DEMO_CHECKLIST.md) for the remaining practical work and operational limits.
 
 CI includes previous native BLE compilation, synthetic end-to-end tests and Docker deployment checks. Native compilation is not proof of a physical Bluetooth connection. Check current GitHub Actions results for the latest commit.
 
