@@ -263,11 +263,18 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .auto-alert-config>small{display:block;color:#abc7b1;font-size:.77rem;margin-top:8px;line-height:1.55}
 .auto-alert-config input[type=number]{width:100%}
 
+
+.command-alert-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.command-alert-controls button{min-height:44px}
+#enableAlertSound{background:#28372b;border-color:#8cab89;color:#daebd7}
+#enableAlertSound[aria-pressed="true"]{background:#b8dba8;border-color:#c5edb9;color:#14301e}
+@media(max-width:480px){.command-alert-controls{width:100%}.command-alert-controls button{flex:1;min-width:140px}}
+
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
 <header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
-<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div>
+<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
 <section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
 <div class="stat"><span>ลงทะเบียนแล้ว</span><b id="statTotal">—</b></div>
 <div class="stat live"><span>รับสัญญาณ LIVE</span><b id="statLive">—</b></div>
@@ -398,7 +405,37 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  </section>
 <script>
 "use strict";
-let lastAutomaticAlerts=new Set();
+let lastAutomaticAlerts=new Set(),alertSoundEnabled=false,alertAudio=null;
+function playAutoAlertSound(){
+ if(!alertSoundEnabled||!alertAudio)return;
+ try{
+  const t=alertAudio.currentTime;
+  for(let i=0;i<2;i++){
+   const oscillator=alertAudio.createOscillator(),gain=alertAudio.createGain();
+   oscillator.type="sine";oscillator.frequency.value=780;
+   gain.gain.setValueAtTime(0.0001,t+i*0.38);
+   gain.gain.exponentialRampToValueAtTime(0.12,t+i*0.38+0.02);
+   gain.gain.exponentialRampToValueAtTime(0.0001,t+i*0.38+0.24);
+   oscillator.connect(gain);gain.connect(alertAudio.destination);
+   oscillator.start(t+i*0.38);oscillator.stop(t+i*0.38+0.26);
+  }
+ }catch{alertSoundEnabled=false;byId("enableAlertSound").textContent="เสียงเตือนไม่พร้อม";}
+}
+byId("enableAlertSound").onclick=async()=>{
+ if(alertSoundEnabled){
+  alertSoundEnabled=false;byId("enableAlertSound").setAttribute("aria-pressed","false");
+  byId("enableAlertSound").textContent="เปิดเสียงเตือน";return;
+ }
+ try{
+  const AudioClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioClass)throw Error("unsupported");
+  if(!alertAudio)alertAudio=new AudioClass();
+  await alertAudio.resume();
+  if(alertAudio.state!=="running")throw Error("audio blocked");
+  alertSoundEnabled=true;byId("enableAlertSound").setAttribute("aria-pressed","true");
+  byId("enableAlertSound").textContent="เสียงเตือนเปิดอยู่";
+ }catch{alertSoundEnabled=false;byId("enableAlertSound").textContent="เสียงเตือนไม่พร้อม";}
+};
 let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,operatorRole=null,viewEpoch=0,historySlot=null,historyHours=4,historyRequest=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
@@ -454,7 +491,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  byId("statAutoCheck").textContent=String(autoCases.length);
  const newAuto=autoCases.some(id=>!lastAutomaticAlerts.has(id));
  lastAutomaticAlerts=new Set(autoCases);
- if(newAuto)refreshMedicPending();
+ if(newAuto){refreshMedicPending();playAutoAlertSound();}
  byId("statTotal").textContent=enrolled;
  byId("statLive").textContent=fresh;
  byId("statNoData").textContent=Math.max(0,enrolled-fresh);
