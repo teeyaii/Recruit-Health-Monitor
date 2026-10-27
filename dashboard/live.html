@@ -202,7 +202,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
   <p id="privateStatus" role="status">เลือกผู้สวมที่ลงทะเบียนแล้ว</p>
  </details>
  <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
-</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
+</section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
  <div class="history-header"><div><small>STEVE HR ANALYTICS / บันทึกจริง สูงสุด 7 วัน</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
  <div class="history-ranges" id="historyRanges">
   <button type="button" data-history-hours="0.25" aria-pressed="false">15 นาที</button>
@@ -226,11 +226,11 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  if(historySlot&&!historyIsLive(historySlot))closeHistory();
  const now=Date.now(),panel=byId("emergencyAlerts");
  if(!rosterData?.slots){
-  cards.innerHTML='<p class="notice">กำลังตรวจสอบทะเบียนกลุ่มเสี่ยง • ไม่สามารถยืนยันจำนวนผู้สวมได้</p>';
+  cards.innerHTML='<p class="notice">กำลังโหลดทะเบียน...</p>';
   for(const id of ["statTotal","statLive","statNoData","statWatch","statPaused","statUnregistered"])byId(id).textContent="—";
-  byId("cohortNotice").textContent="รอทะเบียนที่ยืนยันโดยผู้ฝึก/แพทย์ • ไม่ตีความช่องว่างเป็นผู้ขาดสัญญาณ";
+  byId("cohortNotice").textContent="";
   panel.hidden=true;panel.innerHTML="";
-  summary.textContent="ยังไม่ยืนยันทะเบียนผู้สวม • กรุณาตรวจสอบการเชื่อมต่อ";
+  summary.textContent="รอข้อมูลทะเบียน";
   return;
  }
  const profiles=new Map(rosterData.slots.map(p=>[p.id,p]));
@@ -262,7 +262,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
   return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
- if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
+ if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
  panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>รับทราบเหตุแล้วก็ยังเป็น EMERGENCY จนกว่าจะประเมินและแก้ไขเหตุโดยเจ้าหน้าที่</small>':'';
  byId("statTotal").textContent=enrolled;
@@ -271,8 +271,8 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  byId("statWatch").textContent=watchCount;
  byId("statPaused").textContent=emergencyCount;
  byId("statUnregistered").textContent=Math.max(0,15-enrolled);
- byId("cohortNotice").textContent="ผู้สวมที่ลงทะเบียนทุกคนเป็นกลุ่มเสี่ยง • WATCH/EMERGENCY คือสถานะเร่งด่วนเพิ่ม"+(pending?" • พบสัญญาณจาก "+pending+" ช่องที่ยังไม่ลงทะเบียน โปรดยืนยันผู้สวม":"")+(rosterData.ephemeral?" • ข้อมูลการประเมินอยู่ใน RAM และหายเมื่อ Backend รีสตาร์ต":"");
- summary.textContent="ลงทะเบียน "+enrolled+"/15 • สด "+fresh+" • ขาดข้อมูล "+Math.max(0,enrolled-fresh)+" • "+new Date().toLocaleTimeString("th-TH");
+ byId("cohortNotice").textContent=(pending?"มีสัญญาณจาก "+pending+" ช่องที่ยังไม่ลงทะเบียน":"")+(rosterData.ephemeral?(pending?" • ":"")+"การจัดเก็บชั่วคราว":"");
+ summary.textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});
 }
 
 const byId=id=>document.getElementById(id);
@@ -299,13 +299,10 @@ function renderHistory(data){
  const sourceArchive=data.source==="actual accepted HR only";
  const points=(data.points||[]).filter(p=>Array.isArray(p)&&Number.isSafeInteger(p[0])&&p[0]>=start&&
   p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240).sort((a,b)=>a[0]-b[0]);
- const source=sourceArchive?"Supabase • เข้ารหัส • สุ่มเก็บจริงทุก ~7 วินาที":"กราฟข้อมูลสดสูงสุด 4 ชั่วโมง";
- byId("historyStatus").textContent="บันทึก "+points.length.toLocaleString("th-TH")+" จุดบนกราฟ • "+source+
-  (data.compacted?" • คัดค่าต่ำสุด/สูงสุดจริงเพื่อให้กราฟ 7 วันแสดงผลเร็ว":"");
+ const source=sourceArchive?"ประวัติ 7 วัน":"ข้อมูลสด";
+ byId("historyStatus").textContent="จุดข้อมูล "+points.length.toLocaleString("th-TH")+" • "+source+(data.compacted?" • กราฟย่อ":"");
  byId("historyLegend").hidden=sourceArchive;
- byId("historyNote").textContent="ข้อมูลหัวใจจากเซนเซอร์จริง • ไม่มีการเติมค่าในช่วงสัญญาณขาด"+
-  (sourceArchive?" • การบีบกราฟระยะยาวยังแสดงค่าต่ำสุด/สูงสุดที่วัดได้จริง":"")+
-  " • ไม่ใช้วินิจฉัยหรืออนุญาตให้กลับไปฝึก";
+ byId("historyNote").textContent="ข้อมูลที่วัดได้จริง • ช่องว่างคือช่วงไม่มีสัญญาณ";
  if(!points.length){
   byId("historyStats").textContent="ยังไม่มีข้อมูล BPM ที่บันทึกไว้ในช่วงเวลานี้";
   byId("historyBreakdown").textContent="";
@@ -456,8 +453,7 @@ async function loadRoster(keepSelection=false){
  const previous=byId("rosterSlot").value;
  operatorRole=info.role;rosterData=data;
  if(historySlot&&!historyIsLive(historySlot))closeHistory();
- byId("operatorRole").textContent="เข้าสู่ระบบ: "+({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ใช้รหัสร่วมเดิม"}[info.role]||"ผู้ปฏิบัติงาน")
-  +" • สิทธิ์อ่านและแก้ไขเท่ากัน • "+(data.ephemeral?"ข้อมูลจะหายเมื่อเซิร์ฟเวอร์รีสตาร์ต":"มีไฟล์จัดเก็บแบบกำหนดเอง");
+ byId("operatorRole").textContent=({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ปฏิบัติงาน"}[info.role]||"ผู้ปฏิบัติงาน");
  byId("rosterBox").hidden=false;
  byId("privatePanel").hidden=!info.privateProfilesEnabled;
  byId("privateStorageNotice").hidden=!!info.privateProfilesEnabled;
@@ -555,7 +551,7 @@ function paintGroupPhase(){
   prettyDuration(elapsed)+' <small>ในช่วงปัจจุบัน</small>';
  byId("groupPhaseTime").textContent=changedAt?
   "เริ่ม "+new Date(changedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
-  " • นับต่อเนื่องจนผู้ฝึก/แพทย์เปลี่ยนสถานะ":"ยังไม่ได้ตั้งค่า • กดปุ่มเพื่อบันทึกสถานะรวมของกลุ่ม";
+  "":"ยังไม่ได้เริ่มจับเวลา";
  const intervals=(groupPhaseData?.transitions||[]).filter(e=>
   (e.phase==="training"||e.phase==="hourly_rest")&&Number.isSafeInteger(e.at)&&e.at<=now)
   .sort((a,b)=>a.at-b.at);
@@ -587,7 +583,7 @@ async function loadGroupPhase(){
   const data=await r.json();
   if(epoch!==viewEpoch)return;
   groupPhaseData=data;paintGroupPhase();
-  byId("groupPhaseMessage").textContent=data.ephemeral?"สถานะบันทึกใน RAM • อาจหายหลัง Backend รีสตาร์ต • ไม่เปลี่ยนสถานะ WATCH/EMERGENCY":"สถานะภาพรวม ไม่เปลี่ยนข้อจำกัดการฝึกและ WATCH/EMERGENCY รายบุคคล";
+  byId("groupPhaseMessage").textContent=data.ephemeral?"บันทึกสถานะชั่วคราว":"";
  }catch{
   if(epoch!==viewEpoch)return;
   byId("trainingPanel").hidden=false;
@@ -599,7 +595,7 @@ async function changeGroupPhase(phase){
  if(groupPhaseBusy||!groupPhaseData||!["training","hourly_rest"].includes(phase))return;
  const epoch=viewEpoch;
  groupPhaseBusy=true;paintGroupPhase();
- byId("groupPhaseMessage").textContent="กำลังบันทึกสถานะภาพรวม...";
+ byId("groupPhaseMessage").textContent="กำลังบันทึก...";
  try{
   const r=await fetch("/api/training",{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({phase,version:groupPhaseData.version})});
   if(epoch!==viewEpoch)return;
@@ -612,7 +608,7 @@ async function changeGroupPhase(phase){
   const result=await r.json();
   if(epoch!==viewEpoch)return;
   groupPhaseData=result;
-  byId("groupPhaseMessage").textContent="บันทึกสำเร็จ • สถานะเดียวกันทั้งกลุ่ม แต่ WATCH/EMERGENCY ของแต่ละคนยังคงเดิม";
+  byId("groupPhaseMessage").textContent="บันทึกแล้ว";
  }catch{
   if(epoch!==viewEpoch)return;
   byId("groupPhaseMessage").textContent="บันทึกไม่สำเร็จ • ตรวจเครือข่ายแล้วลองใหม่";
