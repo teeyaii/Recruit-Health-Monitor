@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
-import {GatewaySessions,GATEWAY_SESSION_MS,gatewayBrowserRequest} from './gateway-session.js';
+import {GatewaySessions,GATEWAY_SESSION_MS,EXTENDED_GATEWAY_SESSION_MS,gatewayBrowserRequest} from './gateway-session.js';
 
 test('independent browser sessions retain absolute expiry and revoke only their own cookie',()=>{
  const sessions=new GatewaySessions(),req={headers:{}};
@@ -10,10 +10,12 @@ test('independent browser sessions retain absolute expiry and revoke only their 
  const first=cookie(sessions.create(req,'G01',1000));
  const second=cookie(sessions.create(req,'G01',2000));
  const other=cookie(sessions.create(req,'G02',3000));
- assert.equal(sessions.get(first,5000).expiry,1000+GATEWAY_SESSION_MS);
+ const short=cookie(sessions.create(req,'G04',5000));
+ assert.equal(sessions.get(first,5000).expiry,1000+EXTENDED_GATEWAY_SESSION_MS);
  sessions.revoke(second);
  assert.equal(sessions.get(second,5000),null);
  assert.equal(sessions.get(first,5000).gateway,'G01');
+ assert.equal(sessions.get(short,5000+GATEWAY_SESSION_MS),null,'G04 remains 2 hours');
  assert.equal(sessions.get(first,1000+GATEWAY_SESSION_MS),null);
  assert.equal(sessions.get(other,1000+GATEWAY_SESSION_MS).gateway,'G02');
 });
