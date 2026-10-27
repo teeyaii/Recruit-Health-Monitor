@@ -17,7 +17,7 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 .status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
 </style></head><body>
 <h1>STEVE 1.0</h1>
-<p class="muted">Web BLE Gateway Pilot • Bluefy auto-reconnect v4 • foreground only</p>
+<p class="muted">Web BLE Gateway Pilot • Bluefy battery v5 • foreground only</p>
 <div class="card warning" role="alert">
 <strong>ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น — ไม่ใช่อุปกรณ์แพทย์</strong>
 <p>ต้องเปิดหน้านี้ค้างไว้ใน Bluefy ห้ามล็อกหน้าจอระหว่างทดสอบ ถ้าออกจากแอปหรือขาดข้อมูล ให้ถือว่าไม่มีข้อมูลสด ห้ามใช้ตัดสินว่าผู้ฝึกปลอดภัย</p>
@@ -46,6 +46,7 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
+const BATTERY_TTL=15*60*1000, BATTERY_POLL=5*60*1000;
 const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
 let chooserPending=false, recoveryRunning=false, recoveryRequested=false;
@@ -102,6 +103,7 @@ async function upload(s,bpm,timestamp,disconnect=false){
  const pair=provision.find(x=>x.id===s.slot);
  if(!pair || pair.device_id!==s.assignment)return {ok:false,detail:"ช่องไม่ตรงกับสิทธิ์ Gateway"};
  const item={id:s.slot,device_id:pair.device_id,timestamp};
+ if(!disconnect&&validBattery(s.battery,Date.now()))item.battery={...s.battery};
  if(disconnect)item.state="DISCONNECTED";else item.hr=bpm;
  const abort=new AbortController();
  if(!disconnect)s.uploadAbort=abort;
@@ -117,6 +119,7 @@ async function upload(s,bpm,timestamp,disconnect=false){
  finally{clearTimeout(timeout);if(s.uploadAbort===abort)s.uploadAbort=null;}
 }
 function paint(s){
+ if(s.batteryNode)s.batteryNode.textContent="BATTERY: "+(validBattery(s.battery,Date.now())?s.battery.percent+"% • "+Math.floor((Date.now()-s.battery.timestamp)/60000)+" นาทีที่แล้ว":"UNKNOWN");
  s.indicator.textContent=s.lifecycle+" • "+s.state;
  s.measure.textContent=s.bpm===null?"NO DATA":String(s.bpm)+" BPM";
  s.age.textContent=s.lastAt?"วัดล่าสุด "+new Date(s.lastAt).toLocaleTimeString("th-TH")+" • "+Math.round((Date.now()-s.lastAt)/1000)+" วินาที":"ยังไม่มีข้อมูล";
@@ -129,6 +132,7 @@ function paint(s){
 function stopped(s,reason="DISCONNECTED / NO DATA"){
  if(!s || s.closed)return Promise.resolve();
  s.closed=true;transition(s,s.error?"ERROR":/BACKGROUND/.test(reason)?"RECOVERABLE":"DISCONNECTED");s.bpm=null;s.notifications="หยุด";s.state=reason;s.ack="NO DATA";
+ s.batteryCancelled?.();
  s.cancelWait?.();
  s.uploadAbort?.abort();
  try{s.characteristic?.removeEventListener("characteristicvaluechanged",s.onValue)}catch{}
@@ -153,11 +157,41 @@ function addTile(slot,expected,mode){
  const head=element("strong","",slot+" • อุปกรณ์ทดสอบ");
  const measure=element("div","bpm","NO DATA"),indicator=element("p","status","กำลังเชื่อมต่อ"),age=element("small","","ยังไม่มีข้อมูล");
  const notify=element("p","status"),backend=element("p","status"),errorNode=element("p","status");
+ const batteryNode=element("p","status","BATTERY: UNKNOWN");
  const retry=element("button","secondary","เชื่อมต่อใหม่ "+slot),stop=element("button","secondary","ตัดการเชื่อมต่อ "+slot);
  retry.addEventListener("click",()=>connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"standard":mode));
  stop.addEventListener("click",()=>{const b=bindings.get(slot);if(b)b.autoEnabled=false;stopped(live.get(slot),"หยุดโดยผู้ทดสอบ / NO DATA");});
- div.append(head,measure,indicator,age,notify,backend,errorNode,retry,stop);$("slots").append(div);tiles.set(slot,div);
- return {indicator,measure,age,notify,backend,errorNode,retry,stop};
+ div.append(head,measure,indicator,age,notify,backend,batteryNode,errorNode,retry,stop);$("slots").append(div);tiles.set(slot,div);
+ return {indicator,measure,age,notify,backend,batteryNode,errorNode,retry,stop};
+}
+function validBattery(b,now){
+ return b&&Number.isInteger(b.percent)&&b.percent>=0&&b.percent<=100&&Number.isSafeInteger(b.timestamp)&&b.timestamp<=now&&now-b.timestamp<=BATTERY_TTL;
+}
+function batteryWait(s,promise){
+ return new Promise((resolve,reject)=>{
+  let done=false;
+  const end=(fn,value)=>{if(done)return;done=true;clearTimeout(timer);s.batteryCancelled=null;fn(value);};
+  const timer=setTimeout(()=>end(reject,new Error("battery timeout")),3000);
+  s.batteryCancelled=()=>end(reject,new Error("battery cancelled"));
+  Promise.resolve(promise).then(v=>end(resolve,v),e=>end(reject,e));
+ });
+}
+async function readBattery(s){
+ if(s.closed||document.hidden||!s.ready||s.batteryBusy||s.batteryUnavailable)return;
+ if(s.batteryAttemptAt!==undefined&&Date.now()-s.batteryAttemptAt<BATTERY_POLL)return;
+ s.batteryBusy=true;s.batteryAttemptAt=Date.now();
+ const current=()=>!s.closed&&!document.hidden&&live.get(s.slot)===s;
+ try{
+  const service=await batteryWait(s,s.device.gatt.getPrimaryService("battery_service"));
+  if(!current())return;
+  const characteristic=await batteryWait(s,service.getCharacteristic("battery_level"));
+  if(!current())return;
+  const value=await batteryWait(s,characteristic.readValue());
+  if(!current())return;
+  const percent=value?.byteLength===1?value.getUint8(0):null;
+  if(Number.isInteger(percent)&&percent>=0&&percent<=100)s.battery={percent,timestamp:Date.now()};
+ }catch{if(current())s.batteryUnavailable=true;}
+ finally{s.batteryBusy=false;if(current())paint(s);}
 }
 function bounded(s,promise){
  return new Promise((resolve,reject)=>{
@@ -189,7 +223,7 @@ async function connectBand(slot,expected,mode){
   if(document.hidden||window.isSecureContext===false||typeof navigator.bluetooth?.requestDevice!=="function")throw {name:"NotSupportedError"};
   step(s,"chooser");
   // No asynchronous work before requestDevice: preserve the button's user gesture.
-  const options=mode==="broad"?{acceptAllDevices:true,optionalServices:[HR_SERVICE]}:{filters:[{services:[HR_SERVICE]}]};
+  const options=mode==="broad"?{acceptAllDevices:true,optionalServices:[HR_SERVICE,"battery_service"]}:{filters:[{services:[HR_SERVICE]}],optionalServices:["battery_service"]};
   if(mode==="auto"&&bindings.get(slot)?.device){
    s.device=bindings.get(slot).device;
   }else if(mode==="known"||automatic){
@@ -261,6 +295,7 @@ async function connectBand(slot,expected,mode){
   s.characteristic.addEventListener("characteristicvaluechanged",s.onValue);
   bindings.set(slot,{id:s.device.id,expected,device:s.device,autoEnabled:true});
   s.ready=true;s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
+  readBattery(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
   s.error=(stages[s.stage]||stages.capability)+" • "+(s.error||safeError(e));
@@ -350,6 +385,7 @@ document.addEventListener("visibilitychange",()=>{
 window.addEventListener("pagehide",suspend);
 setInterval(()=>{
  for(const s of live.values()){
+  readBattery(s);
   if(s.lastAt && Date.now()-s.lastAt>15000){s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";}
   paint(s);
  }

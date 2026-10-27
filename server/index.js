@@ -1,3 +1,4 @@
+import { freshBattery } from "./battery.js";
 import http from "node:http";
 import { randomUUID, randomBytes } from "node:crypto";
 import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway, provisionedDevicesForGateway } from "./contract.js";
@@ -52,7 +53,7 @@ function snapshot(){const now=Date.now();
   const gatewayOnline=gateway!=null && now-(lastByGateway.get(gateway)??0)<=TTL_MS;
   const state=paused?"PAUSED":r?.state==="DISCONNECTED"?"DISCONNECTED":!r?.timestamp?"NO DATA":
     (!gatewayOnline||now-r.timestamp>TTL_MS)?"STALE":"CONNECTED";
-  return {id,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
+  return {id,battery:freshBattery(r?.battery,now),hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
    stale:state!=="CONNECTED",state,paused,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
 function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
@@ -208,7 +209,8 @@ const server=http.createServer(async(req,res)=>{
    const prior=recruits.get(item.id);if(prior&&(prior.eventAt??prior.timestamp)>=item.timestamp)continue;
    if(prior && prior.gateway!==body.gateway && now-prior.timestamp<=TTL_MS)continue;
    const disconnected=item.state==="DISCONNECTED";
-   recruits.set(item.id,{hr:disconnected?null:item.hr,timestamp:disconnected?(prior?.timestamp??null):item.timestamp,
+   const battery=freshBattery(item.battery,now) || (prior?.gateway===body.gateway&&prior?.device_id===item.device_id?freshBattery(prior.battery,now):null);
+   recruits.set(item.id,{battery,device_id:item.device_id,hr:disconnected?null:item.hr,timestamp:disconnected?(prior?.timestamp??null):item.timestamp,
     eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});accepted++;
   }
   lastByGateway.set(body.gateway,now);

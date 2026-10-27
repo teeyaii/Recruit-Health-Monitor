@@ -44,8 +44,8 @@ function device(id='fake-one',suffix='AB12',failStage=null,error={name:'NetworkE
 test('standard scan invokes chooser synchronously from click and discovers named HR UUIDs',async()=>{
  const h=harness();await h.login();const d=device();h.select(d);h.get('slot').value='R01';h.get('expected').value='AB12';h.get('scanMode').value='standard';
  const connecting=h.get('connect').click();assert.equal(h.calls.length,1);await connecting;
- assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0])),{filters:[{services:['heart_rate']}]});
- assert.deepEqual(d.calls,['gatt','heart_rate','heart_rate_measurement','subscribe']);
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0])),{filters:[{services:['heart_rate']}],optionalServices:['battery_service']});
+ assert.deepEqual(d.calls,['gatt','heart_rate','heart_rate_measurement','subscribe','battery_service']);
  d.emit();await flush();const s=h.api.live.get('R01');assert.equal(s.bpm,66);assert.match(s.state,/LIVE/);assert.equal(s.notifications,'รับ Notify แล้ว');
  const request=h.fetches.find(x=>x.url==='/api/ingest');const body=JSON.parse(request.options.body);
  assert.equal(body.readings[0].device_id,'opaque-one');assert.equal(body.readings[0].id,'R01');assert.match(request.options.headers.Authorization,/^Bearer /);
@@ -53,7 +53,7 @@ test('standard scan invokes chooser synchronously from click and discovers named
 });
 test('broad scan explicitly permits heart_rate, verifies service before accepting notifications',async()=>{
  const h=harness();await h.login();await h.connect(device(),'R01','AB12','broad');
- assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0])),{acceptAllDevices:true,optionalServices:['heart_rate']});
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0])),{acceptAllDevices:true,optionalServices:['heart_rate','battery_service']});
 });
 for(const failure of [null,undefined,'cancelled by user',{name:'NotFoundError'},new DOMException('cancel','AbortError'),{description:'native bridge failed',code:17},{error:'Permission denied'},{message:'test-only-credential-with-32-characters secret URL'},Object.create(null)]){
  test('chooser rejection safely describes '+String(failure?.name||failure?.code||typeof failure),async()=>{
@@ -195,4 +195,31 @@ test('R01 auto failure leaves R02 restored; background cancels in-progress auto 
  const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');h.hide();await drain();
  a.gatt.connect=async()=>{throw {name:'NetworkError'};};foreground(h);await drain();assert.equal(h.api.live.has('R01'),false);assert.equal(h.api.live.get('R02').ready,true);
  h.hide();await drain();let resolve;b.gatt.connect=()=>new Promise(r=>resolve=r);foreground(h);await drain();h.hide();await drain();b.gatt.connected=true;resolve(b.gatt);await drain();assert.equal(h.api.live.size,0);assert.equal(b.gatt.connected,false);
+});
+function withBattery(d,read){
+ const get=d.gatt.getPrimaryService;
+ d.gatt.getPrimaryService=async uuid=>uuid==='battery_service'?{getCharacteristic:async name=>{assert.equal(name,'battery_level');return {readValue:read};}}:get(uuid);
+ return d;
+}
+test('two batteries independent, cached and included in authenticated HR without extra polling',async()=>{
+ const h=harness();await h.login();let reads=0;
+ const a=withBattery(device(),async()=>{reads++;return packet([82]);}),b=withBattery(device('two','CD34'),async()=>packet([29]));
+ await h.connect(a);await h.connect(b,'R02','CD34');await drain();a.emit();b.emit();await drain();
+ assert.equal(h.api.live.get('R01').battery.percent,82);assert.equal(h.api.live.get('R02').battery.percent,29);
+ const payload=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body));assert.equal(payload[0].readings[0].battery.percent,82);
+ h.tick(1000);await drain();assert.equal(reads,1);
+ await h.api.stopped(h.api.live.get('R01'));h.tick(1000);b.emit();await drain();assert.equal(h.api.live.get('R02').bpm,66);
+});
+test('unavailable, invalid and hanging battery do not block HR; stale battery expires',async()=>{
+ for(const read of [async()=>packet([101]),async()=>{throw Error('unsupported');},()=>new Promise(()=>{})]){
+  const h=harness();await h.login();const d=withBattery(device(),read);await h.connect(d);d.emit();await drain();assert.match(h.api.live.get('R01').state,/LIVE/);assert.equal(h.api.live.get('R01').battery,undefined);
+  h.tick(4000);await drain();assert.equal(h.api.live.get('R01').batteryBusy,false);
+ }
+ const h=harness();await h.login();let good=true;
+ const d=withBattery(device(),async()=>{if(!good)throw Error();return packet([0]);});await h.connect(d);await drain();assert.equal(h.api.live.get('R01').battery.percent,0);
+ good=false;h.tick(300000);await drain();h.tick(600001);d.emit();await drain();assert.match(h.api.live.get('R01').batteryNode.textContent,/UNKNOWN/);
+ const last=h.fetches.filter(x=>x.url==='/api/ingest').at(-1);assert.equal(JSON.parse(last.options.body).readings[0].battery,undefined);
+});
+test('late battery completion after disconnect cannot affect new session',async()=>{
+ const h=harness();await h.login();let resolve;const d=withBattery(device(),()=>new Promise(r=>resolve=r));await h.connect(d);await drain();h.hide();await drain();resolve(packet([99]));await drain();assert.equal(h.api.live.size,0);
 });
