@@ -30,9 +30,15 @@ const assert=require('assert/strict');
   await page.locator('#quickR02').click();await page.waitForFunction(()=>live.get('R02')?.ready);
   assert.deepEqual(await page.evaluate(()=>window.choices.map(c=>c.active)),[true,true]);
   await page.evaluate(()=>window.bands.forEach(d=>d.emit()));await page.waitForFunction(()=>Array.from(live.values()).every(s=>s.ackAt));
+  assert.equal(await page.locator('#slots > .card').count(),2);
+  assert.equal(await page.locator('#reservedSlots article').count(),3);
+  assert.equal(await page.locator('#reservedSlots button').count(),0);
+  assert.equal(await page.locator('#reservedSlots').innerText().then(t=>(t.match(/NO DATA/g)||[]).length),3);
+  assert.equal(await page.evaluate(()=>live.size),2,'presentation slots must not create BLE sessions');
   for(const width of [390,1440]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);fs.mkdirSync('ui-artifacts',{recursive:true});await page.screenshot({path:'ui-artifacts/gateway-'+width+'.png',fullPage:true});}
   const text=await page.locator('body').innerText();assert.ok(!/Notifications:|Backend:|GATT|BATTERY/i.test(text));
   await page.locator('#presentation').click();assert.equal(await page.locator('#loginFields').isVisible(),false);assert.equal(await page.locator('.warning').isVisible(),true);
+  assert.equal(await page.locator('#reservedSlots').isVisible(),true);
   await page.locator('#resetBle').click();await page.waitForFunction(()=>live.size===2&&Array.from(live.values()).every(s=>s.ready));
   assert.equal(await page.evaluate(()=>window.choices.length),2);assert.deepEqual(await page.evaluate(()=>Array.from(live.values()).map(s=>s.bpm)),[null,null]);
   await page.evaluate(()=>{for(const s of live.values()){s.lastAt=Date.now()-16000;s.bpm=65;}});await page.waitForFunction(()=>Array.from(live.values()).every(s=>s.bpm===null));
