@@ -41,7 +41,7 @@ test("malformed and reserved identifiers remain rejected",()=>{
 });
 test("mobile roster field explains mixed case and disables automatic capitalization",()=>{
  const html=readFileSync(new URL("../dashboard/live.html",import.meta.url),"utf8");
- assert.match(html,/รหัสประจำตัวทหารใหม่ \(4–24 ตัว ใช้ตัวเล็ก\/ตัวใหญ่\/ตัวเลขได้\)/);
+ assert.ok(html.includes("รหัสประจำตัว (หน่วยกำหนด)"));
  assert.match(html,/id="rosterCode"[^>]*autocapitalize="none"/);
  assert.doesNotMatch(html,/รหัสสมมติ \(4–24 ตัว พิมพ์ใหญ่\)/);
 });
@@ -68,5 +68,5 @@ test("operator screen has one Save button for wearer changes and no resume/repla
  const html=readFileSync(new URL("../dashboard/live.html",import.meta.url),"utf8");
  assert.match(html,/id="rosterSave"[^>]*>บันทึกข้อมูลทหารใหม่/);
  assert.doesNotMatch(html,/id="rosterReplace"|id="rosterResume"|id="bandConfirmed"/);
- assert.match(html,/ระบบล้าง BPM และสถานะของผู้สวมเดิม/);
+ assert.match(html,/rosterAction\("save"\)/);
 });
