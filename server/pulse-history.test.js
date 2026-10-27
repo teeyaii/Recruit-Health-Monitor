@@ -5,7 +5,7 @@ import {RosterStore} from "./roster.js";
 test("live sample history keeps at most 4h at 5s resolution, with sparse gaps",()=>{
  const h=new PulseHistory(),now=Date.now(),start=now-WINDOW_MS;
  assert.equal(h.record("R01",70,start-1,now),false,"too-old packet");
- for(let i=0;i<MAX_POINTS;i++)h.record("R01",60+i%25,start+i*STEP_MS,now);
+ for(let i=0;i<MAX_POINTS;i++){const time=start+i*STEP_MS;h.record("R01",60+i%25,time,time);}
  assert.ok(h.size()<=MAX_POINTS);
  const points=h.get("R01",now);
  assert.equal(points.length,MAX_POINTS);
