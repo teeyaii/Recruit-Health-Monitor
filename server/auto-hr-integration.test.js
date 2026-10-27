@@ -1,4 +1,5 @@
 import test from "node:test";
+import http from "node:http";
 import assert from "node:assert/strict";
 import {spawn} from "node:child_process";
 import {once} from "node:events";
@@ -106,5 +107,24 @@ for(const failSave of [false,true])test(`TEST ONLY: automatic review survives re
   const currentMedic=await login(m);
   const reopened=await (await req("/api/medic-reviews/R01",{cookie:currentMedic})).json();
   assert.equal(reopened.review.status,"pending","case survives encrypted state reload");
+  for(const [i,route] of ["private-profile","medic-reviews"].entries()){
+   // Hold a request body open while a different request replaces its wearer.
+   let finish;
+   const completed=new Promise((resolve,reject)=>{
+    const slow=http.request(base+"/api/"+route+"/R01",{method:"PUT",headers:{Cookie:currentMedic,"Content-Type":"application/json"}},res=>{
+     res.resume();res.on("end",()=>resolve(res.statusCode));
+    });slow.on("error",reject);slow.write('{"version":');
+    finish=()=>slow.end(route==="private-profile"?'0,"confirmed":true,"weightKg":null,"heightCm":null,"conditions":"TEST ONLY"}':'0,"action":"request","reason":"other","note":"TEST ONLY"}');
+   });
+   await delay(80);
+   const all=await (await req("/api/roster",{cookie:currentMedic})).json();
+   const old=all.slots.find(x=>x.id==="R01");
+   const replaced=await req("/api/roster/R01",{method:"PUT",cookie:currentMedic,json:{version:old.version,code:"TESTNEW"+i,restriction:"none",observation:"none"}});
+   assert.equal(replaced.status,200);
+   finish();assert.equal(await completed,409,"delayed "+route+" cannot apply to replaced wearer");
+   const snapshot=await (await req("/api/snapshot",{cookie:currentMedic})).json();
+   assert.equal(snapshot.recruits[0].autoCheck,false);assert.equal(snapshot.recruits[0].hr,null);
+  }
+
  }finally{await stop();await rm(dir,{recursive:true,force:true});}
 });

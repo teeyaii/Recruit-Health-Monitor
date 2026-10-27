@@ -28,6 +28,13 @@ export class MedicReviews{
   this.records=structuredClone(data);
  }
  clear(slot){delete this.records[slot];}
+ rollback(slot,expected,previous){
+  const current=this.records[slot];
+  if(!current||current.code!==expected.code||current.version!==expected.version)return false;
+  if(previous)this.records[slot]=structuredClone(previous);
+  else delete this.records[slot];
+  return true;
+ }
  get(slot,code){
   if(!validSlots.has(slot)||!code)throw err(404,"registered slot required");
   const p=this.records[slot];

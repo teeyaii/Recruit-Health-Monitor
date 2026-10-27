@@ -95,3 +95,31 @@ test("TEST ONLY: an existing manual case cannot mask automatic pause/check",()=>
  assert.equal(restored.get("R01","TEST001").autoPauseRequired,true);
  assert.throws(()=>restored.update("R01","TEST001",{version:first.version,action:"close"},"medic"),{status:409});
 });
+
+
+test("TEST ONLY: failed review rollback preserves other slots and newer automatic cases",()=>{
+ const r=new MedicReviews();
+ const a=r.update("R01","TEST001",{version:0,action:"request",reason:"other"},"trainer");
+ r.autoRequest("R02","TEST002","high_sustained");
+ assert.equal(r.rollback("R01",a,undefined),true);
+ assert.equal(r.get("R02","TEST002").status,"pending");
+ const b=r.update("R01","TEST001",{version:0,action:"request",reason:"other"},"trainer");
+ r.autoRequest("R01","TEST001","high_sustained");
+ assert.equal(r.rollback("R01",b,undefined),false);
+ assert.equal(r.get("R01","TEST001").autoPauseRequired,true);
+});
+
+test("TEST ONLY: failed private write rollback cannot erase another wearer or newer edit",()=>{
+ const p=new PrivateProfiles();
+ const input={version:0,confirmed:true,weightKg:null,heightCm:null,conditions:"TEST ONLY"};
+ const first=p.update("R01","TEST001",input);
+ p.update("R02","TEST002",input);
+ assert.equal(p.rollback("R01",first,undefined),true);
+ assert.equal(p.get("R02","TEST002").version,1);
+ const second=p.update("R01","TEST001",input);
+ p.update("R01","TEST001",{...input,version:1});
+ assert.equal(p.rollback("R01",second,undefined),false);
+ p.clear("R01");p.update("R01","TEST003",input);
+ assert.equal(p.rollback("R01",second,undefined),false);
+ assert.equal(p.get("R01","TEST003").version,1);
+});

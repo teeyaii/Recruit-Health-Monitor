@@ -81,7 +81,8 @@ jobs:
 
   dashboard-browser:
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    # Pin browser OS: ubuntu-latest rolled to 26.04 and dependency downloads timed out.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

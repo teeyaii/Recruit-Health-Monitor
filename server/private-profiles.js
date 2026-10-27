@@ -33,6 +33,13 @@ export class PrivateProfiles {
   return withBmi(existing?.code.toUpperCase()===code.toUpperCase()?structuredClone(existing):blank(slot,code));
  }
  clear(slot){delete this.records[slot];}
+ rollback(slot,expected,previous){
+  const current=this.records[slot];
+  if(!current||current.code!==expected.code||current.version!==expected.version)return false;
+  if(previous)this.records[slot]=structuredClone(previous);
+  else delete this.records[slot];
+  return true;
+ }
  update(slot,code,input){
   const p=this.get(slot,code);
   if(input?.version!==p.version)reject(409,"Profile changed; reload before saving");

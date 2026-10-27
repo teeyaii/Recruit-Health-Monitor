@@ -201,7 +201,7 @@ const server=http.createServer(async(req,res)=>{
  if(medicRoute){
   if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
   if(!durable.enabled){send(res,503,{error:"encrypted durable store required"});return;}
-  const slot=medicRoute[1],code=roster.get(slot).code;
+  const slot=medicRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"register wearer before medical review"});return;}
   if(req.method==="GET"){
    try{
@@ -209,6 +209,7 @@ const server=http.createServer(async(req,res)=>{
     const phase=roster.getGroupPhase();
     let archiveUnavailable=false,points=pulseHistory.get(slot,Date.now());
     if(archive.enabled){try{points=await archive.get(slot,code,4);}catch{archiveUnavailable=true;}}
+    if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
     // Comparison is descriptive only; rest phase must be recorded by a human.
     const baseline=profile.baselineConfirmed&&phase.phase==="hourly_rest"?
      profile.restingBaselineBpm:null;
@@ -229,10 +230,13 @@ const server=http.createServer(async(req,res)=>{
   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{
-   const body=await readBody(req,900),backup=medicReviews.export();
+   const body=await readBody(req,900);
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   const backup=medicReviews.export()[slot];
    const review=medicReviews.update(slot,code,body,isViewer);
    try{await persistState();}
-   catch{medicReviews.load(backup);send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
+   catch{if(roster.get(slot).version===rosterVersion)medicReviews.rollback(slot,review,backup);historyDirty=true;send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{review});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"review request unavailable"});}
   return;
@@ -241,17 +245,20 @@ const server=http.createServer(async(req,res)=>{
  if(privateRoute){
   if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
   if(!durable.enabled){send(res,503,{error:"secure external storage not yet configured"});return;}
-  const slot=privateRoute[1],code=roster.get(slot).code;
+  const slot=privateRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"register recruit before storing private information"});return;}
   if(req.method==="GET"){send(res,200,{profile:privateProfiles.get(slot,code),sensitive:true});return;}
   if(req.method!=="PUT"){send(res,405,{error:"method not allowed"});return;}
   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{
-   const body=await readBody(req,1024),backup=privateProfiles.export();
+   const body=await readBody(req,1024);
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   const backup=privateProfiles.export()[slot];
    const profile=privateProfiles.update(slot,code,body);
    try{await persistState();}
-   catch{privateProfiles.load(backup);send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
+   catch{if(roster.get(slot).version===rosterVersion)privateProfiles.rollback(slot,profile,backup);historyDirty=true;send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{profile,sensitive:true});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"private profile unavailable"});}
   return;
@@ -262,11 +269,12 @@ const server=http.createServer(async(req,res)=>{
   if(!archive.enabled){send(res,503,{error:"seven-day archive not enabled"});return;}
   const hours=Number(url.searchParams.get("hours")||24);
   if(![...HISTORY_HOURS,24].includes(hours)){send(res,422,{error:"invalid archive window"});return;}
-  const slot=archiveRoute[1],code=roster.get(slot).code;
+  const slot=archiveRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"recruit not registered"});return;}
   try{
    const compact=url.searchParams.get("compact")==="1";
    const points=await archive.get(slot,code,hours,Date.now(),compact);
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{slot,windowStart:Date.now()-hours*3600000,windowEnd:Date.now(),windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,compacted:compact&&(hours===8||hours===168),source:"actual accepted HR only"});
   }catch{send(res,503,{error:"encrypted archive unavailable"});}
   return;
@@ -320,8 +328,9 @@ const server=http.createServer(async(req,res)=>{
    if(action==="replace"||wearerChanged||firstAssignment){
     // Never attribute a previously measured BPM to a new wearer.
     recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);autoHR.reset(slot);
-    await archive.forget(slot);
-    reassignmentCutoff.set(slot,Date.now());publish();
+    reassignmentCutoff.set(slot,Number.MAX_SAFE_INTEGER);
+    try{await archive.forget(slot);}
+    finally{if(roster.get(slot).version===current.version)reassignmentCutoff.set(slot,Date.now());publish();}
    }else if(action==="resume")publish();
    await persistState();send(res,200,{ok:true,slot:current});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"roster update unavailable"});}
