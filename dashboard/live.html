@@ -15,6 +15,12 @@ h1{font-size:clamp(1.5rem,2.5vw,2.4rem);font-weight:850;letter-spacing:.09em;tex
 .card{background:linear-gradient(145deg,#202b28,#17211f);border:1px solid #37443d;border-left:5px solid #718579;border-radius:14px;padding:20px;min-height:188px;box-shadow:0 8px 22px #0003;transition:transform .2s,border-color .2s}
 .card:hover{transform:translateY(-2px);border-color:#758a73}
 .card strong{font-size:1.15rem;letter-spacing:.1em}
+.card-personnel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.card-personnel-title{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 130px}
+.card-personnel-caption{font-size:.69rem;font-weight:750;color:#b6cab8;letter-spacing:.02em}
+.card .card-personnel-code{display:block;font-size:clamp(1.15rem,1.65vw,1.42rem);font-weight:850;line-height:1.25;letter-spacing:.025em;overflow-wrap:anywhere;color:#f1f7ee}
+.card .card-slot-label{display:block;font-size:.74rem;color:#a6b8ab;letter-spacing:.06em;line-height:1.3}
+.card-personnel-head .status-chip{margin-top:0;flex-shrink:0}
 .card .bpm{font-size:clamp(2rem,3vw,2.8rem);font-variant-numeric:tabular-nums;letter-spacing:-.04em;margin:12px 0 6px}
 .card small{font-size:.82rem;color:#aebdb3;line-height:1.7}
 .card.fresh{border-left-color:#83bfa5}.card.stale{border-left-color:#c76b67}
@@ -106,10 +112,10 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 <section id="rosterBox" class="operator-box" hidden>
  <h2>ลงทะเบียนผู้สวม Band กลุ่มเสี่ยง R01–R15 (ผู้ฝึกและแพทย์มีสิทธิ์เท่ากัน)</h2>
  <p id="operatorRole">กำลังตรวจสอบสิทธิ์...</p>
- <p class="safety">เฉพาะรหัสสมมติ/รหัสไม่ระบุตัวบุคคลและสถานะการปฏิบัติงาน ห้ามกรอกชื่อจริง เลขทหาร โรคประจำตัวหรือเวชระเบียนใน Render Free ระบบต้นแบบนี้ไม่ใช่เครื่องมือวินิจฉัย</p>
+ <p class="safety">รหัสประจำตัวทหารใหม่ในระบบนี้ต้องเป็นรหัสที่หน่วยกำหนดสำหรับการเฝ้าระวังโดยไม่ระบุตัวบุคคล ห้ามกรอกเลขประจำตัวทหารจริง ชื่อจริง โรคประจำตัวหรือเวชระเบียนใน Render Free ระบบต้นแบบนี้ไม่ใช่เครื่องมือวินิจฉัย</p>
  <div class="operator-fields">
   <label>ช่องผู้ฝึก<select id="rosterSlot"><option value="R01">R01</option><option value="R02">R02</option><option value="R03">R03</option><option value="R04">R04</option><option value="R05">R05</option><option value="R06">R06</option><option value="R07">R07</option><option value="R08">R08</option><option value="R09">R09</option><option value="R10">R10</option><option value="R11">R11</option><option value="R12">R12</option><option value="R13">R13</option><option value="R14">R14</option><option value="R15">R15</option></select></label>
-  <label>รหัสสมมติ (4–24 ตัว พิมพ์ใหญ่)<input id="rosterCode" placeholder="DEMO001" autocomplete="off" autocorrect="off" maxlength="24"></label>
+  <label>รหัสประจำตัวทหารใหม่ (4–24 ตัว พิมพ์ใหญ่)<input id="rosterCode" placeholder="A001" autocomplete="off" autocorrect="off" maxlength="24"></label>
   <label>ข้อจำกัดการฝึกจากผู้รับผิดชอบ<select id="rosterRestriction"><option value="none">ยังไม่ระบุ</option><option value="watch">ให้ติดตามเป็นพิเศษ</option><option value="no_training">งดกิจกรรมจนกว่าจะประเมิน</option></select></label>
    <label>อาการที่มีผู้สังเกตและบันทึก<select id="rosterObservation"><option value="none">ยังไม่มีการแจ้งเหตุ</option><option value="dizzy_weak_nausea">เวียนศีรษะ / อ่อนแรง / คลื่นไส้ — หยุดประเมิน</option><option value="confusion_collapse_seizure">สับสน / หมดสติ / ชัก — ฉุกเฉิน</option></select></label>
  </div>
@@ -151,7 +157,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const live=transportUp&&!r.stale&&age<=15000&&Number.isInteger(r.hr);
   if(!registered&&live)pending++;
   return registered||live||r.source==="SIMULATED";
- });
+ }).sort((a,b)=>Number(a.id.slice(1))-Number(b.id.slice(1)));
  cards.innerHTML=shown.map(r=>{
   const profile=profiles.get(r.id),registered=!!profile?.code;
   const age=Number.isFinite(r.timestamp)?Math.max(0,now-r.timestamp):Infinity;
@@ -168,7 +174,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน — ตรวจผู้สวมก่อนใช้งาน")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
  panel.hidden=critical.length===0;

@@ -39,3 +39,24 @@ test('15-slot capacity is not 15 signal losses: only registered high-risk wearer
  assert.equal(node('statNoData').textContent,1);
  assert.equal(node('statWatch').textContent,1,'WATCH persists despite missing HR');
 });
+
+test('cards show recruit code above its R-slot and preserve R01–R15 numerical ordering',()=>{
+ const {node,context}=view(),now=Date.now();
+ const profiles=[{id:'R10',code:'UNIT010',restriction:'none',observation:'none'},
+                 {id:'R02',code:'B015',restriction:'watch',observation:'none'},
+                 {id:'R01',code:'A001',restriction:'none',observation:'none'}];
+ const data={recruits:[{id:'R10',hr:82,timestamp:now,stale:false},
+                      {id:'R02',hr:68,timestamp:now,stale:false},
+                      {id:'R01',hr:63,timestamp:now,stale:false}]};
+ context.render(data,profiles);
+ const cards=node('cards').innerHTML;
+ assert.match(cards,/รหัสประจำตัวทหารใหม่/);
+ const a=cards.indexOf('card-personnel-code">A001'),b=cards.indexOf('card-personnel-code">B015'),c=cards.indexOf('card-personnel-code">UNIT010');
+ assert.ok(a>=0&&b>a&&c>b,'cards sorted by R01, R02, R10 regardless of incoming order');
+ assert.ok(cards.indexOf('ช่องอุปกรณ์ R01',a)>a);
+ assert.ok(cards.indexOf('ช่องอุปกรณ์ R01',a)<b,'R01 slot shown directly below A001 before next card');
+ assert.ok(cards.indexOf('ช่องอุปกรณ์ R02',b)>b);
+ assert.equal(node('statTotal').textContent,3);
+ assert.equal(node('statLive').textContent,3);
+ assert.equal(node('statWatch').textContent,1,'code presentation does not change clinical urgency');
+});
