@@ -58,6 +58,15 @@ header h1{line-height:1.25;text-wrap:balance}
 .card .status-chip{letter-spacing:.11em}
 .alert-panel{box-shadow:0 0 0 1px #ff969622,0 8px 28px #0005}
 #gateways,#conditions{padding:5px 0}
+.training-phase{background:linear-gradient(125deg,#20382e,#17251f);border:1px solid #53725c;border-radius:16px;padding:clamp(15px,2.2vw,24px);margin:16px 0;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.training-phase strong{font-size:clamp(1.2rem,2.3vw,1.7rem);color:#e5f3d8}
+.training-phase small{display:block;margin-top:7px;color:#b5c6b4}
+.phase-actions{display:flex;gap:9px;flex-wrap:wrap}
+.phase-actions button{min-height:48px;padding:10px 18px}
+.phase-actions button[aria-pressed="true"]{background:#a9c99e;color:#15241a;border-color:#c7e4bd}
+#groupPhaseMessage{width:100%;font-size:.86rem;color:#f5d492;margin:0}
+body.presentation #trainingActions{display:none!important}
+@media(max-width:480px){.phase-actions{width:100%}.phase-actions button{flex:1}}
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
@@ -72,6 +81,15 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 <div class="stat"><span>ยังไม่ลงทะเบียน / 15 ช่อง</span><b id="statUnregistered">—</b></div>
 </section>
 <p id="cohortNotice" class="status-note" role="status">กำลังโหลดทะเบียนกลุ่มเสี่ยง • ผู้สวม Band ทุกคนอยู่ในกลุ่มเฝ้าระวัง แต่ WATCH/EMERGENCY เป็นเหตุเร่งด่วนเพิ่ม</p>
+<section id="trainingPanel" class="training-phase" aria-label="สถานะการฝึกทั้งกลุ่ม" hidden>
+ <div><div class="command-eyebrow">GROUP ACTIVITY • สถานะภาพรวม</div><strong id="groupPhaseLabel">ยังไม่ระบุสถานะการฝึก</strong>
+ <small id="groupPhaseTime">ควบคุมทั้งกลุ่ม ไม่กระทบ WATCH/EMERGENCY รายบุคคล</small></div>
+ <div id="trainingActions" class="phase-actions">
+  <button type="button" id="startTraining" aria-pressed="false">▶ กำลังฝึก</button>
+  <button type="button" id="startHourlyRest" aria-pressed="false">◷ พักประจำชั่วโมง</button>
+ </div>
+ <p id="groupPhaseMessage" role="status"></p>
+</section>
 <div id="emergencyAlerts" class="alert-panel" role="alert" hidden></div>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
@@ -93,7 +111,6 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
   <label>ช่องผู้ฝึก<select id="rosterSlot"><option value="R01">R01</option><option value="R02">R02</option><option value="R03">R03</option><option value="R04">R04</option><option value="R05">R05</option><option value="R06">R06</option><option value="R07">R07</option><option value="R08">R08</option><option value="R09">R09</option><option value="R10">R10</option><option value="R11">R11</option><option value="R12">R12</option><option value="R13">R13</option><option value="R14">R14</option><option value="R15">R15</option></select></label>
   <label>รหัสสมมติ (4–24 ตัว พิมพ์ใหญ่)<input id="rosterCode" placeholder="DEMO001" autocomplete="off" autocorrect="off" maxlength="24"></label>
   <label>ข้อจำกัดการฝึกจากผู้รับผิดชอบ<select id="rosterRestriction"><option value="none">ยังไม่ระบุ</option><option value="watch">ให้ติดตามเป็นพิเศษ</option><option value="no_training">งดกิจกรรมจนกว่าจะประเมิน</option></select></label>
-  <label>สถานะกิจกรรม (ผู้ฝึก/แพทย์ยืนยัน)<select id="rosterActivity"><option value="not_reported">ยังไม่รายงาน</option><option value="training">กำลังฝึก</option><option value="resting">กำลังพัก</option><option value="assessment">หยุดเพื่อประเมิน</option></select></label>
    <label>อาการที่มีผู้สังเกตและบันทึก<select id="rosterObservation"><option value="none">ยังไม่มีการแจ้งเหตุ</option><option value="dizzy_weak_nausea">เวียนศีรษะ / อ่อนแรง / คลื่นไส้ — หยุดประเมิน</option><option value="confusion_collapse_seizure">สับสน / หมดสติ / ชัก — ฉุกเฉิน</option></select></label>
  </div>
  <div class="operator-actions">
@@ -146,13 +163,12 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const watchFlag=registered&&!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
   if(registered){if(!stale)fresh++;if(watchFlag)watchCount++;if(emergencyFlag){emergencyCount++;critical.push({id:r.id,acknowledged:!!profile.acknowledged});}}
   const chip=!registered?"PENDING REGISTRATION":emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":"MONITOR";
-  const activity=({training:"กำลังฝึก",resting:"กำลังพัก",assessment:"หยุดเพื่อประเมิน",not_reported:"ยังไม่รายงานกิจกรรม"})[profile?.activity]||"ยังไม่รายงานกิจกรรม";
   const note=severity==="emergency"?"ฉุกเฉิน: หยุดกิจกรรมและเรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
     profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังใกล้ชิดตามผู้รับผิดชอบ":"";
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน — ตรวจผู้สวมก่อนใช้งาน")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>กิจกรรม: '+escapeHtml(registered?activity:"ยังไม่ยืนยันผู้สวม")+'</small></div><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน — ตรวจผู้สวมก่อนใช้งาน")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
  panel.hidden=critical.length===0;
@@ -186,7 +202,6 @@ function fillRoster(){
  byId("rosterCode").value=p.code||"";
  byId("rosterRestriction").value=p.restriction;
  byId("rosterObservation").value=p.observation;
- byId("rosterActivity").value=p.activity||"not_reported";
  byId("bandConfirmed").checked=false;
  byId("rosterStatus").textContent=(p.paused?"PAUSED: ต้องตรวจอุปกรณ์ก่อนเปิดรับ BPM อีกครั้ง":"พร้อมแก้ไข")
   +" • รุ่นข้อมูล "+p.version+(p.acknowledged?" • รับทราบเหตุแล้ว":"");
@@ -222,7 +237,7 @@ async function rosterAction(action){
  }
  const url="/api/roster/"+p.id+(action==="save"?"":"/"+(action==="ack"?"acknowledge":action));
  const method=action==="save"?"PUT":"POST";
- const payload=action==="save"?{version:p.version,code,restriction:byId("rosterRestriction").value,observation:byId("rosterObservation").value,activity:byId("rosterActivity").value}:
+ const payload=action==="save"?{version:p.version,code,restriction:byId("rosterRestriction").value,observation:byId("rosterObservation").value}:
   action==="replace"?{version:p.version,code}:
   action==="resume"?{version:p.version,confirmed:true}:{version:p.version};
  const button=byId("roster"+({save:"Save",replace:"Replace",resume:"Resume",ack:"Acknowledge"}[action]));
