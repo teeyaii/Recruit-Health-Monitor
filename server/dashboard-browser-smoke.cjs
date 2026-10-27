@@ -20,7 +20,7 @@ if(!await page.locator('#emergencyAlerts').textContent().then(t=>t.includes('ย
 if(await page.locator('#statLive').textContent()!=='2')throw Error('live count');if(await page.locator('#statTotal').textContent()!=='2')throw Error('enrolled high-risk count');if(await page.locator('#statNoData').textContent()!=='0')throw Error('unassigned counted NO DATA');if(await page.locator('#statUnregistered').textContent()!=='13')throw Error('unregistered capacity count');if(await page.locator('#cards .card').count()!==2)throw Error('phantom unassigned cards');if(await page.locator('#cards').textContent().then(t=>/BATTERY|UNKNOWN|82%/i.test(t)))throw Error('battery should not render');
 if(await page.locator('.card-personnel-code').allTextContents().then(a=>a.join('|'))!=='DEMO-R01|DEMO-R02')throw Error('recruit codes not shown first');
 if(await page.locator('.card-slot-label').allTextContents().then(a=>a.join('|').includes('R01')&&a.join('|').includes('R02'))!==true)throw Error('R-slot label absent');
-if(!await page.locator('#rosterBox').textContent().then(t=>t.includes('รหัสประจำตัวทหารใหม่')))throw Error('roster form label not changed');
+if(!await page.locator('#rosterBox').textContent().then(t=>t.includes('รหัสประจำตัว (หน่วยกำหนด)')))throw Error('roster form label not changed');
 
 // Per-recruit graph must only be created on demand for registered LIVE slots.
 if(await page.locator('.history-open').count()!==2)throw Error('LIVE wearers should have exactly two graph buttons');

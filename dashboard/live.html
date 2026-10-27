@@ -1,4 +1,4 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>STEVE 1.0 — Live</title><style>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>STEVE 1.0 — Command Center</title><style>
 :root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#111827;color:#f3f4f6}body{margin:0 auto;max-width:1050px;padding:18px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h1{font-size:1.4rem}p,small{color:#b8c4d5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}.card{padding:16px;background:#1f2937;border-radius:12px;border-left:5px solid #64748b}.fresh{border-left-color:#38bdf8}.stale{border-left-color:#ef4444}.bpm{font-size:2rem;font-weight:bold}.notice{padding:12px;border:1px solid #64748b;border-radius:8px;margin:12px 0}button,input{padding:11px;border-radius:8px;background:#334155;color:white;border:1px solid #64748b}input{min-width:220px}form{display:flex;gap:8px;flex-wrap:wrap}
 [hidden]{display:none!important}*{box-sizing:border-box}input{max-width:100%}select{padding:11px;border-radius:8px;background:#334155;color:#fff;border:1px solid #64748b;min-width:130px}label{display:grid;gap:5px;font-size:.87rem}.operator-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.operator-box{margin:16px 0;padding:15px;border:1px solid #64748b;border-radius:12px}.operator-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}.operator-actions button{min-height:44px}.safety{color:#fcd34d}.alert-stop{border-left-color:#f59e0b}.alert-emergency{border-left-color:#fb7185}.pause{border-left-color:#a78bfa}#rosterStatus{color:#fcd34d;white-space:pre-wrap}#rosterAudit{font-size:.85rem;color:#a6b7cf}
 
@@ -129,36 +129,128 @@ body.presentation .history-open{display:none!important}
 .history-stat small{font-size:.7rem;color:#a8bdab}
 .history-graph svg{min-height:175px}
 @media(max-width:620px){.history-ranges{grid-template-columns:repeat(3,minmax(0,1fr))}.phase-metrics{order:2;width:100%}.training-phase{gap:12px}}
+
+/* STEVE 1.0 — clean clinical command presentation */
+:root{--ink:#0c1511;--pine:#13241b;--panel:#1b2e23;--edge:#405848;--accent:#b6dda8;--muted:#aabfb1}
+body{background:radial-gradient(ellipse 78% 34% at 88% -8%,#254438 0%,transparent 80%),linear-gradient(160deg,#101b16,#0b1310 75%);color:#ecf5ed}
+header{padding:12px 0 19px;margin-bottom:12px;border-bottom:1px solid #354a3b;gap:14px}
+header h1{letter-spacing:-.035em;font-size:clamp(1.55rem,3vw,2.45rem);font-weight:860}
+.command-wordmark{font-size:.55em;letter-spacing:.09em;color:#a9c8b2;font-weight:760;vertical-align:middle}
+#connection{border:1px solid #496c53;background:linear-gradient(145deg,#1f3b2b,#173123);color:#ceecd0;box-shadow:inset 0 1px #ffffff11;font-size:.78rem;padding:8px 13px}
+.command-bar{margin:6px 0 12px;padding:6px 0 3px}
+.command-bar .command-eyebrow{font-size:.72rem;letter-spacing:.13em;color:#b8d9b7}
+.command-bar small{display:block;margin-top:3px;font-size:.82rem;color:#a9beaf}
+.command-bar button{background:#20382a;border:1px solid #5e8263;border-radius:11px;padding:11px 16px;font-size:.82rem}
+.command-stats{gap:10px;margin:13px 0 17px}
+.command-stats .stat{background:linear-gradient(150deg,#21372a,#16271e);border:1px solid #3d5a44;border-radius:14px;min-height:103px;padding:15px 15px 13px;box-shadow:inset 0 1px #ffffff0b,0 8px 22px #0002}
+.stat span{display:block;min-height:32px;letter-spacing:.01em;font-size:.78rem;color:#adc5b2;font-weight:650}
+.stat b{font-size:clamp(1.65rem,3vw,2.3rem);line-height:1.1;letter-spacing:-.04em;color:#eef8ef}
+.command-stats .stat.live{border-color:#5f9775;background:linear-gradient(140deg,#264e38,#173123)}
+.command-stats .stat.lost{border-color:#80665e}.command-stats .stat.watch{border-color:#857549}.command-stats .stat.paused{border-color:#975956}
+#cohortNotice{padding:0;margin:6px 0 11px}
+#cohortNotice:empty,#groupPhaseMessage:empty,#rosterStatus:empty{display:none}
+.training-phase{background:linear-gradient(135deg,#213e2e,#17271d 62%,#18271f);border:1px solid #557663;border-radius:18px;padding:clamp(16px,2.5vw,25px);box-shadow:inset 0 1px #ffffff0d,0 12px 38px #0003;gap:14px;margin:17px 0}
+.training-phase .command-eyebrow{font-size:.73rem;color:#aed0b1}
+.training-phase strong{font-size:clamp(1.1rem,2.25vw,1.65rem);letter-spacing:-.022em}
+.phase-clock{margin-top:9px;font-size:clamp(1.5rem,3.2vw,2.3rem);color:#eff9ee}
+.phase-clock small{color:#bbd6c4}
+.phase-metric{background:#14251bcf;border-radius:12px;border-color:#49634f;padding:13px}
+.phase-metric span{font-size:.78rem}
+.phase-metric b{letter-spacing:-.025em}
+.phase-metric em{margin-top:2px}
+.phase-actions button{min-height:46px;border-radius:11px;background:#2c4435;border-color:#56785f;font-size:.84rem}
+.phase-actions button[aria-pressed="true"]{background:#b7dba7;color:#17291e;border-color:#b7dba7}
+#groupPhaseMessage{margin:0;color:#dcdbbc;font-size:.79rem}
+#rosterBox{background:linear-gradient(145deg,#1c2b22,#15221b);border-color:#3e5846;border-radius:18px;box-shadow:0 12px 30px #0002;margin:19px 0;padding:clamp(16px,2.5vw,26px)}
+#rosterBox h2{margin:0 0 9px;letter-spacing:-.03em;font-size:clamp(1.15rem,2vw,1.45rem)}
+.section-count{font-size:.72em;color:#a6c5ab;letter-spacing:.03em;font-weight:650}
+#operatorRole{margin:0 0 15px;color:#a8cdb5;font-size:.8rem}
+.operator-fields{gap:11px}
+.operator-fields label{font-size:.82rem;color:#cadccd;font-weight:650}
+.operator-fields input,.operator-fields select{background:#14251c;border-color:#53715b;border-radius:10px}
+.operator-actions{margin-top:15px}
+.operator-actions button{border-radius:10px;font-size:.84rem}
+#rosterSave,#privateSave{background:#b9dcae;color:#163022;border-color:#c8e5bf}
+#rosterSave:hover,#privateSave:hover{background:#d5f1cb}
+#rosterStatus{margin:10px 0 0;color:#cbdabc;font-size:.81rem}
+.operator-box details{border-top:1px solid #3b5341;margin-top:17px;padding-top:10px}
+.operator-box details summary{font-weight:700;font-size:.87rem;color:#c3d9c7}
+.telemetry-strip{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;background:#17241c;border:1px solid #314d3a;border-radius:13px;padding:10px 15px;margin:15px 0 20px}
+.telemetry-strip p{margin:0;line-height:1.5;color:#b5cbbb;font-size:.8rem}
+.telemetry-strip form{margin:0;gap:8px}
+.telemetry-strip form label{font-size:.75rem}
+.telemetry-strip form input{min-width:100px;width:112px;min-height:40px}
+.telemetry-strip form button{min-height:40px;padding:8px 12px}
+.monitor-section{margin:15px 0 22px}
+.monitor-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 15px}
+.monitor-heading h2{font-size:clamp(1.3rem,2.2vw,1.75rem);letter-spacing:-.035em;margin:4px 0 0;color:#eef7eb}
+.monitor-heading .command-eyebrow{font-size:.71rem}
+#summary{font-size:.8rem;margin:0;color:#aec5b4;font-weight:650;letter-spacing:0}
+.grid{gap:13px}
+.grid .card{background:linear-gradient(150deg,#23352a,#17251d);border:1px solid #3b5645;border-left:3px solid #8da794;border-radius:15px;padding:clamp(13px,1.65vw,19px);min-height:0;box-shadow:inset 0 1px #ffffff0b,0 8px 24px #0002}
+.grid .card:hover{border-color:#729779}
+.card .card-personnel-code{font-size:clamp(1.1rem,1.55vw,1.42rem);letter-spacing:-.02em}
+.card .card-personnel-caption{color:#a8c5af;font-size:.67rem}
+.card .card-slot-label{letter-spacing:0;color:#95b3a3}
+.card .status-chip{border-radius:7px;padding:5px 9px;font-size:.68rem;letter-spacing:.045em;margin:0}
+.card .bpm{font-size:clamp(2.3rem,3vw,3rem);font-weight:850;line-height:1.15;letter-spacing:-.05em;margin:16px 0 10px}
+.card .bpm small{font-size:.33em;font-weight:700;letter-spacing:.04em;color:#b3ccb8}
+.signal-line{border-top:1px solid #3a5441;padding-top:10px;margin:9px 0 5px}
+.card > div > small{color:#b0c7b7}
+.card .history-open{background:#2b4334;border:1px solid #597765;border-radius:10px;margin-top:13px;color:#e2f4e3;font-size:.78rem;min-height:44px}
+.card .history-open:hover{background:#385a43}
+.card .safety{background:#3d301b;padding:8px 10px;border-radius:8px;font-size:.76rem;line-height:1.5;color:#f0d196;margin:10px 0 0}
+.history-detail{border-radius:17px;border-color:#506f58}
+.history-ranges button{font-size:.79rem}
+.history-stat{border-radius:10px}
+.alert-panel{border-radius:11px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #b5e2aa;outline-offset:2px}
+@media(max-width:600px){
+ header{padding:7px 0 16px}
+ header h1{font-size:1.52rem}
+ .command-wordmark{display:block;font-size:.49em;letter-spacing:.16em;margin-top:1px}
+ .command-stats{gap:8px}
+ .command-stats .stat{min-height:93px;padding:11px}
+ .stat span{min-height:28px;font-size:.72rem}
+ .stat b{font-size:1.8rem}
+ .telemetry-strip{gap:8px}
+ .monitor-heading h2{font-size:1.32rem}
+ .grid{gap:10px}
+ .grid .card{padding:12px}
+ .card .bpm{font-size:2.25rem}
+}
+@media(prefers-reduced-motion:reduce){.command-stats .stat{transition:none}}
+
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
-<header><h1>STEVE 1.0 <span style="color:#a8c49d">/ TACTICAL COMMAND</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
-<div class="command-bar"><div><div class="command-eyebrow">FIELD OPERATIONS / HEALTH TELEMETRY</div><small>STEVE • HIGH-RISK WEARERS / 15-SLOT CAPACITY</small></div><button id="presentationToggle" type="button" aria-pressed="false">เปิดโหมดนำเสนอ</button></div>
+<header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
+<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div>
 <section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
-<div class="stat"><span>กลุ่มเสี่ยงที่ลงทะเบียน</span><b id="statTotal">—</b></div>
-<div class="stat live"><span>LIVE / ลงทะเบียน</span><b id="statLive">—</b></div>
-<div class="stat lost"><span>NO DATA / ลงทะเบียน</span><b id="statNoData">—</b></div>
-<div class="stat watch"><span>WATCH / เฝ้าระวังใกล้ชิด</span><b id="statWatch">0</b></div>
-<div class="stat paused"><span>EMERGENCY / อันตราย</span><b id="statPaused">—</b></div>
-<div class="stat"><span>ยังไม่ลงทะเบียน / 15 ช่อง</span><b id="statUnregistered">—</b></div>
+<div class="stat"><span>ลงทะเบียนแล้ว</span><b id="statTotal">—</b></div>
+<div class="stat live"><span>รับสัญญาณ LIVE</span><b id="statLive">—</b></div>
+<div class="stat lost"><span>NO DATA</span><b id="statNoData">—</b></div>
+<div class="stat watch"><span>WATCH</span><b id="statWatch">0</b></div>
+<div class="stat paused"><span>EMERGENCY</span><b id="statPaused">—</b></div>
+<div class="stat"><span>ช่องที่เหลือ</span><b id="statUnregistered">—</b></div>
 </section>
-<p id="cohortNotice" class="status-note" role="status">กำลังโหลดทะเบียนกลุ่มเสี่ยง • ผู้สวม Band ทุกคนอยู่ในกลุ่มเฝ้าระวัง แต่ WATCH/EMERGENCY เป็นเหตุเร่งด่วนเพิ่ม</p>
+<p id="cohortNotice" class="status-note" role="status"></p>
 <section id="trainingPanel" class="training-phase" aria-label="สถานะการฝึกทั้งกลุ่ม" hidden>
- <div class="phase-main"><div class="command-eyebrow">GROUP ACTIVITY / ชั่วโมงการฝึก</div><strong id="groupPhaseLabel">ยังไม่ระบุสถานะการฝึก</strong>
+ <div class="phase-main"><div class="command-eyebrow">TRAINING TIMER</div><strong id="groupPhaseLabel">ยังไม่ระบุสถานะการฝึก</strong>
  <div id="phaseClock" class="phase-clock" aria-live="off">— <small>นาทีในช่วงปัจจุบัน</small></div>
  <small id="groupPhaseTime">รอผู้ฝึกหรือแพทย์เริ่มบันทึก</small></div>
  <div class="phase-metrics" aria-label="ระยะเวลาช่วงฝึกและพักล่าสุด">
-  <div class="phase-metric" id="trainingMetric"><span>▶ ฝึกช่วงล่าสุด</span><b id="trainingDuration">—</b><em id="trainingDurationNote">ยังไม่มีข้อมูล</em></div>
-  <div class="phase-metric rest" id="restMetric"><span>◷ พักช่วงล่าสุด</span><b id="restDuration">—</b><em id="restDurationNote">ยังไม่มีข้อมูล</em></div>
+  <div class="phase-metric" id="trainingMetric"><span>▶ ฝึกประจำชั่วโมง</span><b id="trainingDuration">—</b><em id="trainingDurationNote">ยังไม่มีข้อมูล</em></div>
+  <div class="phase-metric rest" id="restMetric"><span>◷ พักประจำชั่วโมง</span><b id="restDuration">—</b><em id="restDurationNote">ยังไม่มีข้อมูล</em></div>
  </div>
  <div id="trainingActions" class="phase-actions">
   <button type="button" id="startTraining" aria-pressed="false">▶ กำลังทำการฝึก</button>
   <button type="button" id="startHourlyRest" aria-pressed="false">◷ พักประจำชั่วโมง</button>
  </div>
- <p id="groupPhaseMessage" role="status"></p><div class="phase-explain">เวลาคำนวณจากการกดเปลี่ยนสถานะของเจ้าหน้าที่ ไม่ใช่การตรวจจับการออกกำลังกายอัตโนมัติ และจะนับต่อจนมีการเปลี่ยนสถานะ</div>
+ <p id="groupPhaseMessage" role="status"></p>
 </section>
 <div id="emergencyAlerts" class="alert-panel" role="alert" hidden></div>
-<div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
+
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
 <div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
 <div id="demo" class="notice" hidden>
@@ -171,12 +263,12 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  <button id="demoStop">หยุดจำลอง</button>
 </div>
 <section id="rosterBox" class="operator-box" hidden>
- <h2>ลงทะเบียนผู้สวม Band กลุ่มเสี่ยง R01–R15 (ผู้ฝึกและแพทย์มีสิทธิ์เท่ากัน)</h2>
+ <h2>ทะเบียนทหารใหม่ <span class="section-count">R01–R15</span></h2>
  <p id="operatorRole">กำลังตรวจสอบสิทธิ์...</p>
- <p class="safety">รหัสประจำตัวทหารใหม่ในระบบนี้ต้องเป็นรหัสที่หน่วยกำหนดสำหรับการเฝ้าระวังโดยไม่ระบุตัวบุคคล ห้ามกรอกเลขประจำตัวทหารจริง ชื่อจริง โรคประจำตัวหรือเวชระเบียนใน Render Free ระบบต้นแบบนี้ไม่ใช่เครื่องมือวินิจฉัย</p>
+ 
  <div class="operator-fields">
   <label>ช่องผู้ฝึก<select id="rosterSlot"><option value="R01">R01</option><option value="R02">R02</option><option value="R03">R03</option><option value="R04">R04</option><option value="R05">R05</option><option value="R06">R06</option><option value="R07">R07</option><option value="R08">R08</option><option value="R09">R09</option><option value="R10">R10</option><option value="R11">R11</option><option value="R12">R12</option><option value="R13">R13</option><option value="R14">R14</option><option value="R15">R15</option></select></label>
-  <label>รหัสประจำตัวทหารใหม่ (4–24 ตัว ใช้ตัวเล็ก/ตัวใหญ่/ตัวเลขได้)<input id="rosterCode" placeholder="a001" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" maxlength="24"></label>
+  <label>รหัสประจำตัว (หน่วยกำหนด)<input id="rosterCode" placeholder="a001" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" maxlength="24"></label>
   <label>ข้อจำกัดการฝึกจากผู้รับผิดชอบ<select id="rosterRestriction"><option value="none">ยังไม่ระบุ</option><option value="watch">ให้ติดตามเป็นพิเศษ</option><option value="no_training">งดกิจกรรมจนกว่าจะประเมิน</option></select></label>
    <label>อาการที่มีผู้สังเกตและบันทึก<select id="rosterObservation"><option value="none">ยังไม่มีการแจ้งเหตุ</option><option value="dizzy_weak_nausea">เวียนศีรษะ / อ่อนแรง / คลื่นไส้ — หยุดประเมิน</option><option value="confusion_collapse_seizure">สับสน / หมดสติ / ชัก — ฉุกเฉิน</option></select></label>
  </div>
@@ -184,26 +276,26 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
   <button id="rosterSave" type="button">บันทึกข้อมูลทหารใหม่</button>
   <button id="rosterAcknowledge" type="button">รับทราบเหตุ</button>
  </div>
- <p id="rosterStatus" role="status">ระบบจะตรวจสอบเวอร์ชันข้อมูลก่อนบันทึกเสมอ</p>
- <p class="safety">เมื่อเปลี่ยนผู้สวม ให้ย้ายและตรวจสายรัด Band ของช่องนั้นกับทหารใหม่ก่อนแก้รหัสแล้วกดบันทึกครั้งเดียว ระบบล้าง BPM และสถานะของผู้สวมเดิมโดยอัตโนมัติและรอข้อมูลใหม่ ไม่ต้องเปิดรับซ้ำ หากมีเหตุ EMERGENCY ค้าง ต้องให้เจ้าหน้าที่ประเมินและปิดเหตุก่อนเปลี่ยนผู้สวม</p>
- <p id="privateStorageNotice" class="status-note" hidden>ข้อมูลสุขภาพส่วนตัวเปิดใช้ได้เมื่อเชื่อมฐานข้อมูลเข้ารหัส และลงชื่อเข้าใช้ด้วยบัญชีครูฝึกหรือแพทย์</p>
+ <p id="rosterStatus" role="status"></p>
+ 
+ <p id="privateStorageNotice" class="status-note" hidden>ข้อมูลสุขภาพส่วนตัวไม่พร้อมใช้งาน</p>
  <details id="privatePanel" class="private-medical" hidden>
-  <summary>ข้อมูลส่วนตัว • เฉพาะผู้รับผิดชอบ (ไม่แสดงบน Dashboard)</summary>
-  <p class="history-note">เก็บเฉพาะข้อมูลที่ได้รับอนุญาต หลีกเลี่ยงชื่อจริงและเลขประจำตัวจริง</p>
+  <summary>ข้อมูลสุขภาพส่วนตัว</summary>
+  
   <div class="operator-fields">
    <label>น้ำหนัก (กก.)<input id="privateWeight" type="number" inputmode="decimal" min="20" max="300" step="0.1" autocomplete="off"></label>
    <label>ส่วนสูง (ซม.)<input id="privateHeight" type="number" inputmode="decimal" min="80" max="230" step="0.1" autocomplete="off"></label>
   </div>
-  <label>โรคประจำตัว / ข้อควรระวัง (เฉพาะที่จำเป็น ไม่เกิน 300 ตัวอักษร)
+  <label>โรคประจำตัว / ข้อควรระวัง
    <textarea id="privateConditions" maxlength="300" autocomplete="off" spellcheck="false"></textarea>
   </label>
   <p id="privateBmi" class="status-note">BMI: —</p>
   <button type="button" id="privateSave">บันทึกข้อมูลส่วนตัวแบบเข้ารหัส</button>
   <p id="privateStatus" role="status">เลือกผู้สวมที่ลงทะเบียนแล้ว</p>
  </details>
- <details><summary>ประวัติการเปลี่ยนแปลง (ไม่มีรายละเอียดสุขภาพ)</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
-</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
- <div class="history-header"><div><small>STEVE HR ANALYTICS / บันทึกจริง สูงสุด 7 วัน</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
+ <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
+</section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
+ <div class="history-header"><div><small>HR TREND / 7-DAY HISTORY</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
  <div class="history-ranges" id="historyRanges">
   <button type="button" data-history-hours="0.25" aria-pressed="false">15 นาที</button>
   <button type="button" data-history-hours="0.5" aria-pressed="false">30 นาที</button>
@@ -216,7 +308,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  <div id="historyStats" class="history-stats"></div><div id="historyBreakdown" class="history-breakdown"></div>
  <div id="historyChart" class="history-graph"></div>
  <div id="historyLegend" class="history-legend"><span style="--mark:#71b28c">ช่วงฝึกที่บันทึก</span><span style="--mark:#689cc8">ช่วงพักที่บันทึก</span><span style="--mark:#c3e1cb">BPM จากเซนเซอร์</span></div>
- <p id="historyNote" class="history-note">ข้อมูลจริงเท่านั้น • ช่วงที่ขาดสัญญาณต้องมีช่องว่าง ไม่ต่อเส้นหลอก • กราฟไม่ใช้วินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก</p>
+ <p id="historyNote" class="history-note">ข้อมูลจากเซนเซอร์ที่บันทึกจริง • ช่องว่างหมายถึงไม่มีข้อมูล</p>
  </section>
 <script>
 "use strict";
@@ -226,11 +318,11 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  if(historySlot&&!historyIsLive(historySlot))closeHistory();
  const now=Date.now(),panel=byId("emergencyAlerts");
  if(!rosterData?.slots){
-  cards.innerHTML='<p class="notice">กำลังตรวจสอบทะเบียนกลุ่มเสี่ยง • ไม่สามารถยืนยันจำนวนผู้สวมได้</p>';
+  cards.innerHTML='<p class="notice">กำลังโหลดทะเบียน...</p>';
   for(const id of ["statTotal","statLive","statNoData","statWatch","statPaused","statUnregistered"])byId(id).textContent="—";
-  byId("cohortNotice").textContent="รอทะเบียนที่ยืนยันโดยผู้ฝึก/แพทย์ • ไม่ตีความช่องว่างเป็นผู้ขาดสัญญาณ";
+  byId("cohortNotice").textContent="";
   panel.hidden=true;panel.innerHTML="";
-  summary.textContent="ยังไม่ยืนยันทะเบียนผู้สวม • กรุณาตรวจสอบการเชื่อมต่อ";
+  summary.textContent="รอข้อมูลทะเบียน";
   return;
  }
  const profiles=new Map(rosterData.slots.map(p=>[p.id,p]));
@@ -260,9 +352,9 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
- if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
+ if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
  panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>รับทราบเหตุแล้วก็ยังเป็น EMERGENCY จนกว่าจะประเมินและแก้ไขเหตุโดยเจ้าหน้าที่</small>':'';
  byId("statTotal").textContent=enrolled;
@@ -271,8 +363,8 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  byId("statWatch").textContent=watchCount;
  byId("statPaused").textContent=emergencyCount;
  byId("statUnregistered").textContent=Math.max(0,15-enrolled);
- byId("cohortNotice").textContent="ผู้สวมที่ลงทะเบียนทุกคนเป็นกลุ่มเสี่ยง • WATCH/EMERGENCY คือสถานะเร่งด่วนเพิ่ม"+(pending?" • พบสัญญาณจาก "+pending+" ช่องที่ยังไม่ลงทะเบียน โปรดยืนยันผู้สวม":"")+(rosterData.ephemeral?" • ข้อมูลการประเมินอยู่ใน RAM และหายเมื่อ Backend รีสตาร์ต":"");
- summary.textContent="ลงทะเบียน "+enrolled+"/15 • สด "+fresh+" • ขาดข้อมูล "+Math.max(0,enrolled-fresh)+" • "+new Date().toLocaleTimeString("th-TH");
+ byId("cohortNotice").textContent=(pending?"มีสัญญาณจาก "+pending+" ช่องที่ยังไม่ลงทะเบียน":"")+(rosterData.ephemeral?(pending?" • ":"")+"การจัดเก็บชั่วคราว":"");
+ summary.textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});
 }
 
 const byId=id=>document.getElementById(id);
@@ -299,13 +391,10 @@ function renderHistory(data){
  const sourceArchive=data.source==="actual accepted HR only";
  const points=(data.points||[]).filter(p=>Array.isArray(p)&&Number.isSafeInteger(p[0])&&p[0]>=start&&
   p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240).sort((a,b)=>a[0]-b[0]);
- const source=sourceArchive?"Supabase • เข้ารหัส • สุ่มเก็บจริงทุก ~7 วินาที":"กราฟข้อมูลสดสูงสุด 4 ชั่วโมง";
- byId("historyStatus").textContent="บันทึก "+points.length.toLocaleString("th-TH")+" จุดบนกราฟ • "+source+
-  (data.compacted?" • คัดค่าต่ำสุด/สูงสุดจริงเพื่อให้กราฟ 7 วันแสดงผลเร็ว":"");
+ const source=sourceArchive?"ประวัติ 7 วัน":"ข้อมูลสด";
+ byId("historyStatus").textContent="จุดข้อมูล "+points.length.toLocaleString("th-TH")+" • "+source+(data.compacted?" • กราฟย่อ":"");
  byId("historyLegend").hidden=sourceArchive;
- byId("historyNote").textContent="ข้อมูลหัวใจจากเซนเซอร์จริง • ไม่มีการเติมค่าในช่วงสัญญาณขาด"+
-  (sourceArchive?" • การบีบกราฟระยะยาวยังแสดงค่าต่ำสุด/สูงสุดที่วัดได้จริง":"")+
-  " • ไม่ใช้วินิจฉัยหรืออนุญาตให้กลับไปฝึก";
+ byId("historyNote").textContent="ข้อมูลที่วัดได้จริง • ช่องว่างคือช่วงไม่มีสัญญาณ";
  if(!points.length){
   byId("historyStats").textContent="ยังไม่มีข้อมูล BPM ที่บันทึกไว้ในช่วงเวลานี้";
   byId("historyBreakdown").textContent="";
@@ -456,8 +545,7 @@ async function loadRoster(keepSelection=false){
  const previous=byId("rosterSlot").value;
  operatorRole=info.role;rosterData=data;
  if(historySlot&&!historyIsLive(historySlot))closeHistory();
- byId("operatorRole").textContent="เข้าสู่ระบบ: "+({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ใช้รหัสร่วมเดิม"}[info.role]||"ผู้ปฏิบัติงาน")
-  +" • สิทธิ์อ่านและแก้ไขเท่ากัน • "+(data.ephemeral?"ข้อมูลจะหายเมื่อเซิร์ฟเวอร์รีสตาร์ต":"มีไฟล์จัดเก็บแบบกำหนดเอง");
+ byId("operatorRole").textContent=({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ปฏิบัติงาน"}[info.role]||"ผู้ปฏิบัติงาน");
  byId("rosterBox").hidden=false;
  byId("privatePanel").hidden=!info.privateProfilesEnabled;
  byId("privateStorageNotice").hidden=!!info.privateProfilesEnabled;
@@ -549,13 +637,13 @@ function paintGroupPhase(){
  const panel=byId("trainingPanel");panel.hidden=false;
  const phase=groupPhaseData?.phase||"not_started",now=Date.now();
  const changedAt=groupPhaseData?.changedAt;
- byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมงทั้งกลุ่ม":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
+ byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมง":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
  const elapsed=Number.isSafeInteger(changedAt)?Math.max(0,now-changedAt):null;
  if(byId("phaseClock"))byId("phaseClock").innerHTML=elapsed===null?'— <small>นาทีในช่วงปัจจุบัน</small>':
   prettyDuration(elapsed)+' <small>ในช่วงปัจจุบัน</small>';
  byId("groupPhaseTime").textContent=changedAt?
   "เริ่ม "+new Date(changedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
-  " • นับต่อเนื่องจนผู้ฝึก/แพทย์เปลี่ยนสถานะ":"ยังไม่ได้ตั้งค่า • กดปุ่มเพื่อบันทึกสถานะรวมของกลุ่ม";
+  "":"ยังไม่ได้เริ่มจับเวลา";
  const intervals=(groupPhaseData?.transitions||[]).filter(e=>
   (e.phase==="training"||e.phase==="hourly_rest")&&Number.isSafeInteger(e.at)&&e.at<=now)
   .sort((a,b)=>a.at-b.at);
@@ -587,7 +675,7 @@ async function loadGroupPhase(){
   const data=await r.json();
   if(epoch!==viewEpoch)return;
   groupPhaseData=data;paintGroupPhase();
-  byId("groupPhaseMessage").textContent=data.ephemeral?"สถานะบันทึกใน RAM • อาจหายหลัง Backend รีสตาร์ต • ไม่เปลี่ยนสถานะ WATCH/EMERGENCY":"สถานะภาพรวม ไม่เปลี่ยนข้อจำกัดการฝึกและ WATCH/EMERGENCY รายบุคคล";
+  byId("groupPhaseMessage").textContent=data.ephemeral?"บันทึกสถานะชั่วคราว":"";
  }catch{
   if(epoch!==viewEpoch)return;
   byId("trainingPanel").hidden=false;
@@ -599,7 +687,7 @@ async function changeGroupPhase(phase){
  if(groupPhaseBusy||!groupPhaseData||!["training","hourly_rest"].includes(phase))return;
  const epoch=viewEpoch;
  groupPhaseBusy=true;paintGroupPhase();
- byId("groupPhaseMessage").textContent="กำลังบันทึกสถานะภาพรวม...";
+ byId("groupPhaseMessage").textContent="กำลังบันทึก...";
  try{
   const r=await fetch("/api/training",{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({phase,version:groupPhaseData.version})});
   if(epoch!==viewEpoch)return;
@@ -612,7 +700,7 @@ async function changeGroupPhase(phase){
   const result=await r.json();
   if(epoch!==viewEpoch)return;
   groupPhaseData=result;
-  byId("groupPhaseMessage").textContent="บันทึกสำเร็จ • สถานะเดียวกันทั้งกลุ่ม แต่ WATCH/EMERGENCY ของแต่ละคนยังคงเดิม";
+  byId("groupPhaseMessage").textContent="บันทึกแล้ว";
  }catch{
   if(epoch!==viewEpoch)return;
   byId("groupPhaseMessage").textContent="บันทึกไม่สำเร็จ • ตรวจเครือข่ายแล้วลองใหม่";
