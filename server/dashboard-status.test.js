@@ -15,4 +15,8 @@ test('WATCH and acknowledged EMERGENCY persist on signal loss without battery di
  const profiles=[{id:'R01',restriction:'watch'},{id:'R02',observation:'confusion_collapse_seizure',acknowledged:true}];
  context.render(data,profiles);assert.equal(node('statLive').textContent,2);assert.equal(node('statWatch').textContent,1);assert.equal(node('statPaused').textContent,1);assert.doesNotMatch(node('cards').innerHTML,/BATTERY|UNKNOWN|80%/i);
  context.render(data,profiles,false);assert.equal(node('statLive').textContent,0);assert.equal(node('statNoData').textContent,2);assert.equal(node('statWatch').textContent,1);assert.equal(node('statPaused').textContent,1);assert.match(node('emergencyAlerts').innerHTML,/ยังเป็น EMERGENCY/);assert.match(node('emergencyAlerts').innerHTML,/disabled/);
+ data.recruits.forEach(r=>r.timestamp=now-16000);
+ context.render(data,profiles,true);assert.equal(node('statLive').textContent,0);assert.equal(node('statWatch').textContent,1);assert.equal(node('statPaused').textContent,1);
+ assert.match(node('emergencyAlerts').innerHTML,/ยังเป็น EMERGENCY/);
+ assert.doesNotMatch(node('cards').innerHTML,/>52 | >58 /);
 });

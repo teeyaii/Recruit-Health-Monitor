@@ -261,7 +261,10 @@ async function connectBand(slot,expected,mode){
    if(s.busy || now-s.sentAt<1000)return;
    s.sentAt=now;s.busy=true;s.ack="กำลังส่ง HTTPS";
    upload(s,bpm,now,bpm===null).then(result=>{
-    if(s.closed||document.hidden||s.sequence!==sequence||Date.now()-now>15000)return;
+    if(s.closed||document.hidden)return;
+    // A newer BLE notification cannot erase an HTTPS failure. Only successful
+    // acknowledgements belong to one measurement and must pass the freshness guard.
+    if(result.ok&&(s.sequence!==sequence||Date.now()-now>15000))return;
     s.ack=result.detail;
     if(result.ok){s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";}
     else{s.bpm=null;transition(s,"ERROR");s.state="SERVER REJECTED / OFFLINE";s.error=stages.upload+" • "+result.detail;$("simpleStatus").textContent="ส่งข้อมูลไม่สำเร็จ • ตรวจเครือข่ายหรือเข้าใช้งานใหม่";}

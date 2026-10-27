@@ -160,6 +160,21 @@ test('failed R01 GATT retry leaves R02 data live',async()=>{
  assert.equal(h.api.live.get('R02').bpm,57);assert.equal(b.gatt.connected,true);
 });
 const drain=async()=>{for(let i=0;i<150;i++)await Promise.resolve();};
+test('slow HTTPS failure remains visible after newer notifications and isolates the other band',async()=>{
+ for(const failure of ['network','timeout','http','rejected']){
+  const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');
+  let resolve,reject;h.reply(()=>new Promise((ok,no)=>{resolve=ok;reject=no;}));a.emit([6,61]);await drain();
+  h.reply({ok:true,json:async()=>({accepted:1})});b.emit([6,72]);await drain();
+  h.tick(1001);a.emit([6,62]);await drain();
+  if(failure==='network'||failure==='timeout')reject({name:failure==='timeout'?'AbortError':'TypeError'});
+  else resolve(failure==='http'?{ok:false,status:503}:{ok:true,json:async()=>({accepted:0})});
+  await drain();const s=h.api.live.get('R01');
+  assert.equal(s.bpm,null);assert.match(s.state,/SERVER REJECTED/);assert.ok(s.error);
+  assert.equal(h.api.live.get('R02').bpm,72);assert.equal(b.gatt.connected,true);
+  h.tick(1001);a.emit([6,63]);await drain();assert.equal(s.bpm,63);assert.equal(s.error,'');assert.match(s.state,/Server acknowledged/);
+ }
+});
+
 function foreground(h){h.document.hidden=false;h.document.listeners.visibilitychange();}
 test('foreground automatically restores two authorized handles without chooser or stale BPM',async()=>{
  const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();

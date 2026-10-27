@@ -1,6 +1,14 @@
 # STEVE 1.0 — Bluefy Web BLE Gateway pilot (iPhone only)
 
-## Observed on 26 October 2026
+## Accepted baseline — 27 October 2026
+
+The owner confirmed all six Gateway v8 physical acceptance checks PASS on iPhone / Bluefy 2.01 / Xiaomi Smart Band 10 x2: fresh R01 BPM; simultaneous fresh R02 BPM; foreground return automatic reconnect; Soft BLE Reset preserves credentials; browser reload preserves login within the two-hour HttpOnly session; Dashboard LIVE / NO DATA is correct. Baseline: PR #22, main `cddfad8c5ea0b572fcc5449c595a032b3e375f17`.
+
+Evidence is the owner's direct report, not a new hardware test by the code reviewer. These checks are accepted and must not be reset to pending or routinely repeated. Ten-minute and sixty-minute measured stability remain pending. Use the [commander demo checklist](COMMANDER_DEMO_CHECKLIST.md).
+
+Everything below records historical diagnosis/setup; older pending/failed statements and instructions to change credentials or mappings do not describe the accepted installation. For current operation follow Gateway v8 and the checklist. No battery functionality.
+
+## Historical observation on 26 October 2026
 nRF Connect showed two simultaneously connected Xiaomi Smart Band 10 units (47FD, A746), with independent Heart Rate Service 180D / Characteristic 2A37 screenshots reading 63 and 65 BPM. Bluefy later received continuous heart-rate notifications (for example 06 35 through 06 39, decoded as 53–57 BPM).
 
 Not yet verified: two simultaneous **Web Bluetooth** subscriptions within Bluefy, continuous ten-minute reception, end-to-end STEVE upload, screen lock/background reliability or medical suitability. Bluefy explicitly warns background Bluetooth may disconnect.
