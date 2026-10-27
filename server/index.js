@@ -5,7 +5,7 @@ import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, pro
 import { RosterStore } from "./roster.js";
 import { PulseHistory, WINDOW_MS } from "./pulse-history.js";
 import { DurableState } from "./durable-state.js";
-import { RollingArchive } from "./rolling-archive.js";
+import { RollingArchive, HISTORY_HOURS } from "./rolling-archive.js";
 import { PrivateProfiles } from "./private-profiles.js";
 import { trainingSummary } from "./training-summary.js";
 import { fileURLToPath } from "node:url";
@@ -207,12 +207,13 @@ const server=http.createServer(async(req,res)=>{
   if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
   if(!archive.enabled){send(res,503,{error:"seven-day archive not enabled"});return;}
   const hours=Number(url.searchParams.get("hours")||24);
-  if(![4,24,168].includes(hours)){send(res,422,{error:"invalid archive window"});return;}
+  if(![...HISTORY_HOURS,24].includes(hours)){send(res,422,{error:"invalid archive window"});return;}
   const slot=archiveRoute[1],code=roster.get(slot).code;
   if(!code){send(res,409,{error:"recruit not registered"});return;}
   try{
-   const points=await archive.get(slot,code,hours);
-   send(res,200,{slot,windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,source:"actual accepted HR only"});
+   const compact=url.searchParams.get("compact")==="1";
+   const points=await archive.get(slot,code,hours,Date.now(),compact);
+   send(res,200,{slot,windowStart:Date.now()-hours*3600000,windowEnd:Date.now(),windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,compacted:compact&&(hours===8||hours===168),source:"actual accepted HR only"});
   }catch{send(res,503,{error:"encrypted archive unavailable"});}
   return;
  }
@@ -234,14 +235,14 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname==="/api/training"&&req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
-  send(res,200,{...roster.getGroupPhase(),ephemeral:!durable.enabled&&!roster.filename});return;
+  send(res,200,{...roster.getGroupPhase(),transitions:roster.getTrainingTimeline(Date.now()-48*3600000),ephemeral:!durable.enabled&&!roster.filename});return;
  }
  if(url.pathname==="/api/training"&&req.method==="PUT"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{const body=await readBody(req,512);const result=roster.setGroupPhase(body,isViewer);
-   await persistState();send(res,200,{ok:true,...result,ephemeral:!durable.enabled&&!roster.filename});}
+   await persistState();send(res,200,{ok:true,...result,transitions:roster.getTrainingTimeline(Date.now()-48*3600000),ephemeral:!durable.enabled&&!roster.filename});}
   catch(e){send(res,e.status||500,{error:e.status?e.message:"training phase update unavailable"});}
   return;
  }
