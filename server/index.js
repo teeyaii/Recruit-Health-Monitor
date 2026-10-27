@@ -36,7 +36,7 @@ function persistState(){
 }
 // Reject queued measurements recorded before a wearer changed.
 const reassignmentCutoff=new Map();
-const clients=new Set();
+const clients=new Map();
 const sessions=new Map();
 const gatewaySessions=new GatewaySessions();
 const failedLogins=new Map();
@@ -78,11 +78,13 @@ function snapshot(){const now=Date.now();
   const state=paused?"PAUSED":r?.state==="DISCONNECTED"?"DISCONNECTED":!r?.timestamp?"NO DATA":
     (!gatewayOnline||now-r.timestamp>TTL_MS)?"STALE":"CONNECTED";
   const code=roster.get(id).code,rev=code?medicReviews.get(id,code):null;
-  const autoCheck=!!(rev?.status==="pending"&&rev?.openedBy==="system");
-  return {id,autoCheck,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
+  const autoCheck=!!(rev?.status==="pending"&&(rev?.openedBy==="system"||rev?.autoPauseRequired));
+  const profile=code?privateProfiles.get(id,code):null;
+  const monitoringStatus=profile?.reviewThresholdConfirmed&&profile?.reviewThresholdBpm!==null?"OPERATOR_CONFIGURED_UNVERIFIED":"MONITORING_NOT_CONFIGURED";
+  return {id,autoCheck,monitoringStatus,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
    stale:state!=="CONNECTED",state,paused,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
-function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
+function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const [c,req] of clients){if(!viewer(req)){clients.delete(c);c.end();continue;}try{c.write(msg)}catch{clients.delete(c)}}}
 // Deliberately synthetic only. Demo cannot run when NODE_ENV=production.
 function demoTick(){
  if(!demoActive)return;
@@ -344,6 +346,7 @@ const server=http.createServer(async(req,res)=>{
   if(slots===null){send(res,503,{error:"provisioning unavailable; configure STEVE_SLOT_MAP_JSON"});return;}
   send(res,200,{gateway:gatewayId,slots,kind:"anonymous_device_ids",sensor_verified:false,...(browserGateway?{expiresAt:browserGateway.expiry}:{})});return;
  }
+ if(strictMode&&!isViewer&&["/api/snapshot","/api/events","/api/gateways","/api/context"].includes(url.pathname)){send(res,403,{error:"viewer session required"});return;}
  if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}
  if(req.method==="GET"&&url.pathname==="/api/context"){send(res,200,{...conditions,stale:!conditions.timestamp||Date.now()-conditions.timestamp>1800000});return;}
@@ -358,7 +361,7 @@ const server=http.createServer(async(req,res)=>{
  }
  if(req.method==="GET"&&url.pathname==="/api/events"){
   res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-store","Connection":"keep-alive","X-Accel-Buffering":"no"});
-  res.write("retry: 3000\n\n");clients.add(res);res.write("data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n");
+  res.write("retry: 3000\n\n");clients.set(res,req);res.write("data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n");
   req.on("close",()=>clients.delete(res));return;
  }
  if(req.method==="POST"&&url.pathname==="/api/ingest"){
@@ -395,22 +398,23 @@ const server=http.createServer(async(req,res)=>{
      {training:roster.getGroupPhase().phase==="training",real:!SYNTHETIC});
     if(decision.trigger){
      const outcome=medicReviews.autoRequest(item.id,code,"high_sustained",now);
-     if(outcome.created)autoCreated++;
+     if(outcome.created||outcome.escalated)autoCreated++;
     }
    }
    accepted++;
   }
   lastByGateway.set(body.gateway,now);
+  if(accepted)publish();
   if(autoCreated){
    // Alert is surfaced immediately even if archive persistence fails; never
    // claim durable confirmation on storage failure.
    try{await persistState();}catch{
-    if(accepted)publish();
-    send(res,503,{error:"automatic review pending but encrypted persistence failed",accepted,autoCreated});
+    historyDirty=true; // Retry the pending case even if no further readings arrive.
+    send(res,503,{error:"storage unavailable",accepted});
     return;
    }
   }
-  if(accepted)publish();send(res,200,{accepted,received:body.readings.length,autoCreated,request_id:randomUUID()});return;
+  send(res,200,{accepted,received:body.readings.length,request_id:randomUUID()});return;
  }
  send(res,404,{error:"not found"});
 });

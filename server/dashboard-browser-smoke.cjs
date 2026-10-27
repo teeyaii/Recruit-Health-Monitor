@@ -22,6 +22,14 @@ if(await page.locator('.card-personnel-code').allTextContents().then(a=>a.join('
 if(await page.locator('.card-slot-label').allTextContents().then(a=>a.join('|').includes('R01')&&a.join('|').includes('R02'))!==true)throw Error('R-slot label absent');
 if(!await page.locator('#rosterBox').textContent().then(t=>t.includes('รหัสประจำตัว (หน่วยกำหนด)')))throw Error('roster form label not changed');
 
+// TEST ONLY: monitoring state and automatic pause must survive stale HR.
+await page.evaluate(()=>{const rows=last.recruits.map(r=>({...r}));rows[0].autoCheck=true;rows[0].monitoringStatus='MONITORING_NOT_CONFIGURED';draw({recruits:rows});});
+if(!await page.locator('#autoPauseAlerts').isVisible())throw Error('automatic pause missing');
+if(!await page.locator('#cards').textContent().then(t=>t.includes('MONITORING NOT CONFIGURED')))throw Error('unconfigured monitoring hidden');
+await page.locator('#enableAlertSound').click();
+if(await page.locator('#enableAlertSound').getAttribute('aria-pressed')!=='true')throw Error('foreground audio activation failed');
+await page.evaluate(()=>{const rows=last.recruits.map(r=>({...r}));rows[0].autoCheck=false;draw({recruits:rows});});
+
 // Per-recruit graph must only be created on demand for registered LIVE slots.
 if(await page.locator('.history-open').count()!==2)throw Error('LIVE wearers should have exactly two graph buttons');
 if(await page.locator('#historyPanel').isVisible())throw Error('chart should not render before click');

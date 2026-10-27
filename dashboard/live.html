@@ -347,7 +347,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
    <label>ระดับ BPM แจ้งเตือนเพื่อพักและตรวจ (เฉพาะบุคคล)
     <input id="privateAlertLimit" type="number" min="60" max="220" step="1" inputmode="numeric" placeholder="เจ้าหน้าที่แพทย์กำหนด"></label>
    <label class="baseline-confirm"><input id="privateAlertConfirmed" type="checkbox"> ยืนยันว่าเกณฑ์นี้ผ่านการพิจารณาของเจ้าหน้าที่แพทย์แล้ว</label>
-   <small>กำหนดครั้งเดียวต่อผู้สวม • เมื่อกำลังฝึกและ BPM สูงต่อเนื่อง ระบบจะแจ้งเตือนและเปิด Medic Review อัตโนมัติ ไม่มีค่าเริ่มต้น</small>
+   <small>Checkbox นี้เป็นคำยืนยันของผู้ใช้งาน ระบบยังไม่ตรวจสอบตัวผู้อนุมัติทางการแพทย์ • เมื่อกำลังฝึกและ BPM สูงต่อเนื่อง ระบบจะแจ้งเตือนและเปิด Medic Review อัตโนมัติ ไม่มีค่าเริ่มต้น</small>
   </div>
   <label>ยา / ข้อควรระวังเกี่ยวกับยา<textarea id="privateMedications" maxlength="240" autocomplete="off" spellcheck="false"></textarea></label>
   <label>โรคประจำตัว / ข้อควรระวัง
@@ -471,13 +471,14 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const emergencyFlag=registered&&severity==="emergency";
   const watchFlag=registered&&!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
   if(registered){if(r.autoCheck)autoCases.push(r.id);if(!stale)fresh++;if(watchFlag)watchCount++;if(emergencyFlag){emergencyCount++;critical.push({id:r.id,acknowledged:!!profile.acknowledged});}}
+  const monitoringNote=r.monitoringStatus==="OPERATOR_CONFIGURED_UNVERIFIED"?"MONITORING NOT CONFIGURED (clinical approval) • มีเพียงเกณฑ์ทดลองที่ผู้ปฏิบัติงานตั้ง":"MONITORING NOT CONFIGURED • ยังไม่มีเกณฑ์แจ้งเตือนเฉพาะบุคคล";
   const chip=!registered?"PENDING REGISTRATION":emergencyFlag?"EMERGENCY":r.autoCheck?"PAUSE / CHECK":watchFlag?"WATCH":r.paused?"PAUSED":"MONITOR";
   const note=severity==="emergency"?"ฉุกเฉิน: หยุดกิจกรรมและเรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
     profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังใกล้ชิดตามผู้รับผิดชอบ":"";
   const alertClass=emergencyFlag?"alert-emergency":r.autoCheck?"alert-auto-check":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small>'+(registered?'<p class="status-note">'+escapeHtml(monitoringNote)+'</p>':'')+'<div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
@@ -486,7 +487,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  alertBox.hidden=autoCases.length===0;
  alertBox.innerHTML=autoCases.length?'<strong>พักกิจกรรมและตรวจผู้สวมทันที • '+autoCases.length+' นาย</strong>'+
   '<div>'+autoCases.map(id=>'<span class="auto-alert-slot">'+escapeHtml(id)+'</span>').join("")+'</div>'+
-  '<small>ระบบพบ BPM สูงต่อเนื่องเกินเกณฑ์เฉพาะบุคคลที่เจ้าหน้าที่รับรอง • ตรวจอาการและยืนยันค่าจากอุปกรณ์ก่อนดำเนินการตาม SOP • ไม่ใช่การวินิจฉัย</small>':"";
+  '<small>ระบบพบ BPM สูงต่อเนื่องเกินเกณฑ์เฉพาะบุคคลที่ผู้ปฏิบัติงานตั้งไว้ (ยังไม่ยืนยันการรับรองทางคลินิก) • ตรวจอาการและยืนยันค่าจากอุปกรณ์ก่อนดำเนินการตาม SOP • ไม่ใช่การวินิจฉัย</small>':"";
  byId("autoAlertStat").hidden=autoCases.length===0;
  byId("statAutoCheck").textContent=String(autoCases.length);
  const newAuto=autoCases.some(id=>!lastAutomaticAlerts.has(id));
