@@ -272,9 +272,30 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
+
+/* Isolated, browser-only R01/R02 seven-day visualisation. Never feeds LIVE alerts/history. */
+.training-preview{margin:22px 0;padding:clamp(16px,2.4vw,25px);background:linear-gradient(145deg,#1b2d25,#101a16);border:1px solid #618369;border-radius:17px;box-shadow:0 18px 36px #0004}
+.training-preview h2{font-size:clamp(1.16rem,2vw,1.7rem);margin:5px 0 9px}
+.training-preview p{line-height:1.5}
+.preview-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.preview-warning{color:#f4ce84!important;font-weight:780}
+.preview-mark{display:inline-block;font-size:.73rem;color:#151f18;background:#f1d392;border-radius:5px;padding:5px 8px;font-weight:850;letter-spacing:.04em}
+.preview-graphs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:12px}
+.preview-series{min-width:0;background:#102019;border:1px solid #425d4a;border-radius:12px;padding:14px}
+.preview-series strong{font-size:1.12rem}
+.preview-series svg{width:100%;height:auto;display:block}
+.preview-series small{font-size:.75rem;color:#bacabe}
+.preview-series-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.preview-activity-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:8px;margin-top:12px}
+.preview-activity{background:#15271c;border:1px solid #415a48;border-radius:9px;padding:10px;display:grid;gap:5px}
+.preview-activity input{width:100%;min-width:0;font-size:.87rem}
+.preview-training-label{font-size:.81rem;color:#bdd3c0}
+#trainingPreviewReset{border-color:#967c58;background:#453827;color:#f9e0ae}
+#trainingPreviewToggle[aria-pressed="true"]{background:#384b30;border-color:#b8dba8}
+@media(max-width:720px){.preview-graphs{grid-template-columns:1fr}.preview-heading button{width:100%}.preview-series{padding:10px}}
 </style></head><body>
 <header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
-<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
+<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="trainingPreviewToggle" type="button" aria-pressed="false" hidden>กราฟสาธิต R01 / R02</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
 <section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
 <div class="stat"><span>ลงทะเบียนแล้ว</span><b id="statTotal">—</b></div>
 <div class="stat live"><span>รับสัญญาณ LIVE</span><b id="statLive">—</b></div>
@@ -387,7 +408,26 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
   <p id="medicMessage" role="status"></p>
  </details>
  <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
-</section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
+</section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="trainingPreview" class="training-preview" aria-label="กราฟจำลองการฝึก 7 วัน R01 และ R02" hidden>
+ <div class="preview-heading">
+  <div><span class="preview-mark">DEMO DATA • SIMULATED • ไม่ใช่การวัดจริง</span>
+   <h2>ตัวอย่างการติดตามการฝึก 7 วัน • R01 / R02</h2>
+   <p class="preview-warning">กราฟและตัวเลขในส่วนนี้เป็นข้อมูลสมมติทั้งหมด ไม่ใช่ชีพจรที่วัดจาก Smart Band และไม่มีผลต่อการแจ้งเตือน LIVE</p></div>
+  <button id="trainingPreviewReset" type="button">ล้างตัวอย่างและปิดกราฟ</button>
+ </div>
+ <div class="preview-graphs">
+  <article class="preview-series"><div class="preview-series-head"><strong>R01 <small>• ตัวอย่าง</small></strong><span class="preview-training-label">เฉลี่ย BPM / วัน</span></div>
+   <div id="trainingPreviewR01" role="img" aria-label="กราฟชีพจรเฉลี่ยจำลอง 7 วันของ R01"></div>
+   <small>ตัวเลขสาธิต ไม่ใช่ประวัติการฝึกหรือข้อมูลสุขภาพจริง</small></article>
+  <article class="preview-series"><div class="preview-series-head"><strong>R02 <small>• ตัวอย่าง</small></strong><span class="preview-training-label">เฉลี่ย BPM / วัน</span></div>
+   <div id="trainingPreviewR02" role="img" aria-label="กราฟชีพจรเฉลี่ยจำลอง 7 วันของ R02"></div>
+   <small>ตัวเลขสาธิต ไม่ใช่ประวัติการฝึกหรือข้อมูลสุขภาพจริง</small></article>
+ </div>
+ <h3 style="margin:20px 0 5px">กิจกรรมการฝึกประกอบตัวอย่าง</h3>
+ <p class="status-note">กรอกหัวข้อกิจกรรมรายวันเพื่อประกอบการนำเสนอเท่านั้น ไม่มีการส่งข้อมูลขึ้นเซิร์ฟเวอร์</p>
+ <div id="trainingPreviewDays" class="preview-activity-grid"></div>
+ <p class="history-note">เมื่อต้องการกลับไปใช้ข้อมูลจริง ให้กด “ล้างตัวอย่างและปิดกราฟ” • ไม่มีการแก้ไขค่าชีพจร ประวัติ R01/R02 ทะเบียน หรือสถานะ WATCH / EMERGENCY</p>
+</section><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
  <div class="history-header"><div><small>HR TREND / 7-DAY HISTORY</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
  <div class="history-ranges" id="historyRanges">
   <button type="button" data-history-hours="0.25" aria-pressed="false">15 นาที</button>
@@ -504,6 +544,55 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
 }
 
 const byId=id=>document.getElementById(id);
+
+// Presentation preview is deliberately in-memory only; no fetch, persistence or patient data.
+const trainingPreviewSamples={
+ R01:[92,105,111,100,118,109,98],
+ R02:[88,99,106,103,112,102,93]
+};
+function trainingPreviewSvg(slot,values){
+ const w=640,h=235,l=43,r=16,t=15,b=186,lo=60,hi=140;
+ const x=i=>l+i*(w-l-r)/6,y=v=>b-(v-lo)*(b-t)/(hi-lo);
+ const color=slot==="R01"?"#92d6a8":"#88bafa";
+ const circles=values.map((v,i)=>'<circle cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="5" fill="'+color+'" stroke="#102019" stroke-width="2"/>').join("");
+ const line=values.map((v,i)=>x(i).toFixed(1)+","+y(v).toFixed(1)).join(" ");
+ const grid=[60,80,100,120,140].map(v=>'<line x1="'+l+'" y1="'+y(v).toFixed(1)+'" x2="'+(w-r)+'" y2="'+y(v).toFixed(1)+'" stroke="#385244" stroke-dasharray="3 6"/>'+
+  '<text x="'+(l-7)+'" y="'+(y(v)+4).toFixed(1)+'" text-anchor="end" fill="#c0d1c5" font-size="13">'+v+'</text>').join("");
+ const ticks=values.map((v,i)=>'<text x="'+x(i).toFixed(1)+'" y="215" text-anchor="middle" fill="#c0d1c5" font-size="13">วัน '+(i+1)+'</text>').join("");
+ return '<svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="ชีพจรเฉลี่ยจำลอง R'+slot.slice(1)+' 7 วัน">'+
+  '<title>DEMO DATA: เส้นแนวโน้มชีพจรสมมติ '+slot+' ไม่ใช่ข้อมูลเซนเซอร์</title>'+
+  grid+'<polyline points="'+line+'" fill="none" stroke="'+color+'" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>'+circles+ticks+'</svg>';
+}
+function clearTrainingPreview(){
+ byId("trainingPreview").hidden=true;
+ byId("trainingPreviewToggle").setAttribute("aria-pressed","false");
+ byId("trainingPreviewToggle").textContent="กราฟสาธิต R01 / R02";
+ for(const id of ["trainingPreviewR01","trainingPreviewR02","trainingPreviewDays"])byId(id).replaceChildren();
+}
+function openTrainingPreview(){
+ for(const [slot,values] of Object.entries(trainingPreviewSamples))
+  byId("trainingPreview"+slot).innerHTML=trainingPreviewSvg(slot,values);
+ const days=byId("trainingPreviewDays");
+ days.replaceChildren();
+ for(let day=1;day<=7;day++){
+  const label=document.createElement("label"),caption=document.createElement("span"),input=document.createElement("input");
+  label.className="preview-activity";
+  caption.textContent="วันที่ "+day;
+  input.type="text";input.maxLength=80;input.placeholder="ระบุกิจกรรม (ตัวอย่าง)";
+  input.setAttribute("aria-label","กิจกรรมสาธิตวันที่ "+day);
+  label.append(caption,input);days.append(label);
+ }
+ byId("trainingPreview").hidden=false;
+ byId("trainingPreviewToggle").setAttribute("aria-pressed","true");
+ byId("trainingPreviewToggle").textContent="ปิดกราฟสาธิต";
+ byId("trainingPreview").scrollIntoView?.({behavior:"smooth",block:"start"});
+}
+byId("trainingPreviewToggle").onclick=()=>{
+ if(byId("trainingPreview").hidden)openTrainingPreview();
+ else clearTrainingPreview();
+};
+byId("trainingPreviewReset").onclick=clearTrainingPreview;
+
 let historyCode=null;
 function archiveAllowed(){return operatorRole==="trainer"||operatorRole==="medic";}
 function historyIsLive(slot){
@@ -989,9 +1078,9 @@ document.getElementById('demoRestore').onclick=()=>demoAction('restore');
 document.getElementById('demoStop').onclick=()=>demoAction('stop');
 async function contextStatus(){try{const r=await fetch("/api/context",{credentials:"same-origin",cache:"no-store"});if(!r.ok)return;const d=await r.json();document.getElementById("conditions").textContent=d.timestamp?(d.stale?"WBGT: ค่าเก่ากว่า 30 นาที ต้องวัดใหม่":"WBGT (กรอกมือ): "+d.wbgtC+" °C • "+new Date(d.timestamp).toLocaleTimeString("th-TH")):"WBGT: ยังไม่มีข้อมูลการวัด";}catch{document.getElementById("conditions").textContent="WBGT: ตรวจข้อมูลไม่ได้";}}
 async function snapshot(){const epoch=viewEpoch;try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(epoch!==viewEpoch)return;if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(epoch!==viewEpoch)return;transportUp=true;draw(data);await gatewayStatus();await contextStatus();}catch(e){if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='DISCONNECTED — โหลดข้อมูลไม่สำเร็จ';}}
-function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;operatorRole=null;
+function disconnect(){clearTrainingPreview();byId("trainingPreviewToggle").hidden=true;viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;operatorRole=null;
 byId("medicPanel").open=false;byId("medicPanel").hidden=true;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statMedicPending','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
-function connect(){const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
+function connect(){byId("trainingPreviewToggle").hidden=false;const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
  events.onopen=()=>{if(epoch!==viewEpoch)return;transportUp=true;conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
  events.onmessage=e=>{if(epoch!==viewEpoch)return;try{transportUp=true;draw(JSON.parse(e.data))}catch{}};
  snapshot();loadGroupPhase();refreshMedicPending();loadRoster().catch(()=>{byId("rosterStatus").textContent="โหลดข้อมูลผู้ฝึกไม่สำเร็จ";byId("rosterBox").hidden=true;});
