@@ -8,6 +8,7 @@ import { DurableState } from "./durable-state.js";
 import { RollingArchive, HISTORY_HOURS } from "./rolling-archive.js";
 import { PrivateProfiles } from "./private-profiles.js";
 import { MedicReviews, describeSignal } from "./medic-review.js";
+import { AutoHRMonitor } from "./auto-hr-monitor.js";
 import { trainingSummary } from "./training-summary.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
@@ -24,6 +25,7 @@ const durable=new DurableState();
 const archive=new RollingArchive(durable);
 const privateProfiles=new PrivateProfiles();
 const medicReviews=new MedicReviews();
+const autoHR=new AutoHRMonitor();
 let writeQueue=Promise.resolve(),historyDirty=false;
 function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
  profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions};}
@@ -75,7 +77,9 @@ function snapshot(){const now=Date.now();
   const gatewayOnline=gateway!=null && now-(lastByGateway.get(gateway)??0)<=TTL_MS;
   const state=paused?"PAUSED":r?.state==="DISCONNECTED"?"DISCONNECTED":!r?.timestamp?"NO DATA":
     (!gatewayOnline||now-r.timestamp>TTL_MS)?"STALE":"CONNECTED";
-  return {id,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
+  const code=roster.get(id).code,rev=code?medicReviews.get(id,code):null;
+  const autoCheck=!!(rev?.status==="pending"&&rev?.openedBy==="system");
+  return {id,autoCheck,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
    stale:state!=="CONNECTED",state,paused,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
 function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
@@ -313,7 +317,7 @@ const server=http.createServer(async(req,res)=>{
    const firstAssignment=previous.code===null&&current.code!==null;
    if(action==="replace"||wearerChanged||firstAssignment){
     // Never attribute a previously measured BPM to a new wearer.
-    recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);
+    recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);autoHR.reset(slot);
     await archive.forget(slot);
     reassignmentCutoff.set(slot,Date.now());publish();
    }else if(action==="resume")publish();
@@ -364,7 +368,7 @@ const server=http.createServer(async(req,res)=>{
   if(!body||typeof body.gateway!=="string"||!/^G0[1-5]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>15){send(res,422,{error:"invalid gateway or batch"});return;}
   if(strictMode&&gatewayId!==body.gateway){send(res,403,{error:"gateway identity mismatch"});return;}
   if(SYNTHETIC ? body.source!=="SIMULATED" : body.source!=null && body.source!=="GATEWAY"){send(res,422,{error:"source does not match server mode"});return;}
-  const now=Date.now();let accepted=0;
+  const now=Date.now();let accepted=0,autoCreated=0;
   const seen=new Set();
   for(const item of body.readings){
    if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)|| (item.state!=="DISCONNECTED" && (!Number.isInteger(item.hr)||item.hr<25||item.hr>240))||!Number.isSafeInteger(item.timestamp)||item.timestamp>now+1000||item.timestamp<now-MAX_AGE_MS)continue;
@@ -379,14 +383,34 @@ const server=http.createServer(async(req,res)=>{
     eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});
    // Only enrolled recruits with genuine accepted HR measurements create history.
    // NO DATA/disconnect and unregistered slots produce no history points.
+   if(disconnected)autoHR.reset(item.id);
    if(!disconnected&&roster.get(item.id).code){
+    const code=roster.get(item.id).code;
     if(pulseHistory.record(item.id,item.hr,item.timestamp,now))historyDirty=true;
-    archive.record(item.id,roster.get(item.id).code,item.hr,item.timestamp,now);
+    archive.record(item.id,code,item.hr,item.timestamp,now);
+    // Never run automated medical claims on synthetic data or guessed thresholds.
+    const profile=privateProfiles.get(item.id,code);
+    const limit=profile.reviewThresholdConfirmed?profile.reviewThresholdBpm:null;
+    const decision=autoHR.ingest(item.id,code,item.hr,item.timestamp,limit,
+     {training:roster.getGroupPhase().phase==="training",real:!SYNTHETIC});
+    if(decision.trigger){
+     const outcome=medicReviews.autoRequest(item.id,code,"high_sustained",now);
+     if(outcome.created)autoCreated++;
+    }
    }
    accepted++;
   }
   lastByGateway.set(body.gateway,now);
-  if(accepted)publish();send(res,200,{accepted,received:body.readings.length,request_id:randomUUID()});return;
+  if(autoCreated){
+   // Alert is surfaced immediately even if archive persistence fails; never
+   // claim durable confirmation on storage failure.
+   try{await persistState();}catch{
+    if(accepted)publish();
+    send(res,503,{error:"automatic review pending but encrypted persistence failed",accepted,autoCreated});
+    return;
+   }
+  }
+  if(accepted)publish();send(res,200,{accepted,received:body.readings.length,autoCreated,request_id:randomUUID()});return;
  }
  send(res,404,{error:"not found"});
 });

@@ -1,12 +1,12 @@
 import {slotIDs} from "./roster.js";
 const valid=new Set(slotIDs);
-const blank=(slot,code)=>({slot,code,weightKg:null,heightCm:null,ageYears:null,medications:"",restingBaselineBpm:null,baselineConfirmed:false,conditions:"",version:0,updatedAt:null});
+const blank=(slot,code)=>({slot,code,weightKg:null,heightCm:null,ageYears:null,medications:"",restingBaselineBpm:null,baselineConfirmed:false,reviewThresholdBpm:null,reviewThresholdConfirmed:false,conditions:"",version:0,updatedAt:null});
 const reject=(status,message)=>{const e=new Error(message);e.status=status;throw e;};
 export function bmi(weightKg,heightCm){
  if(!Number.isFinite(weightKg)||!Number.isFinite(heightCm)||heightCm<=0)return null;
  return Math.round((weightKg/((heightCm/100)**2))*10)/10;
 }
-const withBmi=p=>({ageYears:null,medications:"",restingBaselineBpm:null,baselineConfirmed:false,...p,bmi:bmi(p.weightKg,p.heightCm)});
+const withBmi=p=>({ageYears:null,medications:"",restingBaselineBpm:null,baselineConfirmed:false,reviewThresholdBpm:null,reviewThresholdConfirmed:false,...p,bmi:bmi(p.weightKg,p.heightCm)});
 export class PrivateProfiles {
  constructor(){this.records={};}
  export(){return structuredClone(this.records);}
@@ -21,7 +21,9 @@ export class PrivateProfiles {
       (p.ageYears!==undefined&&p.ageYears!==null&&(!Number.isInteger(p.ageYears)||p.ageYears<16||p.ageYears>85))||
       (p.medications!==undefined&&(typeof p.medications!=="string"||p.medications.length>240))||
       (p.restingBaselineBpm!==undefined&&p.restingBaselineBpm!==null&&(!Number.isInteger(p.restingBaselineBpm)||p.restingBaselineBpm<25||p.restingBaselineBpm>240))||
-      (p.baselineConfirmed!==undefined&&typeof p.baselineConfirmed!=="boolean"))throw Error("Invalid private clinical profile");
+      (p.baselineConfirmed!==undefined&&typeof p.baselineConfirmed!=="boolean")||
+      (p.reviewThresholdBpm!==undefined&&p.reviewThresholdBpm!==null&&(!Number.isInteger(p.reviewThresholdBpm)||p.reviewThresholdBpm<60||p.reviewThresholdBpm>220))||
+      (p.reviewThresholdConfirmed!==undefined&&typeof p.reviewThresholdConfirmed!=="boolean"))throw Error("Invalid private clinical profile");
   }
   this.records=structuredClone(data);
  }
@@ -42,6 +44,9 @@ export class PrivateProfiles {
   const medications=input.medications===undefined?p.medications:input.medications;
   const restingBaselineBpm=input.restingBaselineBpm===undefined?p.restingBaselineBpm:input.restingBaselineBpm===null||input.restingBaselineBpm===""?null:Number(input.restingBaselineBpm);
   const baselineConfirmed=input.baselineConfirmed===undefined?p.baselineConfirmed:input.baselineConfirmed;
+  const reviewThresholdBpm=input.reviewThresholdBpm===undefined?p.reviewThresholdBpm:
+   input.reviewThresholdBpm===null||input.reviewThresholdBpm===""?null:Number(input.reviewThresholdBpm);
+  const reviewThresholdConfirmed=input.reviewThresholdConfirmed===undefined?p.reviewThresholdConfirmed:input.reviewThresholdConfirmed;
   if(weightKg!==null&&(!Number.isFinite(weightKg)||weightKg<20||weightKg>300))reject(422,"Weight must be between 20 and 300 kg");
   if(heightCm!==null&&(!Number.isFinite(heightCm)||heightCm<80||heightCm>230))reject(422,"Height must be between 80 and 230 cm");
   if(typeof conditions!=="string"||conditions.length>300||/[<>\u0000-\u001f]/.test(conditions))
@@ -54,8 +59,14 @@ export class PrivateProfiles {
    reject(422,"Invalid individually measured resting baseline");
   if(typeof baselineConfirmed!=="boolean"||(restingBaselineBpm!==null&&!baselineConfirmed))
    reject(422,"Resting baseline requires operator verification");
+  if(reviewThresholdBpm!==null&&(!Number.isInteger(reviewThresholdBpm)||reviewThresholdBpm<60||reviewThresholdBpm>220))
+   reject(422,"Individual review alert threshold must be an integer between 60 and 220");
+  if(typeof reviewThresholdConfirmed!=="boolean"||
+   (reviewThresholdBpm!==null&&!reviewThresholdConfirmed))
+   reject(422,"Individual alert threshold requires clinician approval and confirmation");
   const next={slot,code,weightKg,heightCm,ageYears,medications:medications.trim(),
     restingBaselineBpm,baselineConfirmed:restingBaselineBpm!==null&&baselineConfirmed,
+    reviewThresholdBpm,reviewThresholdConfirmed:reviewThresholdBpm!==null&&reviewThresholdConfirmed,
     conditions:conditions.trim(),version:p.version+1,updatedAt:Date.now()};
   this.records[slot]=next;return withBmi(structuredClone(next));
  }

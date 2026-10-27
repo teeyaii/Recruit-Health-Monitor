@@ -35,3 +35,12 @@ test("gateway modern presentation retains all actual BLE and auth controls",()=>
  assert.match(gateway,/paintGatewayOverview\(\)/);
  assert.match(gateway,/NO DATA/);
 });
+
+test("automatic pause/check stays visible per anonymous wearer without medical profile leakage",()=>{
+ for(const id of ["autoPauseAlerts","autoAlertStat","statAutoCheck","privateAlertLimit","privateAlertConfirmed"])
+  assert.match(live,new RegExp('id="'+id+'"'));
+ assert.match(live,/autoCases\.push\(r\.id\)/);
+ assert.match(live,/พักกิจกรรมและตรวจผู้สวมทันที/);
+ assert.match(live,/refreshMedicPending\(\)/);
+ assert.doesNotMatch(live,/window\.Notification\.requestPermission/);
+});

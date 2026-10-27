@@ -249,11 +249,32 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .baseline-confirm input{width:20px;height:20px;min-height:20px;min-width:20px;accent-color:#a6d5a9}
 @media(max-width:650px){.medic-review-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+
+/* Safety workflow: prominent precautionary pause/check without false medical diagnosis. */
+.command-stats .auto-alert-stat{border-color:#d2a06e;background:linear-gradient(150deg,#573b2c,#35251f)}
+.command-stats .auto-alert-stat b{color:#ffdda8}
+.auto-pause-panel{margin:10px 0 18px;padding:15px 17px;background:linear-gradient(140deg,#533825,#32251e);border:1px solid #dfac70;border-left:5px solid #eab26c;border-radius:14px;box-shadow:0 9px 22px #0003}
+.auto-pause-panel>strong{display:block;color:#ffe0b3;font-size:clamp(1.05rem,1.7vw,1.35rem)}
+.auto-pause-panel small{display:block;color:#e0c7aa;font-size:.77rem;margin-top:11px;line-height:1.55}
+.auto-alert-slot{display:inline-block;font-size:.97rem;font-weight:800;margin:10px 7px 0 0;padding:7px 12px;border:1px solid #d2a06e;background:#422e25;color:#fff1d5;border-radius:8px}
+.card.alert-auto-check{border-left:4px solid #dfaa6e;border-color:#a67754;background:linear-gradient(145deg,#3b3026,#26261f)}
+.card.alert-auto-check .status-chip{border-color:#cf975d;color:#ffd39a}
+.auto-alert-config{margin:14px 0 6px;padding:12px;border:1px solid #557a60;background:#182d22;border-radius:12px}
+.auto-alert-config>small{display:block;color:#abc7b1;font-size:.77rem;margin-top:8px;line-height:1.55}
+.auto-alert-config input[type=number]{width:100%}
+
+
+.command-alert-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.command-alert-controls button{min-height:44px}
+#enableAlertSound{background:#28372b;border-color:#8cab89;color:#daebd7}
+#enableAlertSound[aria-pressed="true"]{background:#b8dba8;border-color:#c5edb9;color:#14301e}
+@media(max-width:480px){.command-alert-controls{width:100%}.command-alert-controls button{flex:1;min-width:140px}}
+
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
 <header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
-<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div>
+<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
 <section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
 <div class="stat"><span>ลงทะเบียนแล้ว</span><b id="statTotal">—</b></div>
 <div class="stat live"><span>รับสัญญาณ LIVE</span><b id="statLive">—</b></div>
@@ -261,6 +282,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 <div class="stat watch"><span>WATCH</span><b id="statWatch">0</b></div>
 <div class="stat paused"><span>EMERGENCY</span><b id="statPaused">—</b></div>
 <div class="stat medic-review-stat"><span>รอประเมิน MEDIC</span><b id="statMedicPending">—</b></div>
+<div class="stat auto-alert-stat" id="autoAlertStat" hidden><span>พักและตรวจทันที</span><b id="statAutoCheck">0</b></div>
 <div class="stat"><span>ช่องที่เหลือ</span><b id="statUnregistered">—</b></div>
 </section>
 <p id="cohortNotice" class="status-note" role="status"></p>
@@ -279,6 +301,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  <p id="groupPhaseMessage" role="status"></p>
 </section>
 <div id="emergencyAlerts" class="alert-panel" role="alert" hidden></div>
+<div id="autoPauseAlerts" class="auto-pause-panel" role="alert" hidden></div>
 
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
 <div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
@@ -320,6 +343,12 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
    <label>Baseline ชีพจรขณะพัก (BPM)<input id="privateBaseline" type="number" inputmode="numeric" min="25" max="240" step="1" autocomplete="off" placeholder="วัดขณะพักจริง"></label>
   </div>
   <label class="baseline-confirm"><input id="privateBaselineConfirmed" type="checkbox"> ยืนยันว่าค่า Baseline มาจากการวัดและทบทวนโดยเจ้าหน้าที่</label>
+  <div class="auto-alert-config">
+   <label>ระดับ BPM แจ้งเตือนเพื่อพักและตรวจ (เฉพาะบุคคล)
+    <input id="privateAlertLimit" type="number" min="60" max="220" step="1" inputmode="numeric" placeholder="เจ้าหน้าที่แพทย์กำหนด"></label>
+   <label class="baseline-confirm"><input id="privateAlertConfirmed" type="checkbox"> ยืนยันว่าเกณฑ์นี้ผ่านการพิจารณาของเจ้าหน้าที่แพทย์แล้ว</label>
+   <small>กำหนดครั้งเดียวต่อผู้สวม • เมื่อกำลังฝึกและ BPM สูงต่อเนื่อง ระบบจะแจ้งเตือนและเปิด Medic Review อัตโนมัติ ไม่มีค่าเริ่มต้น</small>
+  </div>
   <label>ยา / ข้อควรระวังเกี่ยวกับยา<textarea id="privateMedications" maxlength="240" autocomplete="off" spellcheck="false"></textarea></label>
   <label>โรคประจำตัว / ข้อควรระวัง
    <textarea id="privateConditions" maxlength="300" autocomplete="off" spellcheck="false"></textarea>
@@ -376,6 +405,37 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  </section>
 <script>
 "use strict";
+let lastAutomaticAlerts=new Set(),alertSoundEnabled=false,alertAudio=null;
+function playAutoAlertSound(){
+ if(!alertSoundEnabled||!alertAudio)return;
+ try{
+  const t=alertAudio.currentTime;
+  for(let i=0;i<2;i++){
+   const oscillator=alertAudio.createOscillator(),gain=alertAudio.createGain();
+   oscillator.type="sine";oscillator.frequency.value=780;
+   gain.gain.setValueAtTime(0.0001,t+i*0.38);
+   gain.gain.exponentialRampToValueAtTime(0.12,t+i*0.38+0.02);
+   gain.gain.exponentialRampToValueAtTime(0.0001,t+i*0.38+0.24);
+   oscillator.connect(gain);gain.connect(alertAudio.destination);
+   oscillator.start(t+i*0.38);oscillator.stop(t+i*0.38+0.26);
+  }
+ }catch{alertSoundEnabled=false;byId("enableAlertSound").textContent="เสียงเตือนไม่พร้อม";}
+}
+document.getElementById("enableAlertSound").onclick=async()=>{
+ if(alertSoundEnabled){
+  alertSoundEnabled=false;byId("enableAlertSound").setAttribute("aria-pressed","false");
+  byId("enableAlertSound").textContent="เปิดเสียงเตือน";return;
+ }
+ try{
+  const AudioClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioClass)throw Error("unsupported");
+  if(!alertAudio)alertAudio=new AudioClass();
+  await alertAudio.resume();
+  if(alertAudio.state!=="running")throw Error("audio blocked");
+  alertSoundEnabled=true;byId("enableAlertSound").setAttribute("aria-pressed","true");
+  byId("enableAlertSound").textContent="เสียงเตือนเปิดอยู่";
+ }catch{alertSoundEnabled=false;byId("enableAlertSound").textContent="เสียงเตือนไม่พร้อม";}
+};
 let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,operatorRole=null,viewEpoch=0,historySlot=null,historyHours=4,historyRequest=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
@@ -385,13 +445,14 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   cards.innerHTML='<p class="notice">กำลังโหลดทะเบียน...</p>';
   for(const id of ["statTotal","statLive","statNoData","statWatch","statPaused","statMedicPending","statUnregistered"])byId(id).textContent="—";
   byId("cohortNotice").textContent="";
-  panel.hidden=true;panel.innerHTML="";
+  panel.hidden=true;panel.innerHTML="";byId("autoPauseAlerts").hidden=true;byId("autoPauseAlerts").textContent="";byId("autoAlertStat").hidden=true;lastAutomaticAlerts.clear();
   summary.textContent="รอข้อมูลทะเบียน";
   return;
  }
  const profiles=new Map(rosterData.slots.map(p=>[p.id,p]));
  const enrolled=rosterData.slots.filter(p=>typeof p.code==="string"&&p.code.length>0).length;
  let fresh=0,watchCount=0,emergencyCount=0,pending=0;
+ const autoCases=[];
  const critical=[];
  const shown=data.recruits.filter(r=>{
   const p=profiles.get(r.id),registered=!!p?.code;
@@ -409,11 +470,11 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const severity=profile?.observation==="confusion_collapse_seizure"?"emergency":profile?.observation==="dizzy_weak_nausea"?"stop":null;
   const emergencyFlag=registered&&severity==="emergency";
   const watchFlag=registered&&!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
-  if(registered){if(!stale)fresh++;if(watchFlag)watchCount++;if(emergencyFlag){emergencyCount++;critical.push({id:r.id,acknowledged:!!profile.acknowledged});}}
-  const chip=!registered?"PENDING REGISTRATION":emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":"MONITOR";
+  if(registered){if(r.autoCheck)autoCases.push(r.id);if(!stale)fresh++;if(watchFlag)watchCount++;if(emergencyFlag){emergencyCount++;critical.push({id:r.id,acknowledged:!!profile.acknowledged});}}
+  const chip=!registered?"PENDING REGISTRATION":emergencyFlag?"EMERGENCY":r.autoCheck?"PAUSE / CHECK":watchFlag?"WATCH":r.paused?"PAUSED":"MONITOR";
   const note=severity==="emergency"?"ฉุกเฉิน: หยุดกิจกรรมและเรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
     profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังใกล้ชิดตามผู้รับผิดชอบ":"";
-  const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
+  const alertClass=emergencyFlag?"alert-emergency":r.autoCheck?"alert-auto-check":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
   return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
@@ -421,6 +482,16 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
  panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>รับทราบเหตุแล้วก็ยังเป็น EMERGENCY จนกว่าจะประเมินและแก้ไขเหตุโดยเจ้าหน้าที่</small>':'';
+ const alertBox=byId("autoPauseAlerts");
+ alertBox.hidden=autoCases.length===0;
+ alertBox.innerHTML=autoCases.length?'<strong>พักกิจกรรมและตรวจผู้สวมทันที • '+autoCases.length+' นาย</strong>'+
+  '<div>'+autoCases.map(id=>'<span class="auto-alert-slot">'+escapeHtml(id)+'</span>').join("")+'</div>'+
+  '<small>ระบบพบ BPM สูงต่อเนื่องเกินเกณฑ์เฉพาะบุคคลที่เจ้าหน้าที่รับรอง • ตรวจอาการและยืนยันค่าจากอุปกรณ์ก่อนดำเนินการตาม SOP • ไม่ใช่การวินิจฉัย</small>':"";
+ byId("autoAlertStat").hidden=autoCases.length===0;
+ byId("statAutoCheck").textContent=String(autoCases.length);
+ const newAuto=autoCases.some(id=>!lastAutomaticAlerts.has(id));
+ lastAutomaticAlerts=new Set(autoCases);
+ if(newAuto){refreshMedicPending();playAutoAlertSound();}
  byId("statTotal").textContent=enrolled;
  byId("statLive").textContent=fresh;
  byId("statNoData").textContent=Math.max(0,enrolled-fresh);
@@ -662,8 +733,8 @@ function updatePrivateBmi(){
 }
 function clearPrivate(){
  privateSlot=null;privateVersion=0;
- for(const id of ["privateWeight","privateHeight","privateAge","privateBaseline","privateConditions","privateMedications"])byId(id).value="";
- byId("privateBaselineConfirmed").checked=false;
+ for(const id of ["privateWeight","privateHeight","privateAge","privateBaseline","privateAlertLimit","privateConditions","privateMedications"])byId(id).value="";
+ byId("privateBaselineConfirmed").checked=false;byId("privateAlertConfirmed").checked=false;
  byId("privateStatus").textContent="เลือกผู้สวมที่ลงทะเบียนแล้ว";updatePrivateBmi();
 }
 async function loadPrivateProfile(){
@@ -683,6 +754,8 @@ async function loadPrivateProfile(){
   byId("privateMedications").value=data.profile.medications||"";
   byId("privateBaseline").value=data.profile.restingBaselineBpm??"";
   byId("privateBaselineConfirmed").checked=!!data.profile.baselineConfirmed;
+  byId("privateAlertLimit").value=data.profile.reviewThresholdBpm??"";
+  byId("privateAlertConfirmed").checked=!!data.profile.reviewThresholdConfirmed;
   updatePrivateBmi();byId("privateStatus").textContent="พร้อมแก้ไข • เก็บในระบบเข้ารหัส";
  }catch(e){if(epoch===viewEpoch)byId("privateStatus").textContent=e.message;}
 }
@@ -696,7 +769,9 @@ byId("privateSave").onclick=async()=>{
    heightCm:byId("privateHeight").value||null,conditions:byId("privateConditions").value,
    ageYears:byId("privateAge").value||null,medications:byId("privateMedications").value,
    restingBaselineBpm:byId("privateBaseline").value||null,
-   baselineConfirmed:byId("privateBaselineConfirmed").checked};
+   baselineConfirmed:byId("privateBaselineConfirmed").checked,
+   reviewThresholdBpm:byId("privateAlertLimit").value||null,
+   reviewThresholdConfirmed:byId("privateAlertConfirmed").checked};
   const r=await fetch("/api/private-profile/"+p.id,{method:"PUT",credentials:"same-origin",
    headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   if(!r.ok)throw Error("บันทึกไม่สำเร็จ (HTTP "+r.status+")");
