@@ -421,7 +421,7 @@ function playAutoAlertSound(){
   }
  }catch{alertSoundEnabled=false;byId("enableAlertSound").textContent="เสียงเตือนไม่พร้อม";}
 }
-byId("enableAlertSound").onclick=async()=>{
+document.getElementById("enableAlertSound").onclick=async()=>{
  if(alertSoundEnabled){
   alertSoundEnabled=false;byId("enableAlertSound").setAttribute("aria-pressed","false");
   byId("enableAlertSound").textContent="เปิดเสียงเตือน";return;
