@@ -230,7 +230,7 @@ test('quick R01/R02 taps preserve gesture and verify physical suffix',async()=>{
 });
 test('expiry stops both bands, clears BPM and offers login without opening chooser',async()=>{
  const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();
- h.tick(7200001);await drain();assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('quickR01').disabled,true);assert.equal(h.calls.length,2);
+ h.tick(36000001);await drain();assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('quickR01').disabled,true);assert.equal(h.calls.length,2);
  assert.equal(a.gatt.connected,false);assert.equal(b.gatt.connected,false);
 });
 test('server-revoked cookie clears live sessions instead of presenting unauthorized readings',async()=>{
