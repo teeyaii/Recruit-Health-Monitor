@@ -93,16 +93,21 @@ export class RosterStore {
  }
  update(id,input,actor){
   const p=this.get(id);validateVersion(input,p);
-  if(p.paused)problem(409,"slot paused; verify new band then resume");
   const code=validateCode(input?.code);
-  if(p.code!==null&&!sameCode(p.code,code))problem(409,"use Replace to change occupant");
+  const reassigned=p.code!==null&&!sameCode(p.code,code);
+  // Changing the wearer in a single Save clears old observations and BPM at
+  // the API layer. Never allow a code edit to silently dismiss an emergency.
+  if(reassigned&&p.observation==="confusion_collapse_seizure")
+   problem(409,"active EMERGENCY: resolve and document the event before reassigning a wearer");
   if(slotIDs.some(other=>other!==id&&sameCode(this.data.slots[other].code,code)))
    problem(409,"anonymous code already active on another slot");
   if(!restrictions.has(input?.restriction)||!observations.has(input?.observation)||!activities.has(input?.activity??p.activity))problem(422,"invalid restriction, observation or activity");
-  const observation=input.observation;
-  const next={...p,code,restriction:input.restriction,observation,activity:input.activity??p.activity,
-    acknowledged:observation===p.observation?p.acknowledged:false};
-  return this.commit(id,p,next,actor,"update");
+  const observation=reassigned?"none":input.observation;
+  const next={...p,code,paused:false,
+    restriction:reassigned?"none":input.restriction,observation,
+    activity:reassigned?"not_reported":input.activity??p.activity,
+    acknowledged:reassigned?false:observation===p.observation?p.acknowledged:false};
+  return this.commit(id,p,next,actor,reassigned?"reassign_via_save":p.paused?"resume_via_save":"update");
  }
  replace(id,input,actor){
   const p=this.get(id);validateVersion(input,p);
