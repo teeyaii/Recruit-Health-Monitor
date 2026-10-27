@@ -46,6 +46,20 @@ body.presentation .grid{gap:16px}
 body.presentation .card{min-height:210px}
 @media(max-width:800px){.command-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:480px){.command-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat{padding:11px}.command-bar{align-items:stretch}.command-bar button{width:100%}}
+.signal-line{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px;font-size:.78rem}.signal-line span:last-child{font-weight:800}.signal-ok{color:#a1dfb4}.signal-lost{color:#f2aaa4}.risk-watch{color:#edc783}.risk-emergency{color:#ff8585}.risk-normal{color:#b8cbb8}.alert-panel{border:2px solid #d76d68;background:#382124;border-radius:14px;padding:14px 18px;margin:14px 0}.alert-panel strong{color:#ffb0aa}.alert-panel button{margin:7px 8px 0 0}.alert-panel small{display:block;margin-top:6px}.status-note{color:#a9baa9;font-size:.78rem}.command-stats{scroll-margin-top:12px}body.presentation #gateways,body.presentation #conditions{display:block}body.presentation .notice{font-size:.8rem;padding:8px}body.presentation #summary{margin:8px 0}body.presentation .card{min-height:190px}@media(min-width:1100px){body.presentation .card{padding:14px}}
+/* Refined tactical presentation polish */
+:root{--tactical-edge:#3e5548;--tactical-glow:#b4d6a6}
+header h1{line-height:1.25;text-wrap:balance}
+.command-bar{padding:4px 0 8px}
+.command-stats .stat{background:linear-gradient(160deg,#1f3028,#151f1b);box-shadow:inset 0 1px 0 #ffffff0c,0 6px 20px #0003;transition:border-color .2s,transform .2s}
+.command-stats .stat:hover{border-color:#7c9b80;transform:translateY(-2px)}
+.card{position:relative;overflow:hidden}
+.card:before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,#9bc39b50,transparent);pointer-events:none}
+.card .status-chip{letter-spacing:.11em}
+.alert-panel{box-shadow:0 0 0 1px #ff969622,0 8px 28px #0005}
+#gateways,#conditions{padding:5px 0}
+button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
 <header><h1>STEVE 1.0 <span style="color:#a8c49d">/ TACTICAL COMMAND</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="command-bar"><div><div class="command-eyebrow">FIELD OPERATIONS / HEALTH TELEMETRY</div><small>STEVE • RECRUIT MONITORING / 15 SLOTS</small></div><button id="presentationToggle" type="button" aria-pressed="false">เปิดโหมดนำเสนอ</button></div>
@@ -56,6 +70,7 @@ body.presentation .card{min-height:210px}
 <div class="stat watch"><span>WATCH / เฝ้าระวังใกล้ชิด</span><b id="statWatch">0</b></div>
 <div class="stat paused"><span>EMERGENCY / อันตราย</span><b id="statPaused">0</b></div>
 </section>
+<div id="emergencyAlerts" class="alert-panel" role="alert" hidden></div>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
 <div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
@@ -97,7 +112,7 @@ body.presentation .card{min-height:210px}
 let events=null,last=null,transportUp=false,rosterData=null;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
- const now=Date.now();let fresh=0,watchCount=0,pausedCount=0;
+ const now=Date.now();let fresh=0,watchCount=0,pausedCount=0;const critical=[];
  cards.innerHTML=data.recruits.map(r=>{
   const age=Number.isFinite(r.timestamp)?Math.max(0,now-r.timestamp):Infinity;
   const stale=!transportUp||r.stale||age>15000||!Number.isInteger(r.hr);
@@ -108,12 +123,17 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
     profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังตามผู้รับผิดชอบ":"";
   const emergencyFlag=severity==="emergency";
   const watchFlag=!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
-  if(watchFlag)watchCount++;if(emergencyFlag)pausedCount++;
+  if(watchFlag)watchCount++;if(emergencyFlag){pausedCount++;critical.push({id:r.id,acknowledged:!!profile?.acknowledged});}
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   if(!stale)fresh++;
-  const chip=emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":stale?"NO DATA":"LIVE";
-  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><small>'+(stale?'ไม่มีข้อมูลปัจจุบัน':Math.round(age/1000)+' วินาทีที่แล้ว')+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  const chip=emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":"NO ALERT";
+  const signal=stale?"NO DATA":"LIVE";
+  const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ขาดสัญญาณ "+(age>=60000?Math.floor(age/60000)+" นาที ":"")+Math.floor((age%60000)/1000)+" วินาที":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
+  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><div class="signal-line"><span>HEALTH STATUS</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>TELEMETRY</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
+ const panel=byId("emergencyAlerts");
+ panel.hidden=critical.length===0;
+ panel.innerHTML=critical.length?'<strong>EMERGENCY / ต้องหยุดกิจกรรมและเรียกเจ้าหน้าที่แพทย์ทันที ('+critical.length+')</strong><div>'+critical.map(x=>'<div>'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>การรับทราบไม่ยกเลิกสถานะฉุกเฉิน ต้องให้ผู้รับผิดชอบประเมินและแก้ไขเหตุแยกต่างหาก</small>':'';
  byId("statTotal").textContent=data.recruits.length;
  byId("statLive").textContent=fresh;
  byId("statNoData").textContent=data.recruits.length-fresh;
@@ -123,6 +143,13 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
 }
 
 const byId=id=>document.getElementById(id);
+byId("emergencyAlerts").onclick=async e=>{
+ const slot=e.target.closest("button[data-ack-slot]")?.dataset.ackSlot;
+ if(!slot)return;
+ if(!rosterData){alert("กรุณาเข้าสู่ระบบด้วยสิทธิ์ผู้ฝึกหรือแพทย์ก่อนรับทราบเหตุ");return;}
+ const selector=byId("rosterSlot");selector.value=slot;fillRoster();
+ try{await byId("rosterAcknowledge").click();}catch{byId("rosterStatus").textContent="รับทราบเหตุไม่สำเร็จ กรุณาตรวจสอบสิทธิ์";}
+};
 byId("presentationToggle").onclick=()=>{
  const on=document.body.classList.toggle("presentation");
  byId("presentationToggle").textContent=on?"ออกจากโหมดนำเสนอ":"เปิดโหมดนำเสนอ";
