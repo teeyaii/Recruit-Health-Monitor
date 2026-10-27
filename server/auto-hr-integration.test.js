@@ -64,7 +64,7 @@ test("6 real accepted readings open one encrypted automatic Medic Review that su
   assert.equal(r.status,200);
   let created=0;
   for(let i=0;i<6;i++){
-   const ts=baseTime+i*7000;await writeFile(clock,String(ts));
+   const ts=baseTime+(i+1)*7000;await writeFile(clock,String(ts));
    r=await req("/api/ingest",{method:"POST",token:g,json:{
     gateway:"G01",readings:[{id:"R01",device_id:"device_001",hr:160,timestamp:ts}]}});
    const body=await r.json();
