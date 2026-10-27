@@ -17,7 +17,7 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 .status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
 </style></head><body>
 <h1>STEVE 1.0</h1>
-<p class="muted">Web BLE Gateway Pilot • Bluefy battery v5 • foreground only</p>
+<p class="muted">Web BLE Gateway Pilot • Bluefy HR-first compatibility v6 • foreground only</p>
 <div class="card warning" role="alert">
 <strong>ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น — ไม่ใช่อุปกรณ์แพทย์</strong>
 <p>ต้องเปิดหน้านี้ค้างไว้ใน Bluefy ห้ามล็อกหน้าจอระหว่างทดสอบ ถ้าออกจากแอปหรือขาดข้อมูล ให้ถือว่าไม่มีข้อมูลสด ห้ามใช้ตัดสินว่าผู้ฝึกปลอดภัย</p>
@@ -35,8 +35,8 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 <p>บน Band 10 เปิด Share HR ก่อน แล้วกดเชื่อมต่อแต่ละช่อง R-slot ตามที่ผู้ทดสอบจับคู่อุปกรณ์จริงไว้ ห้ามกำหนดช่องจากลำดับที่สแกนพบ</p>
 <label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
 <label for="expected">รหัสท้ายชื่อ Band จากเรือนจริง (4 ตัว)<input id="expected" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="กรอกรหัสของเรือนที่จะผูกกับช่องนี้"></label>
-<label for="scanMode">โหมดสแกน<select id="scanMode"><option value="standard">A. Standard Heart Rate Scan</option><option value="broad">B. Broad BLE Scan — สแกนทั้งหมดเพื่อแก้ปัญหา</option><option value="known">C. เชื่อมอุปกรณ์ที่เคยอนุญาต (ถ้ารองรับ)</option></select></label>
-<p class="muted">ต้องเลือกชื่ออุปกรณ์ที่ตรงกับรหัสที่กรอก ระบบไม่จับคู่จากลำดับสแกน หากชื่อไม่แสดงรหัส จะยังไม่รับข้อมูล</p>
+<label for="scanMode">โหมดสแกน<select id="scanMode"><option value="standard">A. Standard Heart Rate Scan</option><option value="broad">B. Broad BLE Scan — สแกนทั้งหมดเพื่อแก้ปัญหา</option><option value="known">C. เชื่อมอุปกรณ์ที่เคยอนุญาต (ถ้ารองรับ)</option><option value="battery-standard">D. ทดลองอ่าน HR + Battery (Standard)</option><option value="battery-broad">E. ทดลองอ่าน HR + Battery (Broad)</option></select></label>
+<p class="muted">โหมด A/B ใช้เฉพาะ HR เพื่อเข้ากันได้กับ Bluefy; โหมด D/E ขอสิทธิ์แบตเตอรี่เพิ่มแบบทดลอง ถ้าหน้าเลือกอุปกรณ์ว่างให้กลับใช้ A/B ก่อน ค่าแบตเตอรี่ UNKNOWN ไม่กระทบ HR ต้องเลือกชื่ออุปกรณ์ที่ตรงกับรหัสที่กรอก ระบบไม่จับคู่จากลำดับสแกน</p>
 <button id="resetBle" class="secondary">Soft BLE Reset</button>
 <button id="connect" disabled>เชื่อมต่อ Band 10</button>
 <p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
@@ -177,7 +177,7 @@ function batteryWait(s,promise){
  });
 }
 async function readBattery(s){
- if(s.closed||document.hidden||!s.ready||s.batteryBusy||s.batteryUnavailable)return;
+ if(!s.batteryOptIn||s.closed||document.hidden||!s.ready||s.batteryBusy||s.batteryUnavailable)return;
  if(s.batteryAttemptAt!==undefined&&Date.now()-s.batteryAttemptAt<BATTERY_POLL)return;
  s.batteryBusy=true;s.batteryAttemptAt=Date.now();
  const current=()=>!s.closed&&!document.hidden&&live.get(s.slot)===s;
@@ -212,18 +212,22 @@ function matchesExpected(device,expected){
 }
 async function connectBand(slot,expected,mode){
  const automatic=mode==="auto"||mode==="autoLookup";
+  const batteryOptIn=mode==="battery-standard"||mode==="battery-broad"||(automatic&&Boolean(bindings.get(slot)?.batteryOptIn));
+  const broadScan=mode==="broad"||mode==="battery-broad";
  if(connecting||chooserPending){status("หน้าต่างเลือกยังไม่จบ • ปิดหน้าต่างเลือกก่อน หากค้างให้Soft BLE Reset");return;}
  if(!auth||!provision.some(p=>p.id===slot)||live.has(slot)){status("ช่องนี้เชื่อมต่ออยู่แล้ว หรือไม่ได้รับอนุญาต");return;}
  if(!/^[A-F0-9]{4}$/.test(expected)){status("กรอกรหัสท้ายชื่อ Band 4 ตัวที่ตรวจจากเรือนจริงก่อนเลือกอุปกรณ์");return;}
  connecting=true;controls();
- const s={slot,expected,mode,generation,lifecycle:"IDLE",assignment:provision.find(p=>p.id===slot).device_id,closed:false,ownsDevice:false,bpm:null,lastAt:null,ackAt:null,ack:"ยังไม่ส่ง",notifications:"ยังไม่สมัคร",error:"",busy:false,sentAt:0,sequence:0,...addTile(slot,expected,mode)};
+ const s={slot,expected,mode,batteryOptIn,generation,lifecycle:"IDLE",assignment:provision.find(p=>p.id===slot).device_id,closed:false,ownsDevice:false,bpm:null,lastAt:null,ackAt:null,ack:"ยังไม่ส่ง",notifications:"ยังไม่สมัคร",error:"",busy:false,sentAt:0,sequence:0,...addTile(slot,expected,mode)};
  live.set(slot,s);sessions.set(slot,s);attemptOwner=s;
  try{
   step(s,"capability");
   if(document.hidden||window.isSecureContext===false||typeof navigator.bluetooth?.requestDevice!=="function")throw {name:"NotSupportedError"};
   step(s,"chooser");
   // No asynchronous work before requestDevice: preserve the button's user gesture.
-  const options=mode==="broad"?{acceptAllDevices:true,optionalServices:[HR_SERVICE,"battery_service"]}:{filters:[{services:[HR_SERVICE]}],optionalServices:["battery_service"]};
+  const options=broadScan
+    ?{acceptAllDevices:true,optionalServices:batteryOptIn?[HR_SERVICE,"battery_service"]:[HR_SERVICE]}
+    :batteryOptIn?{filters:[{services:[HR_SERVICE]}],optionalServices:["battery_service"]}:{filters:[{services:[HR_SERVICE]}]};
   if(mode==="auto"&&bindings.get(slot)?.device){
    s.device=bindings.get(slot).device;
   }else if(mode==="known"||automatic){
@@ -293,7 +297,7 @@ async function connectBand(slot,expected,mode){
   await bounded(s,s.characteristic.startNotifications());
   validAttempt(s);
   s.characteristic.addEventListener("characteristicvaluechanged",s.onValue);
-  bindings.set(slot,{id:s.device.id,expected,device:s.device,autoEnabled:true});
+  bindings.set(slot,{id:s.device.id,expected,device:s.device,autoEnabled:true,batteryOptIn});
   s.ready=true;s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   readBattery(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
