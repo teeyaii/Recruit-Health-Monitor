@@ -21,6 +21,29 @@ if(await page.locator('#statLive').textContent()!=='2')throw Error('live count')
 if(await page.locator('.card-personnel-code').allTextContents().then(a=>a.join('|'))!=='DEMO-R01|DEMO-R02')throw Error('recruit codes not shown first');
 if(await page.locator('.card-slot-label').allTextContents().then(a=>a.join('|').includes('R01')&&a.join('|').includes('R02'))!==true)throw Error('R-slot label absent');
 if(!await page.locator('#rosterBox').textContent().then(t=>t.includes('รหัสประจำตัวทหารใหม่')))throw Error('roster form label not changed');
+
+// Per-recruit graph must only be created on demand for registered LIVE slots.
+if(await page.locator('.history-open').count()!==2)throw Error('LIVE wearers should have exactly two graph buttons');
+if(await page.locator('#historyPanel').isVisible())throw Error('chart should not render before click');
+await page.route('**/api/history/R01',route=>{
+ const now=Date.now(),windowStart=now-4*3600000;
+ return route.fulfill({contentType:'application/json',body:JSON.stringify({
+  slot:'R01',windowStart,windowEnd:now,windowHours:4,ephemeral:true,
+  points:[[now-75000,70],[now-70000,73],[now-40000,96],[now-35000,99],[now-10000,86]],
+  phases:[{at:now-95000,phase:'training'},{at:now-50000,phase:'hourly_rest'}]
+ })});
+});
+await page.locator('[data-history-slot="R01"]').click();
+await page.locator('#historyChart svg').waitFor();
+if(await page.locator('#historyChart polyline').count()!==2)throw Error('missing-data intervals incorrectly connected');
+if(await page.locator('#historyChart rect').count()!==2)throw Error('training/rest activity bars absent');
+if(!await page.locator('#historyStats').textContent().then(t=>t.includes('ต่ำสุด')&&t.includes('สูงสุด')))throw Error('min/max graph stats absent');
+await page.evaluate(()=>{const copy=last.recruits.map(r=>({...r}));copy[1].stale=true;copy[1].hr=null;draw({recruits:copy});});
+if(await page.locator('[data-history-slot="R02"]').count()!==0)throw Error('NO DATA recruit should not render a graph button');
+if(await page.locator('[data-history-slot="R01"]').count()!==1)throw Error('other LIVE recruit button disappeared');
+await page.evaluate(()=>{const copy=last.recruits.map(r=>({...r}));copy[0].stale=true;copy[0].hr=null;draw({recruits:copy});});
+if(await page.locator('#historyPanel').isVisible())throw Error('open graph was not dismissed when its wearer became NO DATA');
+await page.evaluate(()=>{const copy=last.recruits.map(r=>({...r}));copy[0].stale=false;copy[0].hr=52;copy[0].timestamp=Date.now();copy[1].stale=false;copy[1].hr=58;copy[1].timestamp=Date.now();draw({recruits:copy});});
 for(const width of [390,1440]){await page.setViewportSize({width,height:900});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('horizontal overflow '+width);
 const dims=await page.evaluate(()=>{const a=document.getElementById('emergencyAlerts').getBoundingClientRect();const b=document.getElementById('trainingPanel').getBoundingClientRect();return {emergencyWidth:a.width,trainingWidth:b.width,emergencyHeight:a.height,trainingHeight:b.height};});
 if(dims.emergencyWidth>760.5)throw Error('alert wider than compact limit '+width);
