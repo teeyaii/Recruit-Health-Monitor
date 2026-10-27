@@ -383,7 +383,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  const now=Date.now(),panel=byId("emergencyAlerts");
  if(!rosterData?.slots){
   cards.innerHTML='<p class="notice">กำลังโหลดทะเบียน...</p>';
-  for(const id of ["statTotal","statLive","statNoData","statWatch","statPaused","statUnregistered"])byId(id).textContent="—";
+  for(const id of ["statTotal","statLive","statNoData","statWatch","statPaused","statMedicPending","statUnregistered"])byId(id).textContent="—";
   byId("cohortNotice").textContent="";
   panel.hidden=true;panel.innerHTML="";
   summary.textContent="รอข้อมูลทะเบียน";
@@ -593,6 +593,7 @@ function fillRoster(){
  byId("rosterRestriction").value=p.restriction;
  byId("rosterObservation").value=p.observation;
  if(byId("privatePanel").open)loadPrivateProfile();
+ if(byId("medicPanel").open)loadMedicReview();
  byId("rosterStatus").textContent=(p.paused?"ช่องนี้ถูกพักไว้ • ตรวจผู้สวมแล้วกดบันทึกเพื่อเปิดรับ BPM อีกครั้ง":"พร้อมแก้ไข")
   +" • รุ่นข้อมูล "+p.version+(p.acknowledged?" • รับทราบเหตุแล้ว":"");
 }
@@ -610,6 +611,8 @@ async function loadRoster(keepSelection=false){
  operatorRole=info.role;rosterData=data;
  if(historySlot&&!historyIsLive(historySlot))closeHistory();
  byId("operatorRole").textContent=({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ปฏิบัติงาน"}[info.role]||"ผู้ปฏิบัติงาน");
+ byId("medicPanel").hidden=!(info.privateProfilesEnabled&&archiveAllowed());
+ if(byId("medicPanel").hidden)byId("medicPanel").open=false;
  byId("rosterBox").hidden=false;
  byId("privatePanel").hidden=!info.privateProfilesEnabled;
  byId("privateStorageNotice").hidden=!!info.privateProfilesEnabled;
@@ -640,6 +643,7 @@ async function rosterAction(action){
   if(!r.ok){const d=await r.json();throw Error(d.error||"HTTP "+r.status);}
   await loadRoster(true);
   await snapshot();
+  refreshMedicPending();
   byId("rosterStatus").textContent=changed?
    "เปลี่ยนผู้สวมสำเร็จ: "+p.id+" • ล้าง BPM และสถานะเดิมแล้ว • รอข้อมูลใหม่จาก Band ที่ตรวจผู้สวมแล้ว":
    reopening?"เปิดรับ BPM ใหม่เรียบร้อยแล้ว • รอข้อมูลสด":
@@ -658,7 +662,8 @@ function updatePrivateBmi(){
 }
 function clearPrivate(){
  privateSlot=null;privateVersion=0;
- for(const id of ["privateWeight","privateHeight","privateConditions"])byId(id).value="";
+ for(const id of ["privateWeight","privateHeight","privateAge","privateBaseline","privateConditions","privateMedications"])byId(id).value="";
+ byId("privateBaselineConfirmed").checked=false;
  byId("privateStatus").textContent="เลือกผู้สวมที่ลงทะเบียนแล้ว";updatePrivateBmi();
 }
 async function loadPrivateProfile(){
@@ -674,6 +679,10 @@ async function loadPrivateProfile(){
   byId("privateWeight").value=data.profile.weightKg??"";
   byId("privateHeight").value=data.profile.heightCm??"";
   byId("privateConditions").value=data.profile.conditions||"";
+  byId("privateAge").value=data.profile.ageYears??"";
+  byId("privateMedications").value=data.profile.medications||"";
+  byId("privateBaseline").value=data.profile.restingBaselineBpm??"";
+  byId("privateBaselineConfirmed").checked=!!data.profile.baselineConfirmed;
   updatePrivateBmi();byId("privateStatus").textContent="พร้อมแก้ไข • เก็บในระบบเข้ารหัส";
  }catch(e){if(epoch===viewEpoch)byId("privateStatus").textContent=e.message;}
 }
@@ -684,15 +693,106 @@ byId("privateSave").onclick=async()=>{
  privateBusy=true;byId("privateSave").disabled=true;
  try{
   const body={version:privateVersion,confirmed:true,weightKg:byId("privateWeight").value||null,
-   heightCm:byId("privateHeight").value||null,conditions:byId("privateConditions").value};
+   heightCm:byId("privateHeight").value||null,conditions:byId("privateConditions").value,
+   ageYears:byId("privateAge").value||null,medications:byId("privateMedications").value,
+   restingBaselineBpm:byId("privateBaseline").value||null,
+   baselineConfirmed:byId("privateBaselineConfirmed").checked};
   const r=await fetch("/api/private-profile/"+p.id,{method:"PUT",credentials:"same-origin",
    headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   if(!r.ok)throw Error("บันทึกไม่สำเร็จ (HTTP "+r.status+")");
   const data=await r.json();privateVersion=data.profile.version;
   byId("privateStatus").textContent="บันทึกข้อมูลส่วนตัวแบบเข้ารหัสสำเร็จ";updatePrivateBmi();
+  if(byId("medicPanel").open)loadMedicReview();
  }catch(e){byId("privateStatus").textContent=e.message+" • โหลดข้อมูลล่าสุดก่อนลองใหม่";}
  finally{privateBusy=false;byId("privateSave").disabled=false;}
 };
+let medicSlot=null,medicCode=null,medicVersion=0,medicBusy=false;
+async function refreshMedicPending(){
+ try{
+  const r=await fetch("/api/medic-reviews/summary",{credentials:"same-origin",cache:"no-store"});
+  if(!r.ok)throw Error("HTTP "+r.status);
+  const data=await r.json();
+  if(Number.isInteger(data.pending)&&data.pending>=0&&data.pending<=15)
+   byId("statMedicPending").textContent=String(data.pending);
+ }catch{byId("statMedicPending").textContent="—";}
+}
+function renderMedicChart(points){
+ const good=(Array.isArray(points)?points:[]).filter(p=>Array.isArray(p)&&
+  Number.isSafeInteger(p[0])&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240).sort((a,b)=>a[0]-b[0]);
+ const el=byId("medicChart");
+ if(!good.length){el.textContent="ยังไม่มีจุด BPM ที่บันทึก";return;}
+ const end=good.at(-1)[0],start=Math.min(good[0][0],end-60000),min=Math.max(25,Math.min(...good.map(p=>p[1]))-12),max=Math.min(240,Math.max(...good.map(p=>p[1]))+12);
+ const W=680,H=160,px=t=>28+(t-start)/Math.max(1,end-start)*628,py=v=>138-(v-min)/Math.max(1,max-min)*118;
+ let svg='<svg viewBox="0 0 680 160" role="img" aria-label="กราฟ BPM ที่ได้รับจริง">';
+ for(let i=0;i<4;i++){const y=20+i*39;svg+='<line x1="25" y1="'+y+'" x2="660" y2="'+y+'" stroke="#345746" stroke-dasharray="3 5"/>';}
+ let segment=[],prior=null;
+ for(const p of good){
+  if(prior!==null&&p[0]-prior>20000){
+   if(segment.length>1)svg+='<polyline fill="none" stroke="#a6ecc0" stroke-width="2.4" stroke-linejoin="round" points="'+segment.join(" ")+'"/>';
+   else if(segment.length)svg+='<circle cx="'+segment[0].split(",")[0]+'" cy="'+segment[0].split(",")[1]+'" r="3" fill="#a6ecc0"/>';
+   segment=[];
+  }
+  segment.push(px(p[0]).toFixed(1)+","+py(p[1]).toFixed(1));prior=p[0];
+ }
+ if(segment.length>1)svg+='<polyline fill="none" stroke="#a6ecc0" stroke-width="2.4" stroke-linejoin="round" points="'+segment.join(" ")+'"/>';
+ else if(segment.length)svg+='<circle cx="'+segment[0].split(",")[0]+'" cy="'+segment[0].split(",")[1]+'" r="3" fill="#a6ecc0"/>';
+ el.innerHTML=svg+'</svg>';
+}
+function clearMedicReview(){
+ medicSlot=null;medicCode=null;medicVersion=0;
+ for(const id of ["medicReviewState","medicSignalQuality","medicLatestBpm","medicObservedMean","medicBaselineValue","medicBaselineDelta"])
+  byId(id).textContent="—";
+ byId("medicChart").textContent="";byId("medicClinicalContext").textContent="";
+ byId("medicNote").value="";byId("medicMessage").textContent="";
+ byId("medicRequest").disabled=true;byId("medicClose").disabled=true;
+}
+async function loadMedicReview(){
+ if(byId("medicPanel").hidden||!byId("medicPanel").open)return;
+ const p=selectedRecord(),epoch=viewEpoch;
+ clearMedicReview();
+ if(!p?.code){byId("medicMessage").textContent="ลงทะเบียนผู้สวมก่อน";return;}
+ const slot=p.id,code=p.code;
+ byId("medicMessage").textContent="กำลังโหลด...";
+ try{
+  const r=await fetch("/api/medic-reviews/"+slot,{credentials:"same-origin",cache:"no-store"});
+  if(epoch!==viewEpoch||!byId("medicPanel").open||selectedRecord()?.id!==slot||selectedRecord()?.code!==code)return;
+  if(!r.ok)throw Error("โหลดรายการประเมินไม่ได้ (HTTP "+r.status+")");
+  const data=await r.json(),review=data.review,signal=data.signal,context=data.context;
+  medicSlot=slot;medicCode=code;medicVersion=review.version;
+  byId("medicReviewState").textContent=review.status==="pending"?"รอเจ้าหน้าที่ประเมิน":review.status==="closed"?"ประเมินแล้ว":"ยังไม่มีรายการ";
+  byId("medicSignalQuality").textContent=({no_live_data:"ไม่มีสัญญาณสด",insufficient:"ข้อมูลยังไม่เพียงพอ",check_signal:"ตรวจสัญญาณก่อน",usable_for_description:"มีข้อมูลพอแสดงแนวโน้ม"})[signal.quality]||"ยังไม่ทราบ";
+  byId("medicLatestBpm").textContent=signal.latestBpm===null?"—":signal.latestBpm+" BPM";
+  byId("medicObservedMean").textContent=signal.observedMeanBpm===null?"—":signal.observedMeanBpm+" BPM";
+  byId("medicBaselineValue").textContent=signal.baselineBpm===null?"—":signal.baselineBpm+" BPM";
+  byId("medicBaselineDelta").textContent=signal.deltaBpm===null?"ยังไม่เทียบ":(signal.deltaBpm>0?"+":"")+signal.deltaBpm+" BPM";
+  byId("medicClinicalContext").textContent="อายุ "+(context.ageYears??"—")+" ปี • BMI "+(context.bmi??"—")+
+   " • WBGT "+(context.wbgtC??"—")+"°C • ยา: "+(context.medications||"ไม่มีข้อมูล")+
+   " • ข้อควรระวัง: "+(context.conditions||"ไม่มีข้อมูล");
+  renderMedicChart(data.points);
+  byId("medicNote").value=review.note||"";
+  byId("medicRequest").disabled=review.status==="pending";
+  byId("medicClose").disabled=review.status!=="pending";
+  byId("medicMessage").textContent=signal.quality==="check_signal"?"ตรวจการสวมและสัญญาณก่อนใช้ประกอบการประเมิน":
+   "คิวประเมินต้องได้รับการยืนยันโดยเจ้าหน้าที่ ไม่เกิดจากเกณฑ์ BPM อัตโนมัติ";
+ }catch(e){if(epoch===viewEpoch)byId("medicMessage").textContent=e.message;}
+}
+byId("medicPanel").ontoggle=()=>{if(byId("medicPanel").open)loadMedicReview();else clearMedicReview();};
+for(const [id,action] of [["medicRequest","request"],["medicClose","close"]]){
+ byId(id).onclick=async()=>{
+  const p=selectedRecord();if(medicBusy||!medicSlot||p?.id!==medicSlot||p?.code!==medicCode)return;
+  medicBusy=true;byId("medicRequest").disabled=true;byId("medicClose").disabled=true;
+  byId("medicMessage").textContent="กำลังบันทึก...";
+  try{
+   const body={version:medicVersion,action,reason:byId("medicReason").value,note:byId("medicNote").value};
+   const r=await fetch("/api/medic-reviews/"+p.id,{method:"PUT",credentials:"same-origin",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+   if(!r.ok){const d=await r.json();throw Error(d.error||"HTTP "+r.status);}
+   await Promise.all([loadMedicReview(),refreshMedicPending()]);
+  }catch(e){byId("medicMessage").textContent="บันทึกไม่สำเร็จ • "+e.message;await loadMedicReview();}
+  finally{medicBusy=false;}
+ };
+}
+
 function prettyDuration(ms){
  const minutes=Math.max(0,Math.floor(ms/60000));
  return minutes>=60?Math.floor(minutes/60)+" ชม. "+minutes%60+" นาที":minutes+" นาที";
@@ -813,11 +913,12 @@ document.getElementById('demoRestore').onclick=()=>demoAction('restore');
 document.getElementById('demoStop').onclick=()=>demoAction('stop');
 async function contextStatus(){try{const r=await fetch("/api/context",{credentials:"same-origin",cache:"no-store"});if(!r.ok)return;const d=await r.json();document.getElementById("conditions").textContent=d.timestamp?(d.stale?"WBGT: ค่าเก่ากว่า 30 นาที ต้องวัดใหม่":"WBGT (กรอกมือ): "+d.wbgtC+" °C • "+new Date(d.timestamp).toLocaleTimeString("th-TH")):"WBGT: ยังไม่มีข้อมูลการวัด";}catch{document.getElementById("conditions").textContent="WBGT: ตรวจข้อมูลไม่ได้";}}
 async function snapshot(){const epoch=viewEpoch;try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(epoch!==viewEpoch)return;if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(epoch!==viewEpoch)return;transportUp=true;draw(data);await gatewayStatus();await contextStatus();}catch(e){if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='DISCONNECTED — โหลดข้อมูลไม่สำเร็จ';}}
-function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;operatorRole=null;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
+function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;operatorRole=null;
+byId("medicPanel").open=false;byId("medicPanel").hidden=true;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statMedicPending','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
 function connect(){const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
  events.onopen=()=>{if(epoch!==viewEpoch)return;transportUp=true;conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
  events.onmessage=e=>{if(epoch!==viewEpoch)return;try{transportUp=true;draw(JSON.parse(e.data))}catch{}};
- snapshot();loadGroupPhase();loadRoster().catch(()=>{byId("rosterStatus").textContent="โหลดข้อมูลผู้ฝึกไม่สำเร็จ";byId("rosterBox").hidden=true;});
+ snapshot();loadGroupPhase();refreshMedicPending();loadRoster().catch(()=>{byId("rosterStatus").textContent="โหลดข้อมูลผู้ฝึกไม่สำเร็จ";byId("rosterBox").hidden=true;});
 }
 document.getElementById('login').onsubmit=async e=>{e.preventDefault();const token=document.getElementById('token').value;document.getElementById('token').value='';try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});if(r.ok)connect();else summary.textContent=r.status===401?'รหัสไม่ถูกต้อง':'เข้าใช้งานไม่สำเร็จ • ลองใหม่เมื่อเซิร์ฟเวอร์พร้อม';}catch{summary.textContent='เข้าใช้งานไม่สำเร็จ • ตรวจเครือข่ายแล้วลองใหม่';}};
 document.getElementById('wbgtForm').onsubmit=async e=>{e.preventDefault();const wbgtC=Number(document.getElementById('wbgt').value);try{const r=await fetch('/api/context',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({wbgtC})});if(!r.ok)throw Error('HTTP '+r.status);document.getElementById('wbgt').value='';await contextStatus();}catch{document.getElementById('conditions').textContent='WBGT: บันทึกไม่สำเร็จ';}};
@@ -825,6 +926,7 @@ document.getElementById('logout').onclick=async()=>{disconnect();try{const r=awa
 document.getElementById('refresh').onclick=()=>{snapshot();loadRoster(true).catch(()=>{});};
 setInterval(()=>{if(last)draw(last);if(groupPhaseData)paintGroupPhase();},1000);
 setInterval(()=>{if(last){gatewayStatus();contextStatus();demoStatus();}},5000);
+setInterval(()=>{if(last)refreshMedicPending();},15000);
 setInterval(()=>{if(last&&rosterData)syncRoster();if(events)loadGroupPhase();},10000);
 setInterval(()=>{if(historySlot)refreshHistory();},15000);
 snapshot().then(()=>{if(last)connect();});
