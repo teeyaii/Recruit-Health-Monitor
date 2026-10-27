@@ -270,7 +270,7 @@ function renderHistory(data){
 async function refreshHistory(){
  const slot=historySlot;if(!slot)return;
  if(!historyIsLive(slot)){closeHistory();return;}
- const token=historyRequest,epoch=viewEpoch;
+ const token=++historyRequest,epoch=viewEpoch;
  try{
   const r=await fetch("/api/history/"+slot,{credentials:"same-origin",cache:"no-store"});
   if(token!==historyRequest||epoch!==viewEpoch||slot!==historySlot)return;
