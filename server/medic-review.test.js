@@ -31,7 +31,7 @@ test("Quality screening never declares safe/unsafe from a single BPM or unknown 
  const now=1793000000000;
  const few=[[now-10000,148]],no=describeSignal(few,now);
  assert.equal(no.quality,"insufficient");assert.equal(no.deltaBpm,null);
- const gap=Array.from({length:30},(_,i)=>[now-240000+i*7000,75+(i%4)]);
+ const gap=Array.from({length:30},(_,i)=>[now-203000+i*7000,75+(i%4)]);
  const good=describeSignal(gap,now,65);
  assert.equal(good.quality,"usable_for_description");assert.equal(good.clinicalThresholdApproved,false);
  assert.equal(typeof good.deltaBpm,"number");
