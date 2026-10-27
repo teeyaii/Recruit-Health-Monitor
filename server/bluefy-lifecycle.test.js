@@ -216,12 +216,12 @@ test('unavailable, invalid and hanging battery do not block HR; stale battery ex
   h.tick(4000);await drain();assert.equal(h.api.live.get('R01').batteryBusy,false);
  }
  const h=harness();await h.login();let good=true;
- const d=withBattery(device(),async()=>{if(!good)throw Error();return packet([0]);});await h.connect(d);await drain();assert.equal(h.api.live.get('R01').battery.percent,0);
+ const d=withBattery(device(),async()=>{if(!good)throw Error();return packet([0]);});await h.connect(d,'R01','AB12','battery-standard');await drain();assert.equal(h.api.live.get('R01').battery.percent,0);
  good=false;h.tick(300000);await drain();h.tick(600001);d.emit();await drain();assert.match(h.api.live.get('R01').batteryNode.textContent,/UNKNOWN/);
  const last=h.fetches.filter(x=>x.url==='/api/ingest').at(-1);assert.equal(JSON.parse(last.options.body).readings[0].battery,undefined);
 });
 test('late battery completion after disconnect cannot affect new session',async()=>{
- const h=harness();await h.login();let resolve;const d=withBattery(device(),()=>new Promise(r=>resolve=r));await h.connect(d);await drain();h.hide();await drain();resolve(packet([99]));await drain();assert.equal(h.api.live.size,0);
+ const h=harness();await h.login();let resolve;const d=withBattery(device(),()=>new Promise(r=>resolve=r));await h.connect(d,'R01','AB12','battery-standard');await drain();h.hide();await drain();resolve(packet([99]));await drain();assert.equal(h.api.live.size,0);
 });
 
 test('HR-first scans do not request or read battery, opt-in scans request extra GATT permission',async()=>{
