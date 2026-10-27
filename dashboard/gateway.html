@@ -15,6 +15,7 @@ button{background:#41a6eb;color:#071526;border:0;font-weight:700;margin:6px 6px 
 button.secondary{background:#324760;color:#fff}
 button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.03em}
 .status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
+.reserved-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.reserved-slots .card{margin:0;border-style:dashed}.reserved-slots h3{font-size:1rem;margin:0 0 12px}.reserved-slots .waiting{font-size:1.2rem;font-weight:700;color:#c3d5a6}.reserved-slots p{margin:8px 0}.reserved-slots small{display:block}@media(max-width:540px){.reserved-slots{grid-template-columns:1fr}}
 [hidden]{display:none!important}summary{cursor:pointer;color:#b7c4af;padding:10px 0}.quick{display:flex;gap:10px;flex-wrap:wrap}.quick button{flex:1;min-width:130px}.technical{font-size:.8rem;color:#abb5a5}body{background:#131813}:root{background:#131813;color:#eff2e9}.card{background:#20271f;border-color:#414c3b}button{background:#c3d5a6;color:#182014}button.secondary{background:#3a4734}input,select{background:#161d16;border-color:#67735f}.bpm{font-size:2.8rem}.presentation .setup,.presentation .advanced{display:none}.presentation .bpm{font-size:3.5rem}
 </style></head><body>
 <h1>STEVE 1.0</h1><button id="presentation" class="secondary">โหมดนำเสนอ</button>
@@ -43,6 +44,15 @@ button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.
 <button id="connect" disabled>เชื่อมต่อ Band 10</button>
 </details><button id="resetBle" class="secondary">เชื่อมใหม่ (Soft Reset)</button><p id="simpleStatus" role="status">เปิด Share HR บนสายรัด แล้วเลือกทีละเรือน</p><details class="advanced"><summary>รายละเอียดการเชื่อมต่อ</summary><p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
 </details><div id="slots" aria-live="polite"></div>
+<section id="reservedSlots" aria-labelledby="reservedTitle">
+<h2 id="reservedTitle">เตรียมขยายเป็น 5 สายรัด</h2>
+<p class="muted">ช่องเชื่อมต่อ R01/R02 • ช่องสำรองอีก 3 ตัวสำหรับนำเสนอ ยังไม่ได้จับคู่อุปกรณ์</p>
+<div class="reserved-slots">
+<article class="card"><h3>สายรัดตัวที่ 3 · ช่องสำรอง</h3><p class="waiting">รอเชื่อมต่อ</p><p>NO DATA</p><small>รอเพิ่มอุปกรณ์และกำหนดผู้สวม</small></article>
+<article class="card"><h3>สายรัดตัวที่ 4 · ช่องสำรอง</h3><p class="waiting">รอเชื่อมต่อ</p><p>NO DATA</p><small>รอเพิ่มอุปกรณ์และกำหนดผู้สวม</small></article>
+<article class="card"><h3>สายรัดตัวที่ 5 · ช่องสำรอง</h3><p class="waiting">รอเชื่อมต่อ</p><p>NO DATA</p><small>รอเพิ่มอุปกรณ์และกำหนดผู้สวม</small></article>
+</div>
+</section>
 </section>
 <p class="muted">จำการเข้าใช้งานได้นานสูงสุด 2 ชั่วโมงบนเครื่องนี้ แล้วต้องเข้าใหม่ ข้อมูลเกิน 15 วินาทีแสดง NO DATA • Gateway v8</p>
 <script>
