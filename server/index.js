@@ -1,4 +1,5 @@
 import http from "node:http";
+import { GatewaySessions, gatewayBrowserRequest } from './gateway-session.js';
 import { randomUUID, randomBytes } from "node:crypto";
 import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway, provisionedDevicesForGateway } from "./contract.js";
 import { RosterStore } from "./roster.js";
@@ -14,6 +15,7 @@ const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && proce
 const recruits=new Map();
 const clients=new Set();
 const sessions=new Map();
+const gatewaySessions=new GatewaySessions();
 const failedLogins=new Map();
 const roster=new RosterStore(process.env.STEVE_ROSTER_FILE||"");
 let conditions={wbgtC:null,timestamp:null,source:"not recorded"};
@@ -111,7 +113,22 @@ const server=http.createServer(async(req,res)=>{
   const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];if(cookie)sessions.delete(cookie);
   res.setHeader("Set-Cookie","rhm_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");send(res,200,{ok:true});return;
  }
- const isViewer=viewer(req),gatewayId=gatewayForBearer(req),isGateway=Boolean(gatewayId);
+ if(url.pathname==='/api/gateway/session' && req.method==='POST'){
+  if(!gatewayBrowserRequest(req)){send(res,403,{error:'origin mismatch'});return;}
+  const gateway=gatewayForBearer(req);
+  if(!gateway || !/^G0[1-5]$/.test(gateway)){send(res,401,{error:'gateway credential required'});return;}
+  const key=gatewaySessions.create(req,gateway);
+  if(!key){send(res,503,{error:'session capacity reached'});return;}
+  res.setHeader('Set-Cookie',gatewaySessions.cookie(key));
+  send(res,200,{ok:true,gateway,expiresAt:gatewaySessions.get({headers:{cookie:'steve_gateway='+key}}).expiry});return;
+ }
+ if(url.pathname==='/api/gateway/session' && req.method==='DELETE'){
+  if(!gatewayBrowserRequest(req)){send(res,403,{error:'origin mismatch'});return;}
+  gatewaySessions.revoke(req);res.setHeader('Set-Cookie',gatewaySessions.cookie(''));send(res,200,{ok:true});return;
+ }
+ // Browser sessions grant only provision/ingest, never viewer or operator access.
+ const browserGateway=['/api/gateway/provision','/api/ingest'].includes(url.pathname)&&gatewayBrowserRequest(req)?gatewaySessions.get(req):null;
+ const isViewer=viewer(req),gatewayId=gatewayForBearer(req)||browserGateway?.gateway,isGateway=Boolean(gatewayId);
  // Public HTML shell only: provisioned slots, secrets and BPM still require a Gateway bearer token.
  if(url.pathname==="/gateway"&&req.method==="GET"){
   res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});
@@ -173,7 +190,7 @@ const server=http.createServer(async(req,res)=>{
   if(!isGateway){send(res,403,{error:"gateway credential required"});return;}
   const slots=provisionedDevicesForGateway(gatewayId);
   if(slots===null){send(res,503,{error:"provisioning unavailable; configure STEVE_SLOT_MAP_JSON"});return;}
-  send(res,200,{gateway:gatewayId,slots,kind:"anonymous_device_ids",sensor_verified:false});return;
+  send(res,200,{gateway:gatewayId,slots,kind:"anonymous_device_ids",sensor_verified:false,...(browserGateway?{expiresAt:browserGateway.expiry}:{})});return;
  }
  if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}

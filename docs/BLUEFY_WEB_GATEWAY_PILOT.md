@@ -209,3 +209,39 @@ Owner decision: disable all battery collection and battery displays until both B
 Operator screenshots show both Xiaomi Band 10 units connected in iPhone Bluetooth Settings but Bluefy 2.01's native chooser empty at stage 2/9 NativeError. iOS Bluetooth Settings alone does not prove a device is discoverable/available to Bluefy. The native chooser failure was seen before the optional battery integration, so this rollback is for isolation and reliability, not a proven root-cause fix. A native browser bridge cannot be repaired by backend tests. Do not unpair devices in iOS Settings as the first troubleshooting step.
 
 Release process: merge only if backend tests, Docker and browser smoke pass; Render Free auto-deploy is disabled, so manually deploy the merged main commit on the existing service, without touching secrets/slot map. Verify the `Bluefy HR-only recovery v7` banner in /gateway. If an empty chooser persists after the correctly deployed HR-only build, close competing BLE clients, ensure each Band is actively sharing HR and attempt A then B from Bluefy. Report stage/error and whether either Band appears. Never treat NO DATA as a safe HR value.
+## Current release: Gateway v8 — 27 October 2026
+
+This section supersedes older login/reload and UI instructions below. Deploy manually
+on the existing Render service; leave auto-deploy off and keep all secrets/slot maps unchanged.
+
+Open `/gateway` in Bluefy, choose G01 and enter its credential once. The server exchanges
+it for a random HttpOnly, SameSite=Strict cookie (Secure in production), scoped to `/api/`.
+Its absolute lifetime is two hours, without sliding renewal. Only a hash of the random
+session key and the authorized gateway/expiry are held in server RAM. The long-lived
+gateway credential is not kept in browser storage, URLs or cookies. Restart/deploy,
+expiry or logout requires login again. Cookie authority is limited to provisioning and
+ingest, with a custom same-origin header and exact Origin host/port checks; it grants no
+dashboard/operator authority. Logout revokes the session; if offline, retry logout online.
+Use a trusted phone and log out when finished.
+
+Tap **R01 · 47FD**, choose the matching physical band, then tap **R02 · A746** and choose
+the other. These are operator-approved convenience defaults for G01, not changes to
+server provisioning. Both buttons still require an authorized slot and verified suffix;
+device IDs remain bound independently. Advanced settings retain alternate scan modes.
+Each chooser requires its own tap: no automatic two-chooser sequence is attempted.
+
+Reload restores authorization only; select each band again. Foreground return and
+unexpected foreground disconnect attempt bounded recovery with existing authorized
+handles. Soft Reset preserves current settings, authorization and bindings, clears old
+readings, and reconnects eligible devices. An explicitly stopped band stays stopped.
+No background monitoring is promised. NO DATA remains until fresh measurements arrive;
+stale readings and authorization expiry clear displayed BPM. Native chooser cancellation
+still requires user action. Presentation mode hides setup/technical details but retains
+the prototype warning and disconnect controls. Battery telemetry remains absent.
+
+Release checks: backend/session/lifecycle tests; production Docker health/auth smoke;
+real browser login/reload/logout and simulated two-band gesture, reset, stale-data and
+390px/1440px layout checks. Browser mocks do not prove native Bluefy/Band compatibility.
+After manual deployment, verify **Gateway v8**, `/health`, both physical bands and three
+foreground-return cycles; verify Soft Reset, explicit stop, logout and NO DATA on loss.
+

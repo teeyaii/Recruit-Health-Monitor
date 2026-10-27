@@ -15,47 +15,56 @@ button{background:#41a6eb;color:#071526;border:0;font-weight:700;margin:6px 6px 
 button.secondary{background:#324760;color:#fff}
 button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.03em}
 .status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
+[hidden]{display:none!important}summary{cursor:pointer;color:#b7c4af;padding:10px 0}.quick{display:flex;gap:10px;flex-wrap:wrap}.quick button{flex:1;min-width:130px}.technical{font-size:.8rem;color:#abb5a5}body{background:#131813}:root{background:#131813;color:#eff2e9}.card{background:#20271f;border-color:#414c3b}button{background:#c3d5a6;color:#182014}button.secondary{background:#3a4734}input,select{background:#161d16;border-color:#67735f}.bpm{font-size:2.8rem}.presentation .setup,.presentation .advanced{display:none}.presentation .bpm{font-size:3.5rem}
 </style></head><body>
-<h1>STEVE 1.0</h1>
-<p class="muted">Web BLE Gateway Pilot • Bluefy HR-only recovery v7 • foreground only</p>
+<h1>STEVE 1.0</h1><button id="presentation" class="secondary">โหมดนำเสนอ</button>
+<p class="muted">สายรัดหัวใจ • เปิดหน้านี้ค้างไว้ใน Bluefy</p>
 <div class="card warning" role="alert">
 <strong>ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น — ไม่ใช่อุปกรณ์แพทย์</strong>
 <p>ต้องเปิดหน้านี้ค้างไว้ใน Bluefy ห้ามล็อกหน้าจอระหว่างทดสอบ ถ้าออกจากแอปหรือขาดข้อมูล ให้ถือว่าไม่มีข้อมูลสด ห้ามใช้ตัดสินว่าผู้ฝึกปลอดภัย</p>
 <p>ใช้รหัส R01–R15 แบบไม่ระบุตัวตนเท่านั้น ห้ามใส่ชื่อหรือข้อมูลสุขภาพจริงในการทดสอบ</p>
 </div>
-<section class="card">
-<h2>1. เชื่อมต่อเซิร์ฟเวอร์ทดลอง</h2>
+<section class="card setup">
+<h2>1. เข้าใช้งาน</h2><div id="loginFields">
 <label for="gateway">Gateway<select id="gateway"><option>G01</option><option>G02</option><option>G03</option><option>G04</option><option>G05</option></select></label>
-<label for="token">Gateway credential (จาก Render — ไม่ใช่รหัสผู้ฝึก)<input id="token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ใส่เฉพาะในหน้า HTTPS ของ STEVE"></label>
-<button id="load">ตรวจสิทธิ์และโหลดช่อง</button><button id="clear" class="secondary">หยุดและล้างรหัส</button>
+<label for="token">รหัสเข้าใช้งาน Gateway<input id="token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ใส่เฉพาะในหน้า HTTPS ของ STEVE"></label>
+<button id="load">เข้าใช้งาน</button></div><button id="clear" class="secondary">หยุดและออกจากระบบ</button>
 <p id="serverStatus" class="status" role="status">ยังไม่ได้ตรวจสอบสิทธิ์</p>
 </section>
 <section class="card">
 <h2>2. เลือกสายรัดทีละเรือน</h2>
 <p>บน Band 10 เปิด Share HR ก่อน แล้วกดเชื่อมต่อแต่ละช่อง R-slot ตามที่ผู้ทดสอบจับคู่อุปกรณ์จริงไว้ ห้ามกำหนดช่องจากลำดับที่สแกนพบ</p>
-<label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
+<div class="quick"><button id="quickR01" disabled>เชื่อม R01 · 47FD</button><button id="quickR02" disabled>เชื่อม R02 · A746</button></div>
+<details class="advanced"><summary>ตั้งค่าเพิ่มเติม / แก้ปัญหา</summary><label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
 <label for="expected">รหัสท้ายชื่อ Band จากเรือนจริง (4 ตัว)<input id="expected" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="กรอกรหัสของเรือนที่จะผูกกับช่องนี้"></label>
 <label for="scanMode">โหมดสแกน<select id="scanMode"><option value="standard">A. Standard Heart Rate Scan</option><option value="broad">B. Broad BLE Scan — สแกนทั้งหมดเพื่อแก้ปัญหา</option><option value="known">C. เชื่อมอุปกรณ์ที่เคยอนุญาต (ถ้ารองรับ)</option></select></label>
 <p class="muted">ต้องเลือกชื่ออุปกรณ์ที่ตรงกับรหัสที่กรอก ระบบไม่จับคู่จากลำดับสแกน หากชื่อไม่แสดงรหัส จะยังไม่รับข้อมูล</p>
-<button id="resetBle" class="secondary">Soft BLE Reset</button>
+
 <button id="connect" disabled>เชื่อมต่อ Band 10</button>
-<p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
-<div id="slots" aria-live="polite"></div>
+</details><button id="resetBle" class="secondary">เชื่อมใหม่ (Soft Reset)</button><p id="simpleStatus" role="status">เปิด Share HR บนสายรัด แล้วเลือกทีละเรือน</p><details class="advanced"><summary>รายละเอียดการเชื่อมต่อ</summary><p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
+</details><div id="slots" aria-live="polite"></div>
 </section>
-<p class="muted">ข้อมูล BPM ส่งด้วย HTTPS ไปยัง Backend เดียวกันแบบมีการตรวจสิทธิ์ ไม่บันทึก token หรือ BPM ลง localStorage, คุกกี้, URL หรือ GitHub ข้อมูลเกิน 15 วินาทีต้องถือว่าเก่า</p>
+<p class="muted">จำการเข้าใช้งานได้นานสูงสุด 2 ชั่วโมงบนเครื่องนี้ แล้วต้องเข้าใหม่ ข้อมูลเกิน 15 วินาทีแสดง NO DATA • Gateway v8</p>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
 const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
-let chooserPending=false, recoveryRunning=false, recoveryRequested=false;
+let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null;
 let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
 const stages={capability:"1/9 ตรวจ Web Bluetooth",chooser:"2/9 เปิดหน้าต่างเลือกอุปกรณ์",selected:"3/9 ตรวจอุปกรณ์และช่อง",gatt:"4/9 เชื่อม GATT",service:"5/9 ค้นหา Heart Rate Service 180D",characteristic:"6/9 ค้นหา Characteristic 2A37",subscribe:"7/9 สมัครรับ Notifications",receiving:"8/9 รับข้อมูลหัวใจ",upload:"9/9 ส่ง HTTPS และรอ Server"};
 function status(message){$("bleStatus").textContent=message;}
 function serverStatus(message){$("serverStatus").textContent=message;}
+function expireSession(){
+ auth=null;generation++;recoveryRequested=false;
+ for(const s of Array.from(live.values()))stopped(s,"SESSION EXPIRED / NO DATA");
+ $("loginFields").hidden=false;$("gateway").disabled=false;
+ serverStatus("หมดเวลาเข้าใช้งาน • กรอกรหัสเพื่อเข้าใหม่");controls();
+}
 function controls(){
+ for(const slot of ["R01","R02"])$("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||live.has(slot)||connecting||chooserPending||document.hidden;
  $("connect").disabled=!auth||!provision.length||connecting||chooserPending||document.hidden;
- $("load").disabled=connecting||live.size>0;
+ $("load").disabled=loginPending||connecting||live.size>0;
  for(const session of sessions.values())paint(session);
 }
 // Native bridge errors may be strings, objects, DOMExceptions, or null. Never render
@@ -108,8 +117,9 @@ async function upload(s,bpm,timestamp,disconnect=false){
  const timeout=setTimeout(()=>abort.abort(),4000);
  try{
   const r=await fetch("/api/ingest",{method:"POST",cache:"no-store",signal:abort.signal,
-   headers:{"Authorization":"Bearer "+credentials.token,"Content-Type":"application/json"},
+   credentials:"same-origin",headers:{"X-STEVE-Gateway":"1","Content-Type":"application/json"},
    body:JSON.stringify({gateway:credentials.gateway,source:"GATEWAY",readings:[item]})});
+  if(r.status===401 && auth===credentials)expireSession();
   if(!r.ok)return {ok:false,detail:"Gateway upload rejected • HTTP "+r.status};
   const payload=await r.json();
   return payload.accepted===1?{ok:true,detail:"Server acknowledged"}:{ok:false,detail:"Server ไม่รับข้อมูลช่องนี้ (accepted != 1)"};
@@ -117,7 +127,8 @@ async function upload(s,bpm,timestamp,disconnect=false){
  finally{clearTimeout(timeout);if(s.uploadAbort===abort)s.uploadAbort=null;}
 }
 function paint(s){
- s.indicator.textContent=s.lifecycle+" • "+s.state;
+ s.indicator.textContent=s.closed?"NO DATA • กดเชื่อมต่อใหม่":s.bpm===null?"NO DATA • รอสัญญาณใหม่":s.error?"ส่งข้อมูลไม่สำเร็จ":"กำลังรับข้อมูล";
+ s.diagnostics.textContent=s.lifecycle+" • "+s.state;
  s.measure.textContent=s.bpm===null?"NO DATA":String(s.bpm)+" BPM";
  s.age.textContent=s.lastAt?"วัดล่าสุด "+new Date(s.lastAt).toLocaleTimeString("th-TH")+" • "+Math.round((Date.now()-s.lastAt)/1000)+" วินาที":"ยังไม่มีข้อมูล";
  s.notify.textContent="Notifications: "+s.notifications;
@@ -156,8 +167,10 @@ function addTile(slot,expected,mode){
  const retry=element("button","secondary","เชื่อมต่อใหม่ "+slot),stop=element("button","secondary","ตัดการเชื่อมต่อ "+slot);
  retry.addEventListener("click",()=>connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"standard":mode));
  stop.addEventListener("click",()=>{const b=bindings.get(slot);if(b)b.autoEnabled=false;stopped(live.get(slot),"หยุดโดยผู้ทดสอบ / NO DATA");});
- div.append(head,measure,indicator,age,notify,backend,errorNode,retry,stop);$("slots").append(div);tiles.set(slot,div);
- return {indicator,measure,age,notify,backend,errorNode,retry,stop};
+ const details=element("details","advanced technical"),summary=element("summary","","รายละเอียด"),diagnostics=element("p","status");
+ details.append(summary,diagnostics,notify,backend,errorNode);
+ div.append(head,measure,indicator,age,details,retry,stop);$("slots").append(div);tiles.set(slot,div);
+ return {indicator,measure,age,notify,backend,errorNode,retry,stop,diagnostics};
 }
 function bounded(s,promise){
  return new Promise((resolve,reject)=>{
@@ -220,7 +233,7 @@ async function connectBand(slot,expected,mode){
    s.error="อุปกรณ์ไม่ตรงกับการจับคู่เดิมของช่องนี้ — หยุดและล้างรหัสก่อนเปลี่ยนคู่";throw {name:"InvalidStateError"};
   }
   s.ownsDevice=true;pairedDevices.add(s.device.id);
-  s.onDisconnect=()=>stopped(s,"BLE DISCONNECTED / NO DATA");
+  s.onDisconnect=()=>{stopped(s,"BLE DISCONNECTED / NO DATA");if(!document.hidden && s.ready){recoveryRequested=true;Promise.resolve().then(recoverKnown);}};
   s.device.addEventListener("gattserverdisconnected",s.onDisconnect);
   step(s,"gatt");
   const connection=s.device.gatt.connect();
@@ -251,7 +264,7 @@ async function connectBand(slot,expected,mode){
     if(s.closed||document.hidden||s.sequence!==sequence||Date.now()-now>15000)return;
     s.ack=result.detail;
     if(result.ok){s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";}
-    else{transition(s,"ERROR");s.state="SERVER REJECTED / OFFLINE";s.error=stages.upload+" • "+result.detail;}
+    else{s.bpm=null;transition(s,"ERROR");s.state="SERVER REJECTED / OFFLINE";s.error=stages.upload+" • "+result.detail;$("simpleStatus").textContent="ส่งข้อมูลไม่สำเร็จ • ตรวจเครือข่ายหรือเข้าใช้งานใหม่";}
     paint(s);
    }).finally(()=>{s.busy=false;});
   };
@@ -260,41 +273,52 @@ async function connectBand(slot,expected,mode){
   validAttempt(s);
   s.characteristic.addEventListener("characteristicvaluechanged",s.onValue);
   bindings.set(slot,{id:s.device.id,expected,device:s.device,autoEnabled:true});
-  s.ready=true;s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
+  s.ready=true;$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
   s.error=(stages[s.stage]||stages.capability)+" • "+(s.error||safeError(e));
   await stopped(s,"เชื่อมต่อไม่สำเร็จ / NO DATA");
   if(sessions.get(slot)!==s)return;
-  paint(s);status(slot+" • "+s.error+" • กดลองใหม่ หรือเลือกโหมดสแกน BLE ทั้งหมด");
+  $("simpleStatus").textContent=slot+" เชื่อมไม่สำเร็จ • ตรวจ Share HR แล้วกดใหม่ หรือเปิดตั้งค่าเพิ่มเติม";paint(s);status(slot+" • "+s.error+" • กดลองใหม่ หรือเลือกโหมดสแกน BLE ทั้งหมด");
  }finally{if(attemptOwner===s){attemptOwner=null;connecting=false;controls();if(recoveryRequested&&!recoveryRunning&&!document.hidden)Promise.resolve().then(recoverKnown);}}
 }
 
+function applyProvision(payload){
+ if(!/^G0[1-5]$/.test(payload.gateway)||!Array.isArray(payload.slots)||!payload.slots.every(s=>/^R(0[1-9]|1[0-5])$/.test(s.id)&&/^[a-zA-Z0-9_-]{4,64}$/.test(s.device_id)))throw Error("Invalid provision");
+ bindings.clear();auth={gateway:payload.gateway,expiresAt:payload.expiresAt||Date.now()+7200000};provision=payload.slots;
+ $("token").value="";$("gateway").value=payload.gateway;$("gateway").disabled=true;$("loginFields").hidden=true;
+ $("slot").replaceChildren();
+ for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}
+ $("slot").disabled=!provision.length;serverStatus("พร้อมใช้งาน "+payload.gateway+" • จำการเข้าใช้สูงสุด 2 ชั่วโมง");controls();
+}
+async function loadProvision(epoch){
+ const r=await fetch("/api/gateway/provision",{headers:{"X-STEVE-Gateway":"1"},credentials:"same-origin",cache:"no-store"});
+ if(!r.ok)throw Error("Unauthorized");const payload=await r.json();
+ if(epoch===generation)applyProvision(payload);
+}
 $("load").addEventListener("click",async()=>{
- if(live.size||connecting){serverStatus("ต้องหยุดสายรัดทั้งหมดก่อนเปลี่ยน Gateway");return;}
+ if(live.size||connecting||loginPending)return;
  const gateway=$("gateway").value,token=$("token").value.trim();
- if(token.length<32){serverStatus("กรอกรหัส Gateway ที่ได้รับอนุญาต (อย่างน้อย 32 ตัวอักษร)");return;}
- const requestGeneration=++generation;
- const button=$("load");button.disabled=true;serverStatus("กำลังตรวจสิทธิ์...");
+ if(token.length<32){serverStatus("กรอกรหัสเข้าใช้งาน Gateway");return;}
+ const epoch=++generation;loginPending=true;$("load").disabled=true;
  try{
-  const r=await fetch("/api/gateway/provision",{headers:{"Authorization":"Bearer "+token},cache:"no-store"});
-  if(!r.ok)throw Error("HTTP "+r.status+" — ตรวจรหัส Gateway และการตั้งค่า Render");
-  const payload=await r.json();
-  if(requestGeneration!==generation)return;
-  if(payload.gateway!==gateway || !Array.isArray(payload.slots))throw Error("Gateway/slot map ไม่ตรง");
-  const valid=payload.slots.every(s=>/^R(0[1-9]|1[0-5])$/.test(s.id)&&/^[a-zA-Z0-9_-]{4,64}$/.test(s.device_id));
-  if(!valid)throw Error("ข้อมูลช่องไม่ถูกต้อง");
-  bindings.clear();auth={gateway,token};provision=payload.slots;
-  $("token").value="";
-  $("slot").replaceChildren();
-  for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}
-  $("slot").disabled=!provision.length;$("connect").disabled=!provision.length;
-  $("gateway").disabled=true;
-  serverStatus("ยืนยันสิทธิ์ "+gateway+" แล้ว • "+provision.length+" ช่องที่อนุญาต • รหัสอยู่ในหน่วยความจำชั่วคราว");
-  if(!provision.length)status("ไม่มีช่องที่ได้รับอนุญาต กรุณาตั้งค่า R-slot ที่ Render ก่อน");
- }catch(e){if(requestGeneration!==generation)return;auth=null;provision=[];$("slot").disabled=true;$("connect").disabled=true;serverStatus("เชื่อมเซิร์ฟเวอร์ไม่สำเร็จ: "+safeError(e));}
- finally{button.disabled=false;controls();}
+  // Verify chosen gateway before creating a cookie; never store the long-lived token.
+  const check=await fetch("/api/gateway/provision",{headers:{Authorization:"Bearer "+token},cache:"no-store"});
+  if(!check.ok)throw Error("Unauthorized");const payload=await check.json();
+  if(epoch!==generation)return;if(payload.gateway!==gateway)throw Error("Gateway mismatch");
+  pendingSession=fetch("/api/gateway/session",{method:"POST",headers:{Authorization:"Bearer "+token,"X-STEVE-Gateway":"1"},credentials:"same-origin",cache:"no-store"});
+  const r=await pendingSession;
+  if(!r.ok)throw Error("Unauthorized");const session=await r.json();if(epoch!==generation)return;
+  applyProvision({...payload,expiresAt:session.expiresAt});
+ }catch{if(epoch===generation){auth=null;provision=[];serverStatus("เข้าใช้งานไม่สำเร็จ • ตรวจ Gateway และรหัสแล้วลองใหม่");}}
+ finally{loginPending=false;pendingSession=null;$("token").value="";controls();}
 });
+for(const [slot,suffix] of [["R01","47FD"],["R02","A746"]]){
+ $("quick"+slot).addEventListener("click",()=>connectBand(slot,suffix,"standard"));
+}
+$("presentation").addEventListener("click",()=>{document.body.classList.toggle("presentation");$("presentation").textContent=document.body.classList.contains("presentation")?"ออกจากโหมดนำเสนอ":"โหมดนำเสนอ";});
+// Reload restores authorization only, never invents BLE handles or fresh readings.
+if(window.location)loadProvision(generation).catch(()=>{});
 
 $("connect").addEventListener("click",()=>connectBand($("slot").value,$("expected").value.trim().toUpperCase(),$("scanMode").value));
 $("slot").addEventListener("change",()=>{$("expected").value=bindings.get($("slot").value)?.expected||"";});
@@ -311,7 +335,10 @@ $("clear").addEventListener("click",async()=>{
  auth=null;provision=[];bindings.clear();$("token").value="";$("slot").replaceChildren();
  $("slot").disabled=true;$("connect").disabled=true;$("gateway").disabled=false;
  $("expected").value="";serverStatus("ล้างข้อมูล Gateway จากหน้าเว็บแล้ว");status("หยุดทั้งหมด");
- await Promise.all(stops);controls();
+ await Promise.all(stops);
+ try{await pendingSession;}catch{}
+ try{await fetch("/api/gateway/session",{method:"DELETE",headers:{"X-STEVE-Gateway":"1"},credentials:"same-origin"});serverStatus("ออกจากระบบแล้ว");}catch{serverStatus("ติดต่อเซิร์ฟเวอร์ไม่ได้ • กดออกจากระบบอีกครั้งเพื่อยกเลิก session");}
+ $("loginFields").hidden=false;controls();
 });
 function suspend(){
  recoveryRequested=true;
@@ -349,6 +376,7 @@ document.addEventListener("visibilitychange",()=>{
 });
 window.addEventListener("pagehide",suspend);
 setInterval(()=>{
+ if(auth && Date.now()>=auth.expiresAt)expireSession();
  for(const s of live.values()){
   if(s.lastAt && Date.now()-s.lastAt>15000){s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";}
   paint(s);
