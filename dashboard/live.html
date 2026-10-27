@@ -101,6 +101,34 @@ body.presentation #trainingActions{display:none!important}
 .history-note{font-size:.77rem;color:#b5c6b4;line-height:1.5}
 body.presentation .history-open{display:none!important}
 @media(max-width:480px){.history-ranges button{flex:1;min-width:70px}}
+
+/* STEVE Command Center — readable phase clocks and long-term HR history */
+.training-phase{box-shadow:0 12px 34px rgba(0,0,0,.16);align-items:stretch}
+.training-phase .phase-main{flex:1;min-width:210px}
+.phase-clock{margin-top:10px;font-variant-numeric:tabular-nums;line-height:1.16;font-size:clamp(1.35rem,3.1vw,2.2rem);font-weight:850;letter-spacing:-.035em;color:#f3fbf0}
+.phase-clock small{display:inline;font-size:.45em;font-weight:650;letter-spacing:0;margin-left:5px}
+.phase-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:min(380px,100%)}
+.phase-metric{background:rgba(9,20,14,.55);padding:12px 13px;border:1px solid #415d49;border-radius:12px;min-width:0}
+.phase-metric span{display:block;color:#bdd1bf;font-size:.79rem}
+.phase-metric b{display:block;font-size:clamp(1.15rem,2.4vw,1.5rem);font-variant-numeric:tabular-nums;color:#ecf6ee;margin-top:3px}
+.phase-metric[data-active="true"]{border-color:#b3dda4;background:rgba(82,132,84,.23)}
+.phase-metric.rest[data-active="true"]{border-color:#88bbeb;background:rgba(68,112,163,.2)}
+.phase-metric em{display:block;font-size:.7rem;color:#a5bba9;font-style:normal}
+.phase-explain{font-size:.76rem;color:#bcd2c2;line-height:1.5;width:100%}
+.history-detail{background:linear-gradient(160deg,#172b22,#101a16 63%);border-color:#50775c;box-shadow:0 14px 38px rgba(0,0,0,.2)}
+.history-header h2{font-size:clamp(1.2rem,2.6vw,1.7rem);letter-spacing:-.025em}
+.history-ranges{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}
+.history-ranges button{min-width:0;background:#22382b;border:1px solid #47644f;border-radius:10px;color:#d8e7d8;font-size:.82rem;font-weight:750}
+.history-ranges button[aria-pressed="true"]{background:#b8dfa9;border-color:#d5f2cb;color:#102116;box-shadow:0 3px 12px rgba(124,182,128,.22)}
+.history-ranges button:disabled{opacity:.4;cursor:not-allowed}
+.history-graph{background:linear-gradient(180deg,#12281f,#0c1913);border-color:#365743;border-radius:14px;box-shadow:inset 0 1px rgba(255,255,255,.04)}
+.history-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.history-stat{background:rgba(35,63,46,.65);border:1px solid #365743;border-radius:11px;padding:10px 12px}
+.history-stat span{display:block;color:#afc6b6;font-size:.78rem}
+.history-stat b{display:block;color:#ecfaef;font-size:clamp(1.1rem,2vw,1.5rem);font-variant-numeric:tabular-nums}
+.history-stat small{font-size:.7rem;color:#a8bdab}
+.history-graph svg{min-height:175px}
+@media(max-width:620px){.history-ranges{grid-template-columns:repeat(3,minmax(0,1fr))}.phase-metrics{order:2;width:100%}.training-phase{gap:12px}}
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
@@ -116,13 +144,18 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 </section>
 <p id="cohortNotice" class="status-note" role="status">กำลังโหลดทะเบียนกลุ่มเสี่ยง • ผู้สวม Band ทุกคนอยู่ในกลุ่มเฝ้าระวัง แต่ WATCH/EMERGENCY เป็นเหตุเร่งด่วนเพิ่ม</p>
 <section id="trainingPanel" class="training-phase" aria-label="สถานะการฝึกทั้งกลุ่ม" hidden>
- <div><div class="command-eyebrow">GROUP ACTIVITY • สถานะภาพรวม</div><strong id="groupPhaseLabel">ยังไม่ระบุสถานะการฝึก</strong>
- <small id="groupPhaseTime">ควบคุมทั้งกลุ่ม ไม่กระทบ WATCH/EMERGENCY รายบุคคล</small></div>
+ <div class="phase-main"><div class="command-eyebrow">GROUP ACTIVITY / ชั่วโมงการฝึก</div><strong id="groupPhaseLabel">ยังไม่ระบุสถานะการฝึก</strong>
+ <div id="phaseClock" class="phase-clock" aria-live="off">— <small>นาทีในช่วงปัจจุบัน</small></div>
+ <small id="groupPhaseTime">รอผู้ฝึกหรือแพทย์เริ่มบันทึก</small></div>
+ <div class="phase-metrics" aria-label="ระยะเวลาช่วงฝึกและพักล่าสุด">
+  <div class="phase-metric" id="trainingMetric"><span>▶ ฝึกช่วงล่าสุด</span><b id="trainingDuration">—</b><em id="trainingDurationNote">ยังไม่มีข้อมูล</em></div>
+  <div class="phase-metric rest" id="restMetric"><span>◷ พักช่วงล่าสุด</span><b id="restDuration">—</b><em id="restDurationNote">ยังไม่มีข้อมูล</em></div>
+ </div>
  <div id="trainingActions" class="phase-actions">
   <button type="button" id="startTraining" aria-pressed="false">▶ กำลังทำการฝึก</button>
   <button type="button" id="startHourlyRest" aria-pressed="false">◷ พักประจำชั่วโมง</button>
  </div>
- <p id="groupPhaseMessage" role="status"></p>
+ <p id="groupPhaseMessage" role="status"></p><div class="phase-explain">เวลาคำนวณจากการกดเปลี่ยนสถานะของเจ้าหน้าที่ ไม่ใช่การตรวจจับการออกกำลังกายอัตโนมัติ และจะนับต่อจนมีการเปลี่ยนสถานะ</div>
 </section>
 <div id="emergencyAlerts" class="alert-panel" role="alert" hidden></div>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
@@ -169,10 +202,25 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
   <p id="privateStatus" role="status">เลือกผู้สวมที่ลงทะเบียนแล้ว</p>
  </details>
  <details><summary>ประวัติการเปลี่ยนแปลง (ไม่มีรายละเอียดสุขภาพ)</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
-</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden><div class="history-header"><div><small>HR TREND • ย้อนหลังสูงสุด 4 ชั่วโมง</small><h2 id="historyTitle">กราฟชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div><div class="history-ranges" id="historyRanges"><button data-history-hours="0.5" aria-pressed="false">30 นาที</button><button data-history-hours="1" aria-pressed="false">1 ชั่วโมง</button><button data-history-hours="2" aria-pressed="false">2 ชั่วโมง</button><button data-history-hours="4" aria-pressed="true">4 ชั่วโมง</button></div><p id="historyStatus" class="status-note" role="status">กำลังโหลดข้อมูล...</p><div id="historyStats" class="history-stats"></div><div id="historyBreakdown" class="history-breakdown"></div><div id="historyChart" class="history-graph"></div><div class="history-legend"><span style="--mark:#71b28c">กำลังทำการฝึก</span><span style="--mark:#689cc8">พักประจำชั่วโมง</span><span style="--mark:#c3e1cb">เส้น BPM ที่วัดได้จริง</span></div><p class="history-note">กราฟเป็นข้อมูลย้อนหลังใน RAM เท่านั้น • ไม่มีเส้นต่อเนื่องข้ามช่วง NO DATA • ไม่ใช้วินิจฉัยหรืออนุญาตให้กลับไปฝึก</p></section>
+</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
+ <div class="history-header"><div><small>STEVE HR ANALYTICS / บันทึกจริง สูงสุด 7 วัน</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
+ <div class="history-ranges" id="historyRanges">
+  <button type="button" data-history-hours="0.25" aria-pressed="false">15 นาที</button>
+  <button type="button" data-history-hours="0.5" aria-pressed="false">30 นาที</button>
+  <button type="button" data-history-hours="1" aria-pressed="false">1 ชั่วโมง</button>
+  <button type="button" data-history-hours="4" aria-pressed="true">4 ชั่วโมง</button>
+  <button type="button" data-history-hours="8" aria-pressed="false">8 ชั่วโมง</button>
+  <button type="button" data-history-hours="168" aria-pressed="false">7 วัน</button>
+ </div>
+ <p id="historyStatus" class="status-note" role="status">กำลังโหลดข้อมูล...</p>
+ <div id="historyStats" class="history-stats"></div><div id="historyBreakdown" class="history-breakdown"></div>
+ <div id="historyChart" class="history-graph"></div>
+ <div id="historyLegend" class="history-legend"><span style="--mark:#71b28c">ช่วงฝึกที่บันทึก</span><span style="--mark:#689cc8">ช่วงพักที่บันทึก</span><span style="--mark:#c3e1cb">BPM จากเซนเซอร์</span></div>
+ <p id="historyNote" class="history-note">ข้อมูลจริงเท่านั้น • ช่วงที่ขาดสัญญาณต้องมีช่องว่าง ไม่ต่อเส้นหลอก • กราฟไม่ใช้วินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก</p>
+ </section>
 <script>
 "use strict";
-let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,viewEpoch=0,historySlot=null,historyHours=4,historyRequest=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
+let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,operatorRole=null,viewEpoch=0,historySlot=null,historyHours=4,historyRequest=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  if(historySlot&&!historyIsLive(historySlot))closeHistory();
@@ -212,7 +260,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&!stale?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูกราฟย้อนหลัง 4 ชั่วโมง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
  panel.hidden=critical.length===0;
@@ -229,70 +277,98 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
 
 const byId=id=>document.getElementById(id);
 let historyCode=null;
+function archiveAllowed(){return operatorRole==="trainer"||operatorRole==="medic";}
 function historyIsLive(slot){
  const p=rosterData?.slots?.find(x=>x.id===slot),r=last?.recruits?.find(x=>x.id===slot);
  return !!p?.code&&(!historySlot||slot!==historySlot||p.code===historyCode)&&
-  !!r&&transportUp&&!r.stale&&Number.isInteger(r.hr)&&
-  Number.isFinite(r.timestamp)&&Date.now()-r.timestamp<=15000;
+  (archiveAllowed()||(!!r&&transportUp&&!r.stale&&Number.isInteger(r.hr)&&
+    Number.isFinite(r.timestamp)&&Date.now()-r.timestamp<=15000));
 }
 function closeHistory(){
  historyRequest++;historySlot=null;historyCode=null;
  byId("historyPanel").hidden=true;
  byId("historyChart").innerHTML="";byId("historyStats").textContent="";byId("historyBreakdown").textContent="";
 }
-function historyTime(t){return new Date(t).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});}
+function historyTime(t){
+ return new Date(t).toLocaleString("th-TH",historyHours===168?
+  {day:"numeric",month:"short",hour:"2-digit"}:{hour:"2-digit",minute:"2-digit"});
+}
 function renderHistory(data){
  if(!historySlot)return;
- const start=Math.max(data.windowStart,data.windowEnd-historyHours*3600000),end=data.windowEnd;
+ const end=Number(data.windowEnd)||Date.now(),start=end-historyHours*3600000;
+ const sourceArchive=data.source==="actual accepted HR only";
  const points=(data.points||[]).filter(p=>Array.isArray(p)&&Number.isSafeInteger(p[0])&&p[0]>=start&&
-  p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240);
- byId("historyStatus").textContent="บันทึกจริง "+points.length+" จุด • สูงสุด 1 จุดทุก 5 วินาที • เก็บใน RAM";
+  p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240).sort((a,b)=>a[0]-b[0]);
+ const source=sourceArchive?"Supabase • เข้ารหัส • สุ่มเก็บจริงทุก ~7 วินาที":"กราฟข้อมูลสดสูงสุด 4 ชั่วโมง";
+ byId("historyStatus").textContent="บันทึก "+points.length.toLocaleString("th-TH")+" จุดบนกราฟ • "+source+
+  (data.compacted?" • คัดค่าต่ำสุด/สูงสุดจริงเพื่อให้กราฟ 7 วันแสดงผลเร็ว":"");
+ byId("historyLegend").hidden=sourceArchive;
+ byId("historyNote").textContent="ข้อมูลหัวใจจากเซนเซอร์จริง • ไม่มีการเติมค่าในช่วงสัญญาณขาด"+
+  (sourceArchive?" • การบีบกราฟระยะยาวยังแสดงค่าต่ำสุด/สูงสุดที่วัดได้จริง":"")+
+  " • ไม่ใช้วินิจฉัยหรืออนุญาตให้กลับไปฝึก";
  if(!points.length){
-  byId("historyStats").textContent="ยังไม่มี BPM ที่บันทึกในช่วงนี้";byId("historyBreakdown").textContent="";
-  byId("historyChart").innerHTML="";return;
+  byId("historyStats").textContent="ยังไม่มีข้อมูล BPM ที่บันทึกไว้ในช่วงเวลานี้";
+  byId("historyBreakdown").textContent="";
+  byId("historyChart").innerHTML='<div style="padding:36px;text-align:center;color:#b8cbbd">ไม่มีข้อมูลการวัดในช่วงเวลาที่เลือก • NO DATA ไม่ใช่ 0 BPM</div>';return;
  }
  const values=points.map(p=>p[1]),lo=Math.min(...values),hi=Math.max(...values);
  const avg=Math.round(values.reduce((a,b)=>a+b,0)/values.length);
- byId("historyStats").textContent="ต่ำสุด "+lo+" BPM • เฉลี่ย "+avg+" BPM • สูงสุด "+hi+" BPM";
+ byId("historyStats").innerHTML=[["ต่ำสุด",lo],["ค่าเฉลี่ยของจุดที่แสดง",avg],["สูงสุด",hi]].map(([name,value])=>
+  '<div class="history-stat"><span>'+name+'</span><b>'+value+'</b><small>BPM</small></div>').join("");
  byId("historyBreakdown").innerHTML=data.summary?[["training","ช่วงฝึก"],["hourly_rest","ช่วงพัก"]].map(([key,label])=>{
   const row=data.summary[key];if(!row)return "";
   return '<div class="phase-summary"><b>'+label+'</b>'+
    (row.samples?'วัดได้ '+row.samples+' จุด • เฉลี่ย '+row.mean+' BPM • สูงสุด '+row.max+' BPM':
     'ไม่มีข้อมูลชีพจรในช่วงนี้')+'</div>';
  }).join(""):"";
- const W=940,H=302,L=55,R=14,T=16,B=240,BAND=255,inner=W-L-R;
- const yMin=Math.max(25,Math.floor((lo-10)/10)*10),yMax=Math.min(240,Math.ceil((hi+10)/10)*10);
+ const W=940,H=318,L=54,R=17,T=22,B=250,bandY=266,inner=W-L-R;
+ const yMin=Math.max(25,Math.floor((lo-10)/10)*10),yMax=Math.min(240,Math.max(yMin+10,Math.ceil((hi+10)/10)*10));
  const x=t=>L+Math.max(0,Math.min(1,(t-start)/(end-start)))*inner;
  const y=bpm=>B-(bpm-yMin)/(yMax-yMin)*(B-T);
  const f=n=>Number(n.toFixed(2));
- let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="กราฟชีพจรจริง พร้อมช่วงฝึกและพัก โดยไม่ลากเส้นข้ามช่วงสัญญาณขาด">';
- for(let i=0;i<=3;i++){
-  const value=yMin+(yMax-yMin)*i/3,py=f(y(value));
-  svg+='<line x1="'+L+'" y1="'+py+'" x2="'+(W-R)+'" y2="'+py+'" stroke="#34473b"/>';
-  svg+='<text x="'+(L-8)+'" y="'+(py+4)+'" fill="#a8c4ad" font-size="14" text-anchor="end">'+Math.round(value)+'</text>';
+ let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="กราฟชีพจรที่วัดได้จริง พร้อมช่วงไม่มีข้อมูล">';
+ svg+='<defs><linearGradient id="steveTrendLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6eccad"/><stop offset="1" stop-color="#d6f4b2"/></linearGradient>'+
+  '<linearGradient id="steveTrendFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9dd9ae" stop-opacity=".24"/><stop offset="1" stop-color="#9dd9ae" stop-opacity="0"/></linearGradient></defs>';
+ for(let i=0;i<=4;i++){
+  const value=yMin+(yMax-yMin)*i/4,py=f(y(value));
+  svg+='<line x1="'+L+'" y1="'+py+'" x2="'+(W-R)+'" y2="'+py+'" stroke="#375342" stroke-dasharray="3 6"/>';
+  svg+='<text x="'+(L-8)+'" y="'+(py+5)+'" fill="#b5cdbb" font-size="14" text-anchor="end">'+Math.round(value)+'</text>';
  }
- let phase=null,begin=start;
- const transitions=(data.phases||[]).filter(p=>Number.isSafeInteger(p.at)&&
-  (p.phase==="training"||p.phase==="hourly_rest")).sort((a,b)=>a.at-b.at);
- const bars=[];
- for(const event of transitions){
-  if(event.at<=start){phase=event.phase;continue;}
-  if(event.at>end)break;
-  if(phase)bars.push([begin,event.at,phase]);phase=event.phase;begin=event.at;
+ if(!sourceArchive){
+  let phase=null,begin=start;
+  const transitions=(data.phases||[]).filter(p=>Number.isSafeInteger(p.at)&&
+   (p.phase==="training"||p.phase==="hourly_rest")).sort((a,b)=>a.at-b.at);
+  const bars=[];
+  for(const event of transitions){
+   if(event.at<=start){phase=event.phase;continue;}
+   if(event.at>end)break;
+   if(phase)bars.push([begin,event.at,phase]);phase=event.phase;begin=event.at;
+  }
+  if(phase)bars.push([begin,end,phase]);
+  for(const [from,to,kind] of bars)svg+='<rect x="'+f(x(from))+'" y="'+bandY+
+   '" width="'+f(Math.max(0,x(to)-x(from)))+'" height="12" rx="2" fill="'+
+   (kind==="training"?"#7bd0a0":"#78a6d9")+'"/>';
  }
- if(phase)bars.push([begin,end,phase]);
- for(const [from,to,kind] of bars)svg+='<rect x="'+f(x(from))+'" y="'+BAND+
-  '" width="'+f(Math.max(0,x(to)-x(from)))+'" height="13" fill="'+
-  (kind==="training"?"#71b28c":"#689cc8")+'"/>';
+ const maxGap=historyHours===168?21*60000:historyHours===8?5*60000:20000;
  let group=[],previous=null,groups=[];
  for(const [at,bpm] of points){
-  if(previous!==null&&at-previous>15000){if(group.length>1)groups.push(group);group=[];}
-  group.push(f(x(at))+','+f(y(bpm)));previous=at;
+  if(previous!==null&&at-previous>maxGap){if(group.length)groups.push(group);group=[];}
+  group.push([f(x(at)),f(y(bpm))]);previous=at;
  }
- if(group.length>1)groups.push(group);
- for(const path of groups)svg+='<polyline fill="none" stroke="#c3e1cb" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" points="'+path.join(" ")+'"/>';
- if(points.length===1)svg+='<circle cx="'+f(x(points[0][0]))+'" cy="'+f(y(points[0][1]))+'" r="4" fill="#c3e1cb"/>';
- for(let i=0;i<=4;i++){const t=start+(end-start)*i/4;svg+='<text x="'+f(x(t))+'" y="292" text-anchor="'+(i===0?"start":i===4?"end":"middle")+'" fill="#adc3b0" font-size="14">'+historyTime(t)+'</text>';}
+ if(group.length)groups.push(group);
+ for(const g of groups){
+  if(g.length>1){
+   const coords=g.map(p=>p.join(",")).join(" ");
+   svg+='<polygon points="'+coords+" "+g.at(-1)[0]+","+B+" "+g[0][0]+","+B+
+    '" fill="url(#steveTrendFill)" />';
+   svg+='<polyline fill="none" stroke="url(#steveTrendLine)" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" points="'+coords+'"/>';
+  }else svg+='<circle cx="'+g[0][0]+'" cy="'+g[0][1]+'" r="3.2" fill="#d6f4b2"/>';
+ }
+ for(let i=0;i<=4;i++){
+  const t=start+(end-start)*i/4;
+  svg+='<text x="'+f(x(t))+'" y="306" text-anchor="'+(i===0?"start":i===4?"end":"middle")+
+   '" fill="#aec4b4" font-size="13">'+historyTime(t)+'</text>';
+ }
  byId("historyChart").innerHTML=svg+'</svg>';
 }
 async function refreshHistory(){
@@ -300,15 +376,22 @@ async function refreshHistory(){
  if(!historyIsLive(slot)){closeHistory();return;}
  const token=++historyRequest,epoch=viewEpoch;
  try{
-  const r=await fetch("/api/history/"+slot+"?hours="+historyHours,{credentials:"same-origin",cache:"no-store"});
+  const archive=archiveAllowed();
+  if(!archive&&historyHours>4){byId("historyStatus").textContent="ช่วงเวลานี้ต้องเข้าสู่ระบบด้วยบัญชีครูฝึกหรือแพทย์";return;}
+  const url=archive?"/api/archive/"+slot+"?hours="+historyHours+(historyHours>=8?"&compact=1":""):
+    "/api/history/"+slot+"?hours="+historyHours;
+  let r=await fetch(url,{credentials:"same-origin",cache:"no-store"});
   if(token!==historyRequest||epoch!==viewEpoch||slot!==historySlot)return;
+  if(archive&&r.status===503&&historyHours<=4){
+   r=await fetch("/api/history/"+slot+"?hours="+historyHours,{credentials:"same-origin",cache:"no-store"});
+  }
   if(r.status===401){disconnect();return;}
-  if(r.status===409){closeHistory();return;}
+  if(r.status===409){byId("historyStatus").textContent="ไม่มีข้อมูลสดหรือยังไม่ได้ลงทะเบียน";return;}
   if(!r.ok)throw Error("HTTP "+r.status);
   const data=await r.json();
   if(token!==historyRequest||epoch!==viewEpoch||slot!==historySlot||!historyIsLive(slot))return;
   renderHistory(data);
- }catch{if(token===historyRequest&&slot===historySlot)byId("historyStatus").textContent="โหลดกราฟไม่ได้ • ตรวจเครือข่ายแล้วลองใหม่";}
+ }catch{if(token===historyRequest&&slot===historySlot)byId("historyStatus").textContent="โหลดกราฟไม่ได้ • ตรวจเครือข่ายและสิทธิ์แล้วลองใหม่";}
 }
 function openHistory(slot){
  if(!/^R(0[1-9]|1[0-5])$/.test(slot)||!historyIsLive(slot))return;
@@ -317,8 +400,10 @@ function openHistory(slot){
  byId("historyPanel").hidden=false;
  byId("historyStats").textContent="";byId("historyBreakdown").textContent="";byId("historyChart").innerHTML="";
  byId("historyStatus").textContent="กำลังโหลดกราฟ...";
- for(const b of byId("historyRanges").querySelectorAll("button[data-history-hours]"))
+ for(const b of byId("historyRanges").querySelectorAll("button[data-history-hours]")){
   b.setAttribute("aria-pressed",String(Number(b.dataset.historyHours)===4));
+  b.disabled=!archiveAllowed()&&Number(b.dataset.historyHours)>4;
+ }
  refreshHistory();
  byId("historyPanel").scrollIntoView?.({behavior:"smooth",block:"start"});
 }
@@ -329,7 +414,7 @@ byId("cards").onclick=e=>{
 byId("historyClose").onclick=closeHistory;
 byId("historyRanges").onclick=e=>{
  const hours=Number(e.target.closest("button[data-history-hours]")?.dataset.historyHours);
- if(!historySlot||![0.5,1,2,4].includes(hours))return;
+ if(!historySlot||![0.25,0.5,1,4,8,168].includes(hours)||(!archiveAllowed()&&hours>4))return;
  historyHours=hours;
  for(const b of byId("historyRanges").querySelectorAll("button[data-history-hours]"))
   b.setAttribute("aria-pressed",String(Number(b.dataset.historyHours)===hours));
@@ -369,7 +454,7 @@ async function loadRoster(keepSelection=false){
  const info=await me.json(),data=await r.json(),audit=await a.json();
  if(epoch!==viewEpoch)return;
  const previous=byId("rosterSlot").value;
- rosterData=data;
+ operatorRole=info.role;rosterData=data;
  if(historySlot&&!historyIsLive(historySlot))closeHistory();
  byId("operatorRole").textContent="เข้าสู่ระบบ: "+({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ใช้รหัสร่วมเดิม"}[info.role]||"ผู้ปฏิบัติงาน")
   +" • สิทธิ์อ่านและแก้ไขเท่ากัน • "+(data.ephemeral?"ข้อมูลจะหายเมื่อเซิร์ฟเวอร์รีสตาร์ต":"มีไฟล์จัดเก็บแบบกำหนดเอง");
@@ -456,13 +541,36 @@ byId("privateSave").onclick=async()=>{
  }catch(e){byId("privateStatus").textContent=e.message+" • โหลดข้อมูลล่าสุดก่อนลองใหม่";}
  finally{privateBusy=false;byId("privateSave").disabled=false;}
 };
+function prettyDuration(ms){
+ const minutes=Math.max(0,Math.floor(ms/60000));
+ return minutes>=60?Math.floor(minutes/60)+" ชม. "+minutes%60+" นาที":minutes+" นาที";
+}
 function paintGroupPhase(){
  const panel=byId("trainingPanel");panel.hidden=false;
- const phase=groupPhaseData?.phase||"not_started";
- byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมงทั้งกลุ่ม":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
+ const phase=groupPhaseData?.phase||"not_started",now=Date.now();
  const changedAt=groupPhaseData?.changedAt;
- const elapsed=Number.isSafeInteger(changedAt)?Math.max(0,Math.floor((Date.now()-changedAt)/60000)):null;
- byId("groupPhaseTime").textContent=changedAt?"เริ่มสถานะ "+new Date(changedAt).toLocaleTimeString("th-TH")+" • ผ่านไป "+elapsed+" นาที • ผู้ฝึก/แพทย์กดเปลี่ยนเอง":"ยังไม่ได้ตั้งค่า • กดปุ่มเพื่อบันทึกสถานะรวมของกลุ่ม";
+ byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมงทั้งกลุ่ม":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
+ const elapsed=Number.isSafeInteger(changedAt)?Math.max(0,now-changedAt):null;
+ byId("phaseClock").innerHTML=elapsed===null?'— <small>นาทีในช่วงปัจจุบัน</small>':
+  prettyDuration(elapsed)+' <small>ในช่วงปัจจุบัน</small>';
+ byId("groupPhaseTime").textContent=changedAt?
+  "เริ่ม "+new Date(changedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
+  " • นับต่อเนื่องจนผู้ฝึก/แพทย์เปลี่ยนสถานะ":"ยังไม่ได้ตั้งค่า • กดปุ่มเพื่อบันทึกสถานะรวมของกลุ่ม";
+ const intervals=(groupPhaseData?.transitions||[]).filter(e=>
+  (e.phase==="training"||e.phase==="hourly_rest")&&Number.isSafeInteger(e.at)&&e.at<=now)
+  .sort((a,b)=>a.at-b.at);
+ const last={training:null,hourly_rest:null};
+ for(let i=0;i<intervals.length;i++){
+  const item=intervals[i],until=intervals[i+1]?.at??now;
+  if(until>=item.at)last[item.phase]={ms:until-item.at,active:i===intervals.length-1};
+ }
+ if(elapsed!==null&&phase!=="not_started")last[phase]={ms:elapsed,active:true};
+ for(const [key,id,container,note] of [["training","trainingDuration","trainingMetric","trainingDurationNote"],
+  ["hourly_rest","restDuration","restMetric","restDurationNote"]]){
+  byId(id).textContent=last[key]?prettyDuration(last[key].ms):"—";
+  byId(note).textContent=!last[key]?"ยังไม่มีบันทึก":last[key].active?"กำลังนับเวลา":"ช่วงที่บันทึกล่าสุด";
+  byId(container).dataset.active=String(key===phase);
+ }
  for(const [id,value] of [["startTraining","training"],["startHourlyRest","hourly_rest"]]){
   const button=byId(id);
   button.setAttribute("aria-pressed",String(value===phase));
@@ -553,7 +661,7 @@ document.getElementById('demoRestore').onclick=()=>demoAction('restore');
 document.getElementById('demoStop').onclick=()=>demoAction('stop');
 async function contextStatus(){try{const r=await fetch("/api/context",{credentials:"same-origin",cache:"no-store"});if(!r.ok)return;const d=await r.json();document.getElementById("conditions").textContent=d.timestamp?(d.stale?"WBGT: ค่าเก่ากว่า 30 นาที ต้องวัดใหม่":"WBGT (กรอกมือ): "+d.wbgtC+" °C • "+new Date(d.timestamp).toLocaleTimeString("th-TH")):"WBGT: ยังไม่มีข้อมูลการวัด";}catch{document.getElementById("conditions").textContent="WBGT: ตรวจข้อมูลไม่ได้";}}
 async function snapshot(){const epoch=viewEpoch;try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(epoch!==viewEpoch)return;if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(epoch!==viewEpoch)return;transportUp=true;draw(data);await gatewayStatus();await contextStatus();}catch(e){if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='DISCONNECTED — โหลดข้อมูลไม่สำเร็จ';}}
-function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
+function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;operatorRole=null;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
 function connect(){const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
  events.onopen=()=>{if(epoch!==viewEpoch)return;transportUp=true;conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
  events.onmessage=e=>{if(epoch!==viewEpoch)return;try{transportUp=true;draw(JSON.parse(e.data))}catch{}};
