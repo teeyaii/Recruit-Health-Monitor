@@ -4,6 +4,9 @@ import { randomUUID, randomBytes } from "node:crypto";
 import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway, provisionedDevicesForGateway } from "./contract.js";
 import { RosterStore } from "./roster.js";
 import { PulseHistory, WINDOW_MS } from "./pulse-history.js";
+import { DurableState } from "./durable-state.js";
+import { PrivateProfiles } from "./private-profiles.js";
+import { trainingSummary } from "./training-summary.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -15,13 +18,23 @@ const MAX_AGE_MS=15000;
 const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && process.env.NODE_ENV!=="production");
 const recruits=new Map();
 const pulseHistory=new PulseHistory();
+const durable=new DurableState();
+const privateProfiles=new PrivateProfiles();
+let writeQueue=Promise.resolve(),historyDirty=false;
+function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
+ profiles:privateProfiles.export(),conditions};}
+function persistState(){
+ if(!durable.enabled)return Promise.resolve();
+ writeQueue=writeQueue.catch(()=>{}).then(()=>durable.save(stateSnapshot()));
+ return writeQueue;
+}
 // Reject queued measurements recorded before a wearer changed.
 const reassignmentCutoff=new Map();
 const clients=new Set();
 const sessions=new Map();
 const gatewaySessions=new GatewaySessions();
 const failedLogins=new Map();
-const roster=new RosterStore(process.env.STEVE_ROSTER_FILE||"");
+const roster=new RosterStore(durable.enabled?"":process.env.STEVE_ROSTER_FILE||"");
 let conditions={wbgtC:null,timestamp:null,source:"not recorded"};
 let demoActive=false,demoDropR03=false,demoDropG03=false,demoRound=0,demoTimer=null;
 const lastByGateway=new Map();
@@ -74,7 +87,7 @@ function demoTick(){
   const gateway="G0"+(Math.floor(i/3)+1);
   const hr=72+((i*11+demoRound*3)%41);
   recruits.set(id,{hr,timestamp:now,gateway,source:"SIMULATED",state:"CONNECTED",eventAt:now});
-  if(roster.get(id).code)pulseHistory.record(id,hr,now,now);
+  if(roster.get(id).code&&pulseHistory.record(id,hr,now,now))historyDirty=true;
   lastByGateway.set(gateway,now);
  }
  demoRound++;publish();
@@ -124,7 +137,7 @@ const server=http.createServer(async(req,res)=>{
   if(!gateway || !/^G0[1-5]$/.test(gateway)){send(res,401,{error:'gateway credential required'});return;}
   const key=gatewaySessions.create(req,gateway);
   if(!key){send(res,503,{error:'session capacity reached'});return;}
-  res.setHeader('Set-Cookie',gatewaySessions.cookie(key));
+  res.setHeader('Set-Cookie',gatewaySessions.cookie(key,gateway));
   send(res,200,{ok:true,gateway,expiresAt:gatewaySessions.get({headers:{cookie:'steve_gateway='+key}}).expiry});return;
  }
  if(url.pathname==='/api/gateway/session' && req.method==='DELETE'){
@@ -148,16 +161,36 @@ const server=http.createServer(async(req,res)=>{
  // retained for existing Render dashboards, not a substitute for individual attribution.
  if(url.pathname==="/api/operator/me" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
-  send(res,200,{role:isViewer,permissions:["roster:read","roster:write","audit:read","context:write","training:read","training:write"]});return;
+  send(res,200,{role:isViewer,permissions:["roster:read","roster:write","audit:read","context:write","training:read","training:write",...(["trainer","medic"].includes(isViewer)&&durable.enabled?["private-profile:read","private-profile:write"]:[])],
+ durable:durable.enabled,privateProfilesEnabled:durable.enabled&&["trainer","medic"].includes(isViewer)});return;
  }
  if(url.pathname==="/api/roster" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
-  send(res,200,{slots:roster.all(),ephemeral:!roster.filename,
+  send(res,200,{slots:roster.all(),ephemeral:!durable.enabled&&!roster.filename,
    purpose:"pseudonymous operational information only — no diagnoses or real identifiers"});return;
  }
  if(url.pathname==="/api/roster/audit" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,{events:roster.getAudit()});return;
+ }
+ const privateRoute=url.pathname.match(/^\/api\/private-profile\/(R(?:0[1-9]|1[0-5]))$/);
+ if(privateRoute){
+  if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
+  if(!durable.enabled){send(res,503,{error:"secure external storage not yet configured"});return;}
+  const slot=privateRoute[1],code=roster.get(slot).code;
+  if(!code){send(res,409,{error:"register recruit before storing private information"});return;}
+  if(req.method==="GET"){send(res,200,{profile:privateProfiles.get(slot,code),sensitive:true});return;}
+  if(req.method!=="PUT"){send(res,405,{error:"method not allowed"});return;}
+  if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
+  if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
+  try{
+   const body=await readBody(req,1024),backup=privateProfiles.export();
+   const profile=privateProfiles.update(slot,code,body);
+   try{await persistState();}
+   catch{privateProfiles.load(backup);send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
+   send(res,200,{profile,sensitive:true});
+  }catch(e){send(res,e.status||500,{error:e.status?e.message:"private profile unavailable"});}
+  return;
  }
  const historyRoute=url.pathname.match(/^\/api\/history\/(R(?:0[1-9]|1[0-5]))$/);
  if(historyRoute&&req.method==="GET"){
@@ -167,21 +200,24 @@ const server=http.createServer(async(req,res)=>{
    send(res,409,{error:"NO DATA: กราฟใช้ได้เฉพาะทหารที่มี BPM สด"});return;
   }
   const now=Date.now(),start=now-WINDOW_MS;
+  const hours=Number(url.searchParams.get("hours")||4);
+  if(![0.5,1,2,4].includes(hours)){send(res,422,{error:"invalid history window"});return;}
+  const points=pulseHistory.get(slot,now),phases=roster.getTrainingTimeline(start,now);
   send(res,200,{slot,windowStart:start,windowEnd:now,windowHours:4,
-   sampleIntervalSeconds:5,ephemeral:true,
-   points:pulseHistory.get(slot,now),
-   phases:roster.getTrainingTimeline(start,now)});
+   sampleIntervalSeconds:5,ephemeral:!durable.enabled,points,phases,
+   summaryHours:hours,summary:trainingSummary(points,phases,now-hours*3600000,now)});
   return;
  }
  if(url.pathname==="/api/training"&&req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
-  send(res,200,{...roster.getGroupPhase(),ephemeral:!roster.filename});return;
+  send(res,200,{...roster.getGroupPhase(),ephemeral:!durable.enabled&&!roster.filename});return;
  }
  if(url.pathname==="/api/training"&&req.method==="PUT"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
-  try{const body=await readBody(req,512);send(res,200,{ok:true,...roster.setGroupPhase(body,isViewer),ephemeral:!roster.filename});}
+  try{const body=await readBody(req,512);const result=roster.setGroupPhase(body,isViewer);
+   await persistState();send(res,200,{ok:true,...result,ephemeral:!durable.enabled&&!roster.filename});}
   catch(e){send(res,e.status||500,{error:e.status?e.message:"training phase update unavailable"});}
   return;
  }
@@ -204,10 +240,10 @@ const server=http.createServer(async(req,res)=>{
    const firstAssignment=previous.code===null&&current.code!==null;
    if(action==="replace"||wearerChanged||firstAssignment){
     // Never attribute a previously measured BPM to a new wearer.
-    recruits.delete(slot);pulseHistory.clear(slot);
+    recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);
     reassignmentCutoff.set(slot,Date.now());publish();
    }else if(action==="resume")publish();
-   send(res,200,{ok:true,slot:current});
+   await persistState();send(res,200,{ok:true,slot:current});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"roster update unavailable"});}
   return;
  }
@@ -239,7 +275,8 @@ const server=http.createServer(async(req,res)=>{
   let body;try{body=JSON.parse(raw)}catch{send(res,400,{error:"invalid JSON"});return;}
   if(!body||typeof body.wbgtC!=="number"||!Number.isFinite(body.wbgtC)||body.wbgtC<0||body.wbgtC>60){send(res,422,{error:"invalid WBGT reading"});return;}
   conditions={wbgtC:body.wbgtC,timestamp:Date.now(),source:"manual entry"};
-  send(res,200,{ok:true,...conditions});return;
+  try{await persistState();send(res,200,{ok:true,...conditions});}
+  catch{send(res,503,{error:"durable storage unavailable"});}return;
  }
  if(req.method==="GET"&&url.pathname==="/api/events"){
   res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-store","Connection":"keep-alive","X-Accel-Buffering":"no"});
@@ -268,7 +305,7 @@ const server=http.createServer(async(req,res)=>{
     eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});
    // Only enrolled recruits with genuine accepted HR measurements create history.
    // NO DATA/disconnect and unregistered slots produce no history points.
-   if(!disconnected&&roster.get(item.id).code)pulseHistory.record(item.id,item.hr,item.timestamp,now);
+   if(!disconnected&&roster.get(item.id).code&&pulseHistory.record(item.id,item.hr,item.timestamp,now))historyDirty=true;
    accepted++;
   }
   lastByGateway.set(body.gateway,now);
@@ -277,5 +314,20 @@ const server=http.createServer(async(req,res)=>{
  send(res,404,{error:"not found"});
 });
 setInterval(publish,5000).unref();
-server.listen(PORT,"0.0.0.0",()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
+setInterval(()=>{
+ if(!durable.enabled||!historyDirty)return;
+ historyDirty=false;persistState().catch(()=>{historyDirty=true;});
+},30000).unref();
+async function boot(){
+ if(durable.enabled){
+  const state=await durable.load();
+  if(state){
+   if(!state.roster||!state.profiles||!state.history)throw Error("Incomplete encrypted STEVE snapshot");
+   roster.loadData(state.roster);privateProfiles.load(state.profiles);pulseHistory.load(state.history);
+   if(state.conditions&&typeof state.conditions==="object")conditions=state.conditions;
+  }
+ }
+ server.listen(PORT,"0.0.0.0",()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
+}
+boot().catch(()=>{console.error("STEVE secure storage startup failed; check remote store configuration");process.exitCode=1;});
 
