@@ -221,6 +221,34 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 }
 @media(prefers-reduced-motion:reduce){.command-stats .stat{transition:none}}
 
+
+/* Privacy-separated, clinician-controlled review. Aggregate only outside expanded private form. */
+.command-stats .medic-review-stat{border-color:#577a82;background:linear-gradient(155deg,#234249,#182b30)}
+.command-stats .medic-review-stat b{color:#b4dfeb}
+.medic-review-panel{margin-top:17px;border:1px solid #426f68;border-radius:15px;background:linear-gradient(150deg,#182f2c,#14241f);padding:16px}
+.medic-review-panel summary{display:flex;align-items:center;justify-content:space-between;gap:9px;color:#d5efe4;font-weight:850;cursor:pointer;min-height:40px}
+.medic-review-panel summary small{color:#accbbb;font-weight:550;font-size:.77rem}
+.medic-review-top{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.medic-review-top>div{background:#20372f;border-radius:11px;padding:11px}
+.medic-review-top small{display:block;color:#adcdbf;font-size:.76rem}
+.medic-review-top strong{display:block;color:#e5f8ed;font-size:1rem;margin-top:5px}
+.medic-review-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0 13px}
+.medic-review-grid>div{background:#142920;border:1px solid #3c5b48;border-radius:11px;padding:12px}
+.medic-review-grid span{display:block;font-size:.7rem;color:#a6c3b1}
+.medic-review-grid b{font-size:clamp(1rem,2vw,1.4rem);display:block;color:#e0f8e5;margin-top:5px;font-variant-numeric:tabular-nums}
+.medic-mini-chart{background:#11231d;border:1px solid #345b48;border-radius:10px;min-height:110px;overflow:hidden}
+.medic-mini-chart svg{width:100%;height:auto;display:block}
+.medic-caution{color:#c3d3ba;font-size:.76rem;line-height:1.6}
+.medic-review-panel label{margin-top:11px}
+.medic-review-panel textarea{width:100%;min-height:70px;resize:vertical;background:#172d21;border:1px solid #4d6c58;border-radius:10px;color:#edf7ef;padding:10px}
+.medic-review-panel select{width:100%;background:#172d21;border-color:#4d6c58}
+#medicRequest{background:#bce3d1;color:#123229;border-color:#c7f0dc}
+#medicClose{background:#2d4740;border-color:#618178}
+#medicMessage{font-size:.82rem;color:#ccddc5}
+.baseline-confirm{display:flex;align-items:center;gap:9px;margin:10px 0;font-size:.79rem}
+.baseline-confirm input{width:20px;height:20px;min-height:20px;min-width:20px;accent-color:#a6d5a9}
+@media(max-width:650px){.medic-review-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
@@ -232,6 +260,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 <div class="stat lost"><span>NO DATA</span><b id="statNoData">—</b></div>
 <div class="stat watch"><span>WATCH</span><b id="statWatch">0</b></div>
 <div class="stat paused"><span>EMERGENCY</span><b id="statPaused">—</b></div>
+<div class="stat medic-review-stat"><span>รอประเมิน MEDIC</span><b id="statMedicPending">—</b></div>
 <div class="stat"><span>ช่องที่เหลือ</span><b id="statUnregistered">—</b></div>
 </section>
 <p id="cohortNotice" class="status-note" role="status"></p>
@@ -286,12 +315,47 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
    <label>น้ำหนัก (กก.)<input id="privateWeight" type="number" inputmode="decimal" min="20" max="300" step="0.1" autocomplete="off"></label>
    <label>ส่วนสูง (ซม.)<input id="privateHeight" type="number" inputmode="decimal" min="80" max="230" step="0.1" autocomplete="off"></label>
   </div>
+  <div class="operator-fields">
+   <label>อายุ (ปี)<input id="privateAge" type="number" inputmode="numeric" min="16" max="85" step="1" autocomplete="off"></label>
+   <label>Baseline ชีพจรขณะพัก (BPM)<input id="privateBaseline" type="number" inputmode="numeric" min="25" max="240" step="1" autocomplete="off" placeholder="วัดขณะพักจริง"></label>
+  </div>
+  <label class="baseline-confirm"><input id="privateBaselineConfirmed" type="checkbox"> ยืนยันว่าค่า Baseline มาจากการวัดและทบทวนโดยเจ้าหน้าที่</label>
+  <label>ยา / ข้อควรระวังเกี่ยวกับยา<textarea id="privateMedications" maxlength="240" autocomplete="off" spellcheck="false"></textarea></label>
   <label>โรคประจำตัว / ข้อควรระวัง
    <textarea id="privateConditions" maxlength="300" autocomplete="off" spellcheck="false"></textarea>
   </label>
   <p id="privateBmi" class="status-note">BMI: —</p>
   <button type="button" id="privateSave">บันทึกข้อมูลส่วนตัวแบบเข้ารหัส</button>
   <p id="privateStatus" role="status">เลือกผู้สวมที่ลงทะเบียนแล้ว</p>
+ </details>
+ <details id="medicPanel" class="medic-review-panel" hidden>
+  <summary><span>MEDIC REVIEW</span> <small>ติดตาม / ขอประเมิน</small></summary>
+  <div class="medic-review-top">
+   <div><small>สถานะรายการ</small><strong id="medicReviewState">ยังไม่มีรายการ</strong></div>
+   <div><small>คุณภาพสัญญาณ</small><strong id="medicSignalQuality">รอตรวจ</strong></div>
+  </div>
+  <div class="medic-review-grid">
+   <div><span>ชีพจรล่าสุด</span><b id="medicLatestBpm">—</b></div>
+   <div><span>เฉลี่ยช่วงสังเกต</span><b id="medicObservedMean">—</b></div>
+   <div><span>Baseline ขณะพัก</span><b id="medicBaselineValue">—</b></div>
+   <div><span>ต่างจาก Baseline</span><b id="medicBaselineDelta">—</b></div>
+  </div>
+  <div id="medicChart" class="medic-mini-chart" role="img" aria-label="กราฟ BPM จริงที่มีการบันทึก"></div>
+  <p id="medicClinicalContext" class="status-note">ข้อมูลสุขภาพเฉพาะเจ้าหน้าที่</p>
+  <p class="medic-caution">ข้อมูลจากสายรัดเป็นข้อมูลประกอบการตรวจ ไม่ใช่คำวินิจฉัย • ตรวจคุณภาพสัญญาณก่อนประเมิน</p>
+  <label>เหตุผลที่ขอประเมิน<select id="medicReason">
+   <option value="high_sustained">ชีพจรสูงต่อเนื่องเมื่อเทียบกับข้อมูลรายบุคคล</option>
+   <option value="rest_recovery">รูปแบบชีพจรหลังฝึก/ขณะพัก</option>
+   <option value="sudden_change">ชีพจรเปลี่ยนฉับพลัน / ตรวจสัญญาณ</option>
+   <option value="medical_context">ข้อมูลสุขภาพ / ข้อจำกัดทางการแพทย์</option>
+   <option value="heat_exposure">อากาศร้อน / WBGT</option>
+   <option value="signal_missing">สัญญาณขาดหาย</option>
+   <option value="other">เหตุอื่นที่ต้องการเจ้าหน้าที่ประเมิน</option>
+  </select></label>
+  <label>บันทึกของเจ้าหน้าที่<textarea id="medicNote" maxlength="240" placeholder="ข้อสังเกตสั้น ๆ ไม่ต้องใส่ชื่อจริง"></textarea></label>
+  <div class="operator-actions"><button type="button" id="medicRequest">ส่งเข้าคิวประเมิน</button>
+   <button type="button" id="medicClose" class="secondary">ปิดรายการหลังประเมิน</button></div>
+  <p id="medicMessage" role="status"></p>
  </details>
  <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
 </section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
