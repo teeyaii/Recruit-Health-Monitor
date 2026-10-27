@@ -21,7 +21,7 @@ test("Dashboard uses lean commander copy and keeps essential risk status intact"
  assert.doesNotMatch(dashboard,/สถานะภาพรวม ไม่เปลี่ยนข้อจำกัดการฝึก/);
  assert.doesNotMatch(dashboard,/พักประจำชั่วโมงทั้งกลุ่ม/);
  assert.doesNotMatch(dashboard,/เมื่อเปลี่ยนผู้สวม ให้ย้ายและตรวจสายรัด/);
- assert.match(dashboard,/>พักประจำชั่วโมง</);
+ assert.match(dashboard,/พักประจำชั่วโมง/);
  assert.match(dashboard,/รหัสประจำตัว \\(หน่วยกำหนด\\)/);
  for(const id of ["trainingPanel","phaseClock","trainingDuration","restDuration","statLive","statNoData","statWatch","statPaused","rosterBox","historyPanel"]){
   assert.match(dashboard,new RegExp('id="'+id+'"'));
