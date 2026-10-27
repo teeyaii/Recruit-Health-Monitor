@@ -21,7 +21,7 @@ export class MedicReviews{
     !noteValid(p.note)||!Number.isSafeInteger(p.version)||p.version<1||
     !Number.isSafeInteger(p.requestedAt)||p.requestedAt<0||
     (p.closedAt!==null&&(!Number.isSafeInteger(p.closedAt)||p.closedAt<p.requestedAt))||
-    !["trainer","medic"].includes(p.openedBy)|| (p.closedBy!==null&&!["trainer","medic"].includes(p.closedBy)))
+    !["trainer","medic","system"].includes(p.openedBy)|| (p.closedBy!==null&&!["trainer","medic"].includes(p.closedBy)))
     throw Error("Invalid medic review entry");
   }
   this.records=structuredClone(data);
@@ -37,6 +37,15 @@ export class MedicReviews{
    const p=this.records[slot],code=roster.get(slot).code;
    return !!code&&!!p&&p.status==="pending"&&p.code.toUpperCase()===code.toUpperCase();
   }).length;
+ }
+ autoRequest(slot,code,reason,now=Date.now()){
+  if(!REVIEW_REASONS.has(reason))throw err(422,"Invalid automatic review reason");
+  const prev=this.get(slot,code);
+  if(prev.status==="pending")return {created:false,review:prev};
+  const next={slot,code,status:"pending",reason,note:"",version:prev.version+1,
+   requestedAt:now,closedAt:null,openedBy:"system",closedBy:null};
+  this.records[slot]=next;
+  return {created:true,review:structuredClone(next)};
  }
  update(slot,code,input,actor,now=Date.now()){
   if(!["trainer","medic"].includes(actor))throw err(403,"authorized clinician/operator required");
