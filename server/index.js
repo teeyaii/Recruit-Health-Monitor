@@ -205,7 +205,7 @@ const server=http.createServer(async(req,res)=>{
     // Comparison is descriptive only; rest phase must be recorded by a human.
     const baseline=profile.baselineConfirmed&&phase.phase==="hourly_rest"?
      profile.restingBaselineBpm:null;
-    const signal=describeSignal(points,Date.now(),baseline);
+    const signal=describeSignal(pulseHistory.get(slot,Date.now()),Date.now(),baseline);
     const restVerified=phase.phase==="hourly_rest"&&Number.isSafeInteger(phase.changedAt)&&
      Date.now()-phase.changedAt>=3*60000;
     if(!restVerified)signal.deltaBpm=null;
