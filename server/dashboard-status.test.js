@@ -60,3 +60,22 @@ test('cards show recruit code above its R-slot and preserve R01–R15 numerical 
  assert.equal(node('statLive').textContent,3);
  assert.equal(node('statWatch').textContent,1,'code presentation does not change clinical urgency');
 });
+
+test('compact alert retains urgent instruction, count, R-slot and acknowledgement controls',()=>{
+ const {node,context}=view(),now=Date.now();
+ const profiles=[{id:'R01',code:'a001',observation:'confusion_collapse_seizure',acknowledged:false},
+                 {id:'R02',code:'a002',observation:'confusion_collapse_seizure',acknowledged:true}];
+ context.render({recruits:[{id:'R01',hr:null,timestamp:now-20000,stale:true},
+                           {id:'R02',hr:66,timestamp:now,stale:false}]},profiles);
+ const alert=node('emergencyAlerts');
+ assert.equal(alert.hidden,false);
+ assert.match(alert.innerHTML,/class="emergency-title">EMERGENCY \(2\)/);
+ assert.match(alert.innerHTML,/หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที/);
+ assert.match(alert.innerHTML,/class="emergency-row">R01/);
+ assert.match(alert.innerHTML,/class="emergency-row">R02/);
+ assert.match(alert.innerHTML,/data-ack-slot="R01"/);
+ assert.match(alert.innerHTML,/ยังเป็น EMERGENCY/);
+ assert.match(alert.innerHTML,/disabled/);
+ assert.equal(node('statPaused').textContent,2);
+ assert.equal(node('statNoData').textContent,1);
+});
