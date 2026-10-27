@@ -8,9 +8,10 @@ export const slotIDs=Array.from({length:15},(_,i)=>"R"+String(i+1).padStart(2,"0
 const slotSet=new Set(slotIDs);
 const observations=new Set(["none","dizzy_weak_nausea","confusion_collapse_seizure"]);
 const restrictions=new Set(["none","watch","no_training"]);
+const activities=new Set(["not_reported","training","resting","assessment"]);
 const shortCode=/^[A-Z0-9][A-Z0-9_-]{3,23}$/;
 function problem(status,message){const err=new Error(message);err.status=status;throw err;}
-function blank(id){return {id,code:null,restriction:"none",observation:"none",acknowledged:false,paused:false,version:0,updatedAt:null};}
+function blank(id){return {id,code:null,restriction:"none",observation:"none",activity:"not_reported",acknowledged:false,paused:false,version:0,updatedAt:null};}
 function verifyShape(d){
  if(!d || typeof d!=="object" || Array.isArray(d))throw Error("Invalid persisted STEVE roster file");
  if(d.schema!==1||!d.slots||!Array.isArray(d.audit))throw Error("Unsupported STEVE roster file format");
@@ -19,6 +20,7 @@ function verifyShape(d){
   if(!p||p.id!==id||!Number.isSafeInteger(p.version)||p.version<0||
       (p.code!==null&&typeof p.code!=="string")||
       !restrictions.has(p.restriction)||!observations.has(p.observation)||
+      (p.activity!==undefined&&!activities.has(p.activity))||
       typeof p.acknowledged!=="boolean"||typeof p.paused!=="boolean")throw Error("Invalid STEVE roster slot "+id);
  }
 }
@@ -42,8 +44,8 @@ export class RosterStore {
    }catch(e){if(e.code!=="ENOENT")throw e;}
   }
  }
- all(){return slotIDs.map(id=>({...this.data.slots[id]}));}
- get(id){if(!slotSet.has(id))problem(404,"unknown slot");return {...this.data.slots[id]};}
+ all(){return slotIDs.map(id=>this.get(id));}
+ get(id){if(!slotSet.has(id))problem(404,"unknown slot");return {activity:"not_reported",...this.data.slots[id]};}
  getAudit(){return this.data.audit.slice(-100).map(item=>({...item}));}
  canIngest(id){return slotSet.has(id)&&!this.data.slots[id].paused;}
  persist(){
@@ -73,9 +75,9 @@ export class RosterStore {
   if(p.code!==null&&p.code!==code)problem(409,"use Replace to change occupant");
   if(slotIDs.some(other=>other!==id&&this.data.slots[other].code===code))
    problem(409,"anonymous code already active on another slot");
-  if(!restrictions.has(input?.restriction)||!observations.has(input?.observation))problem(422,"invalid restriction or observation");
+  if(!restrictions.has(input?.restriction)||!observations.has(input?.observation)||!activities.has(input?.activity??p.activity))problem(422,"invalid restriction, observation or activity");
   const observation=input.observation;
-  const next={...p,code,restriction:input.restriction,observation,
+  const next={...p,code,restriction:input.restriction,observation,activity:input.activity??p.activity,
     acknowledged:observation===p.observation?p.acknowledged:false};
   return this.commit(id,p,next,actor,"update");
  }
@@ -86,7 +88,7 @@ export class RosterStore {
   if(slotIDs.some(other=>other!==id&&this.data.slots[other].code===code))
    problem(409,"anonymous code already active on another slot");
   // PAUSED rejects all new BLE readings until a human verifies the physical reassignment.
-  const next={...p,code,paused:true,restriction:"none",observation:"none",acknowledged:false};
+  const next={...p,code,paused:true,restriction:"none",observation:"none",activity:"not_reported",acknowledged:false};
   return this.commit(id,p,next,actor,"replace_paused");
  }
  resume(id,input,actor){
