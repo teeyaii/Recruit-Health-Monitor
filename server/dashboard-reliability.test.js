@@ -57,7 +57,7 @@ test('offline global-phase button must not claim it changed the group; logout cl
  vm.runInContext("groupPhaseData={phase:'training',version:1,changedAt:Date.now()};paintGroupPhase();",h.context);
  h.reply(async()=>{throw Error('offline');});
  await h.node('startHourlyRest').onclick();
- assert.match(h.node('groupPhaseLabel').textContent,/กำลังฝึก/);
+ assert.equal(h.node('groupPhaseLabel').textContent,'กำลังทำการฝึก');
  assert.match(h.node('groupPhaseMessage').textContent,/บันทึกไม่สำเร็จ/);
  await h.node('logout').onclick();
  assert.equal(h.node('trainingPanel').hidden,true);
