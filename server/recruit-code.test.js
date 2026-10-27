@@ -26,7 +26,7 @@ test("case-insensitive duplicate/identity checks protect slot reassignment",()=>
  assert.equal(changedBySave.code,"q001","new wearer is saved with one edit");
  assert.equal(changedBySave.paused,false);
  assert.equal(store.getAudit().at(-1).action,"reassign_via_save");
- assert.throws(()=>store.replace("R01",{version:1,code:"AB-12"},"medic"),{status:422},"case-only change is not a replacement");
+ assert.throws(()=>store.replace("R01",{version:2,code:"Q001"},"medic"),{status:422},"case-only change is not a replacement");
  const changed=store.replace("R01",{version:2,code:"p004"},"medic");
  assert.equal(changed.code,"p004");
  assert.equal(changed.paused,true,"legacy API still supports explicit PAUSED state");
