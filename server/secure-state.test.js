@@ -77,3 +77,21 @@ test("G01–G03 extend to ten hours; G04–G05 remain absolute two hours",()=>{
   assert.equal(s.get({headers:{cookie:"steve_gateway="+key}},now+GATEWAY_SESSION_MS),null);
  }
 });
+
+test("modern Supabase sb_secret key uses apikey header only, not JWT Bearer",async()=>{
+ const secret="sb_secret_testonly_fa014bbac0324151ae6d4c1b7fcae957";
+ let seen=null,encrypted=null;
+ const store=new DurableState({...env,STEVE_SUPABASE_SERVICE_ROLE_KEY:secret},
+  async(_url,options)=>{
+   seen=options.headers;
+   assert.equal(seen.apikey,secret);
+   assert.equal("Authorization" in seen,false,"opaque sb_secret is not a JWT");
+   if(options.method==="GET")return {ok:true,json:async()=>encrypted?[{envelope:encrypted}]:[]};
+   encrypted=JSON.parse(options.body).envelope;
+   return {ok:true,status:201};
+  });
+ const record={schema:1,roster:{slots:{}},profiles:{},history:{},conditions:{}};
+ await store.save(record);
+ assert.deepEqual(await store.load(),record);
+ assert.ok(encrypted);
+});

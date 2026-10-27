@@ -47,11 +47,15 @@ export class DurableState {
  async request(url,options){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
   try{
-   const response=await this.fetcher(url,{
-    ...options,signal:controller.signal,
-    headers:{"apikey":this.token,"Authorization":"Bearer "+this.token,
-     "Accept":"application/json",...(options?.headers||{})}
-   });
+   // New sb_secret_ keys are opaque API keys, NOT JWTs. Sending them as
+   // Authorization: Bearer makes PostgREST try to parse an invalid JWT.
+   // Legacy service_role JWT credentials still require Bearer authentication.
+   const headers={
+    "apikey":this.token,
+    ...(this.token.startsWith("sb_secret_")?{}:{"Authorization":"Bearer "+this.token}),
+    "Accept":"application/json",...(options?.headers||{})
+   };
+   const response=await this.fetcher(url,{...options,signal:controller.signal,headers});
    if(!response.ok)throw Error("Durable storage request failed: HTTP "+response.status);
    return response;
   }finally{clearTimeout(timeout);}
