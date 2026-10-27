@@ -129,6 +129,98 @@ body.presentation .history-open{display:none!important}
 .history-stat small{font-size:.7rem;color:#a8bdab}
 .history-graph svg{min-height:175px}
 @media(max-width:620px){.history-ranges{grid-template-columns:repeat(3,minmax(0,1fr))}.phase-metrics{order:2;width:100%}.training-phase{gap:12px}}
+
+/* STEVE 1.0 — clean clinical command presentation */
+:root{--ink:#0c1511;--pine:#13241b;--panel:#1b2e23;--edge:#405848;--accent:#b6dda8;--muted:#aabfb1}
+body{background:radial-gradient(ellipse 78% 34% at 88% -8%,#254438 0%,transparent 80%),linear-gradient(160deg,#101b16,#0b1310 75%);color:#ecf5ed}
+header{padding:12px 0 19px;margin-bottom:12px;border-bottom:1px solid #354a3b;gap:14px}
+header h1{letter-spacing:-.035em;font-size:clamp(1.55rem,3vw,2.45rem);font-weight:860}
+.command-wordmark{font-size:.55em;letter-spacing:.09em;color:#a9c8b2;font-weight:760;vertical-align:middle}
+#connection{border:1px solid #496c53;background:linear-gradient(145deg,#1f3b2b,#173123);color:#ceecd0;box-shadow:inset 0 1px #ffffff11;font-size:.78rem;padding:8px 13px}
+.command-bar{margin:6px 0 12px;padding:6px 0 3px}
+.command-bar .command-eyebrow{font-size:.72rem;letter-spacing:.13em;color:#b8d9b7}
+.command-bar small{display:block;margin-top:3px;font-size:.82rem;color:#a9beaf}
+.command-bar button{background:#20382a;border:1px solid #5e8263;border-radius:11px;padding:11px 16px;font-size:.82rem}
+.command-stats{gap:10px;margin:13px 0 17px}
+.command-stats .stat{background:linear-gradient(150deg,#21372a,#16271e);border:1px solid #3d5a44;border-radius:14px;min-height:103px;padding:15px 15px 13px;box-shadow:inset 0 1px #ffffff0b,0 8px 22px #0002}
+.stat span{display:block;min-height:32px;letter-spacing:.01em;font-size:.78rem;color:#adc5b2;font-weight:650}
+.stat b{font-size:clamp(1.65rem,3vw,2.3rem);line-height:1.1;letter-spacing:-.04em;color:#eef8ef}
+.command-stats .stat.live{border-color:#5f9775;background:linear-gradient(140deg,#264e38,#173123)}
+.command-stats .stat.lost{border-color:#80665e}.command-stats .stat.watch{border-color:#857549}.command-stats .stat.paused{border-color:#975956}
+#cohortNotice{padding:0;margin:6px 0 11px}
+#cohortNotice:empty,#groupPhaseMessage:empty,#rosterStatus:empty{display:none}
+.training-phase{background:linear-gradient(135deg,#213e2e,#17271d 62%,#18271f);border:1px solid #557663;border-radius:18px;padding:clamp(16px,2.5vw,25px);box-shadow:inset 0 1px #ffffff0d,0 12px 38px #0003;gap:14px;margin:17px 0}
+.training-phase .command-eyebrow{font-size:.73rem;color:#aed0b1}
+.training-phase strong{font-size:clamp(1.1rem,2.25vw,1.65rem);letter-spacing:-.022em}
+.phase-clock{margin-top:9px;font-size:clamp(1.5rem,3.2vw,2.3rem);color:#eff9ee}
+.phase-clock small{color:#bbd6c4}
+.phase-metric{background:#14251bcf;border-radius:12px;border-color:#49634f;padding:13px}
+.phase-metric span{font-size:.78rem}
+.phase-metric b{letter-spacing:-.025em}
+.phase-metric em{margin-top:2px}
+.phase-actions button{min-height:46px;border-radius:11px;background:#2c4435;border-color:#56785f;font-size:.84rem}
+.phase-actions button[aria-pressed="true"]{background:#b7dba7;color:#17291e;border-color:#b7dba7}
+#groupPhaseMessage{margin:0;color:#dcdbbc;font-size:.79rem}
+#rosterBox{background:linear-gradient(145deg,#1c2b22,#15221b);border-color:#3e5846;border-radius:18px;box-shadow:0 12px 30px #0002;margin:19px 0;padding:clamp(16px,2.5vw,26px)}
+#rosterBox h2{margin:0 0 9px;letter-spacing:-.03em;font-size:clamp(1.15rem,2vw,1.45rem)}
+.section-count{font-size:.72em;color:#a6c5ab;letter-spacing:.03em;font-weight:650}
+#operatorRole{margin:0 0 15px;color:#a8cdb5;font-size:.8rem}
+.operator-fields{gap:11px}
+.operator-fields label{font-size:.82rem;color:#cadccd;font-weight:650}
+.operator-fields input,.operator-fields select{background:#14251c;border-color:#53715b;border-radius:10px}
+.operator-actions{margin-top:15px}
+.operator-actions button{border-radius:10px;font-size:.84rem}
+#rosterSave,#privateSave{background:#b9dcae;color:#163022;border-color:#c8e5bf}
+#rosterSave:hover,#privateSave:hover{background:#d5f1cb}
+#rosterStatus{margin:10px 0 0;color:#cbdabc;font-size:.81rem}
+.operator-box details{border-top:1px solid #3b5341;margin-top:17px;padding-top:10px}
+.operator-box details summary{font-weight:700;font-size:.87rem;color:#c3d9c7}
+.telemetry-strip{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;background:#17241c;border:1px solid #314d3a;border-radius:13px;padding:10px 15px;margin:15px 0 20px}
+.telemetry-strip p{margin:0;line-height:1.5;color:#b5cbbb;font-size:.8rem}
+.telemetry-strip form{margin:0;gap:8px}
+.telemetry-strip form label{font-size:.75rem}
+.telemetry-strip form input{min-width:100px;width:112px;min-height:40px}
+.telemetry-strip form button{min-height:40px;padding:8px 12px}
+.monitor-section{margin:15px 0 22px}
+.monitor-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 15px}
+.monitor-heading h2{font-size:clamp(1.3rem,2.2vw,1.75rem);letter-spacing:-.035em;margin:4px 0 0;color:#eef7eb}
+.monitor-heading .command-eyebrow{font-size:.71rem}
+#summary{font-size:.8rem;margin:0;color:#aec5b4;font-weight:650;letter-spacing:0}
+.grid{gap:13px}
+.grid .card{background:linear-gradient(150deg,#23352a,#17251d);border:1px solid #3b5645;border-left:3px solid #8da794;border-radius:15px;padding:clamp(13px,1.65vw,19px);min-height:0;box-shadow:inset 0 1px #ffffff0b,0 8px 24px #0002}
+.grid .card:hover{border-color:#729779}
+.card .card-personnel-code{font-size:clamp(1.1rem,1.55vw,1.42rem);letter-spacing:-.02em}
+.card .card-personnel-caption{color:#a8c5af;font-size:.67rem}
+.card .card-slot-label{letter-spacing:0;color:#95b3a3}
+.card .status-chip{border-radius:7px;padding:5px 9px;font-size:.68rem;letter-spacing:.045em;margin:0}
+.card .bpm{font-size:clamp(2.3rem,3vw,3rem);font-weight:850;line-height:1.15;letter-spacing:-.05em;margin:16px 0 10px}
+.card .bpm small{font-size:.33em;font-weight:700;letter-spacing:.04em;color:#b3ccb8}
+.signal-line{border-top:1px solid #3a5441;padding-top:10px;margin:9px 0 5px}
+.card > div > small{color:#b0c7b7}
+.card .history-open{background:#2b4334;border:1px solid #597765;border-radius:10px;margin-top:13px;color:#e2f4e3;font-size:.78rem;min-height:44px}
+.card .history-open:hover{background:#385a43}
+.card .safety{background:#3d301b;padding:8px 10px;border-radius:8px;font-size:.76rem;line-height:1.5;color:#f0d196;margin:10px 0 0}
+.history-detail{border-radius:17px;border-color:#506f58}
+.history-ranges button{font-size:.79rem}
+.history-stat{border-radius:10px}
+.alert-panel{border-radius:11px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #b5e2aa;outline-offset:2px}
+@media(max-width:600px){
+ header{padding:7px 0 16px}
+ header h1{font-size:1.52rem}
+ .command-wordmark{display:block;font-size:.49em;letter-spacing:.16em;margin-top:1px}
+ .command-stats{gap:8px}
+ .command-stats .stat{min-height:93px;padding:11px}
+ .stat span{min-height:28px;font-size:.72rem}
+ .stat b{font-size:1.8rem}
+ .telemetry-strip{gap:8px}
+ .monitor-heading h2{font-size:1.32rem}
+ .grid{gap:10px}
+ .grid .card{padding:12px}
+ .card .bpm{font-size:2.25rem}
+}
+@media(prefers-reduced-motion:reduce){.command-stats .stat{transition:none}}
+
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
@@ -194,7 +286,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
    <label>น้ำหนัก (กก.)<input id="privateWeight" type="number" inputmode="decimal" min="20" max="300" step="0.1" autocomplete="off"></label>
    <label>ส่วนสูง (ซม.)<input id="privateHeight" type="number" inputmode="decimal" min="80" max="230" step="0.1" autocomplete="off"></label>
   </div>
-  <label>โรคประจำตัว / ข้อควรระวัง (เฉพาะที่จำเป็น ไม่เกิน 300 ตัวอักษร)
+  <label>โรคประจำตัว / ข้อควรระวัง
    <textarea id="privateConditions" maxlength="300" autocomplete="off" spellcheck="false"></textarea>
   </label>
   <p id="privateBmi" class="status-note">BMI: —</p>
@@ -203,7 +295,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  </details>
  <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
 </section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
- <div class="history-header"><div><small>STEVE HR ANALYTICS / บันทึกจริง สูงสุด 7 วัน</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
+ <div class="history-header"><div><small>HR TREND / 7-DAY HISTORY</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
  <div class="history-ranges" id="historyRanges">
   <button type="button" data-history-hours="0.25" aria-pressed="false">15 นาที</button>
   <button type="button" data-history-hours="0.5" aria-pressed="false">30 นาที</button>
@@ -260,7 +352,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
