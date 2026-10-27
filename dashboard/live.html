@@ -33,7 +33,7 @@ button{cursor:pointer;font-weight:700}button:hover{background:#34483d}
 .command-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0}
 .command-eyebrow{font-size:.72rem;letter-spacing:.19em;font-weight:800;color:#a8c49d}
 .command-bar button{background:#273a30;border-color:#6a846c}
-.command-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0}
+.command-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:16px 0}
 .stat{background:#192520;border:1px solid #3b4f42;border-radius:12px;padding:14px}
 .stat b{display:block;font-size:clamp(1.45rem,2.5vw,2.25rem);font-variant-numeric:tabular-nums}
 .stat span{color:#b7c8b8;font-size:.75rem;letter-spacing:.06em}
@@ -62,14 +62,16 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
 <header><h1>STEVE 1.0 <span style="color:#a8c49d">/ TACTICAL COMMAND</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
-<div class="command-bar"><div><div class="command-eyebrow">FIELD OPERATIONS / HEALTH TELEMETRY</div><small>STEVE • RECRUIT MONITORING / 15 SLOTS</small></div><button id="presentationToggle" type="button" aria-pressed="false">เปิดโหมดนำเสนอ</button></div>
+<div class="command-bar"><div><div class="command-eyebrow">FIELD OPERATIONS / HEALTH TELEMETRY</div><small>STEVE • HIGH-RISK WEARERS / 15-SLOT CAPACITY</small></div><button id="presentationToggle" type="button" aria-pressed="false">เปิดโหมดนำเสนอ</button></div>
 <section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
-<div class="stat"><span>กำลังพล / SLOTS</span><b id="statTotal">15</b></div>
-<div class="stat live"><span>LIVE DATA</span><b id="statLive">0</b></div>
-<div class="stat lost"><span>NO DATA</span><b id="statNoData">15</b></div>
+<div class="stat"><span>กลุ่มเสี่ยงที่ลงทะเบียน</span><b id="statTotal">—</b></div>
+<div class="stat live"><span>LIVE / ลงทะเบียน</span><b id="statLive">—</b></div>
+<div class="stat lost"><span>NO DATA / ลงทะเบียน</span><b id="statNoData">—</b></div>
 <div class="stat watch"><span>WATCH / เฝ้าระวังใกล้ชิด</span><b id="statWatch">0</b></div>
-<div class="stat paused"><span>EMERGENCY / อันตราย</span><b id="statPaused">0</b></div>
+<div class="stat paused"><span>EMERGENCY / อันตราย</span><b id="statPaused">—</b></div>
+<div class="stat"><span>ยังไม่ลงทะเบียน / 15 ช่อง</span><b id="statUnregistered">—</b></div>
 </section>
+<p id="cohortNotice" class="status-note" role="status">กำลังโหลดทะเบียนกลุ่มเสี่ยง • ผู้สวม Band ทุกคนอยู่ในกลุ่มเฝ้าระวัง แต่ WATCH/EMERGENCY เป็นเหตุเร่งด่วนเพิ่ม</p>
 <div id="emergencyAlerts" class="alert-panel" role="alert" hidden></div>
 <div class="notice">PROTOTYPE — ข้อมูลชีพจรไม่ใช่เครื่องมือวินิจฉัยหรือรับรองความปลอดภัยระหว่างฝึก สัญญาณขาด = ไม่ทราบค่า ห้ามตีความว่าเป็น 0 BPM</div>
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
@@ -84,14 +86,15 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  <button id="demoStop">หยุดจำลอง</button>
 </div>
 <section id="rosterBox" class="operator-box" hidden>
- <h2>จัดการผู้ฝึก R01–R15 (ผู้ฝึกและแพทย์มีสิทธิ์เท่ากัน)</h2>
+ <h2>ลงทะเบียนผู้สวม Band กลุ่มเสี่ยง R01–R15 (ผู้ฝึกและแพทย์มีสิทธิ์เท่ากัน)</h2>
  <p id="operatorRole">กำลังตรวจสอบสิทธิ์...</p>
  <p class="safety">เฉพาะรหัสสมมติ/รหัสไม่ระบุตัวบุคคลและสถานะการปฏิบัติงาน ห้ามกรอกชื่อจริง เลขทหาร โรคประจำตัวหรือเวชระเบียนใน Render Free ระบบต้นแบบนี้ไม่ใช่เครื่องมือวินิจฉัย</p>
  <div class="operator-fields">
   <label>ช่องผู้ฝึก<select id="rosterSlot"><option value="R01">R01</option><option value="R02">R02</option><option value="R03">R03</option><option value="R04">R04</option><option value="R05">R05</option><option value="R06">R06</option><option value="R07">R07</option><option value="R08">R08</option><option value="R09">R09</option><option value="R10">R10</option><option value="R11">R11</option><option value="R12">R12</option><option value="R13">R13</option><option value="R14">R14</option><option value="R15">R15</option></select></label>
   <label>รหัสสมมติ (4–24 ตัว พิมพ์ใหญ่)<input id="rosterCode" placeholder="DEMO001" autocomplete="off" autocorrect="off" maxlength="24"></label>
   <label>ข้อจำกัดการฝึกจากผู้รับผิดชอบ<select id="rosterRestriction"><option value="none">ยังไม่ระบุ</option><option value="watch">ให้ติดตามเป็นพิเศษ</option><option value="no_training">งดกิจกรรมจนกว่าจะประเมิน</option></select></label>
-  <label>อาการที่มีผู้สังเกตและบันทึก<select id="rosterObservation"><option value="none">ยังไม่มีการแจ้งเหตุ</option><option value="dizzy_weak_nausea">เวียนศีรษะ / อ่อนแรง / คลื่นไส้ — หยุดประเมิน</option><option value="confusion_collapse_seizure">สับสน / หมดสติ / ชัก — ฉุกเฉิน</option></select></label>
+  <label>สถานะกิจกรรม (ผู้ฝึก/แพทย์ยืนยัน)<select id="rosterActivity"><option value="not_reported">ยังไม่รายงาน</option><option value="training">กำลังฝึก</option><option value="resting">กำลังพัก</option><option value="assessment">หยุดเพื่อประเมิน</option></select></label>
+   <label>อาการที่มีผู้สังเกตและบันทึก<select id="rosterObservation"><option value="none">ยังไม่มีการแจ้งเหตุ</option><option value="dizzy_weak_nausea">เวียนศีรษะ / อ่อนแรง / คลื่นไส้ — หยุดประเมิน</option><option value="confusion_collapse_seizure">สับสน / หมดสติ / ชัก — ฉุกเฉิน</option></select></label>
  </div>
  <div class="operator-actions">
   <button id="rosterSave" type="button">บันทึก / แก้ไข</button>
@@ -112,34 +115,56 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 let events=null,last=null,transportUp=false,rosterData=null,viewEpoch=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
- const now=Date.now();let fresh=0,watchCount=0,pausedCount=0;const critical=[];
- cards.innerHTML=data.recruits.map(r=>{
+ const now=Date.now(),panel=byId("emergencyAlerts");
+ if(!rosterData?.slots){
+  cards.innerHTML='<p class="notice">กำลังตรวจสอบทะเบียนกลุ่มเสี่ยง • ไม่สามารถยืนยันจำนวนผู้สวมได้</p>';
+  for(const id of ["statTotal","statLive","statNoData","statWatch","statPaused","statUnregistered"])byId(id).textContent="—";
+  byId("cohortNotice").textContent="รอทะเบียนที่ยืนยันโดยผู้ฝึก/แพทย์ • ไม่ตีความช่องว่างเป็นผู้ขาดสัญญาณ";
+  panel.hidden=true;panel.innerHTML="";
+  summary.textContent="ยังไม่ยืนยันทะเบียนผู้สวม • กรุณาตรวจสอบการเชื่อมต่อ";
+  return;
+ }
+ const profiles=new Map(rosterData.slots.map(p=>[p.id,p]));
+ const enrolled=rosterData.slots.filter(p=>typeof p.code==="string"&&p.code.length>0).length;
+ let fresh=0,watchCount=0,emergencyCount=0,pending=0;
+ const critical=[];
+ const shown=data.recruits.filter(r=>{
+  const p=profiles.get(r.id),registered=!!p?.code;
+  const age=Number.isFinite(r.timestamp)?Math.max(0,now-r.timestamp):Infinity;
+  const live=transportUp&&!r.stale&&age<=15000&&Number.isInteger(r.hr);
+  if(!registered&&live)pending++;
+  return registered||live||r.source==="SIMULATED";
+ });
+ cards.innerHTML=shown.map(r=>{
+  const profile=profiles.get(r.id),registered=!!profile?.code;
   const age=Number.isFinite(r.timestamp)?Math.max(0,now-r.timestamp):Infinity;
   const stale=!transportUp||r.stale||age>15000||!Number.isInteger(r.hr);
   const state=!transportUp?"DISCONNECTED":!r.timestamp?"NO DATA":r.state==="DISCONNECTED"?"DISCONNECTED":stale?"STALE":"CONNECTED";
-  const synthetic=r.source==='SIMULATED',profile=rosterData?.slots?.find(p=>p.id===r.id);
+  const synthetic=r.source==="SIMULATED";
   const severity=profile?.observation==="confusion_collapse_seizure"?"emergency":profile?.observation==="dizzy_weak_nausea"?"stop":null;
-  const safetyNote=severity==="emergency"?"ฉุกเฉิน: เรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
-    profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังตามผู้รับผิดชอบ":"";
-  const emergencyFlag=severity==="emergency";
-  const watchFlag=!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
-  if(watchFlag)watchCount++;if(emergencyFlag){pausedCount++;critical.push({id:r.id,acknowledged:!!profile?.acknowledged});}
+  const emergencyFlag=registered&&severity==="emergency";
+  const watchFlag=registered&&!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
+  if(registered){if(!stale)fresh++;if(watchFlag)watchCount++;if(emergencyFlag){emergencyCount++;critical.push({id:r.id,acknowledged:!!profile.acknowledged});}}
+  const chip=!registered?"PENDING REGISTRATION":emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":"MONITOR";
+  const activity=({training:"กำลังฝึก",resting:"กำลังพัก",assessment:"หยุดเพื่อประเมิน",not_reported:"ยังไม่รายงานกิจกรรม"})[profile?.activity]||"ยังไม่รายงานกิจกรรม";
+  const note=severity==="emergency"?"ฉุกเฉิน: หยุดกิจกรรมและเรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
+    profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังใกล้ชิดตามผู้รับผิดชอบ":"";
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
-  if(!stale)fresh++;
-  const chip=emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":"NO ALERT";
   const signal=stale?"NO DATA":"LIVE";
-  const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ขาดสัญญาณ "+(age>=60000?Math.floor(age/60000)+" นาที ":"")+Math.floor((age%60000)/1000)+" วินาที":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><div class="signal-line"><span>HEALTH STATUS</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>TELEMETRY</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
+  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน — ตรวจผู้สวมก่อนใช้งาน")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>กิจกรรม: '+escapeHtml(registered?activity:"ยังไม่ยืนยันผู้สวม")+'</small></div><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
- const panel=byId("emergencyAlerts");
+ if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
  panel.hidden=critical.length===0;
- panel.innerHTML=critical.length?'<strong>EMERGENCY / ต้องหยุดกิจกรรมและเรียกเจ้าหน้าที่แพทย์ทันที ('+critical.length+')</strong><div>'+critical.map(x=>'<div>'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>การรับทราบไม่ยกเลิกสถานะฉุกเฉิน ต้องให้ผู้รับผิดชอบประเมินและแก้ไขเหตุแยกต่างหาก</small>':'';
- byId("statTotal").textContent=data.recruits.length;
+ panel.innerHTML=critical.length?'<strong>EMERGENCY / ต้องหยุดกิจกรรมและเรียกเจ้าหน้าที่แพทย์ทันที ('+critical.length+')</strong><div>'+critical.map(x=>'<div>'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>การรับทราบไม่ยกเลิกสถานะฉุกเฉิน ต้องประเมินและแก้ไขเหตุแยกต่างหาก</small>':'';
+ byId("statTotal").textContent=enrolled;
  byId("statLive").textContent=fresh;
- byId("statNoData").textContent=data.recruits.length-fresh;
+ byId("statNoData").textContent=Math.max(0,enrolled-fresh);
  byId("statWatch").textContent=watchCount;
- byId("statPaused").textContent=pausedCount;
- summary.textContent='มีข้อมูลปัจจุบัน '+fresh+'/15 • ข้อมูลขาด '+(15-fresh)+'/15 • '+new Date().toLocaleTimeString("th-TH");
+ byId("statPaused").textContent=emergencyCount;
+ byId("statUnregistered").textContent=Math.max(0,15-enrolled);
+ byId("cohortNotice").textContent="ผู้สวมที่ลงทะเบียนทุกคนเป็นกลุ่มเสี่ยง • WATCH/EMERGENCY คือสถานะเร่งด่วนเพิ่ม"+(pending?" • พบสัญญาณจาก "+pending+" ช่องที่ยังไม่ลงทะเบียน โปรดยืนยันผู้สวม":"")+(rosterData.ephemeral?" • ข้อมูลการประเมินอยู่ใน RAM และหายเมื่อ Backend รีสตาร์ต":"");
+ summary.textContent="ลงทะเบียน "+enrolled+"/15 • สด "+fresh+" • ขาดข้อมูล "+Math.max(0,enrolled-fresh)+" • "+new Date().toLocaleTimeString("th-TH");
 }
 
 const byId=id=>document.getElementById(id);
@@ -161,6 +186,7 @@ function fillRoster(){
  byId("rosterCode").value=p.code||"";
  byId("rosterRestriction").value=p.restriction;
  byId("rosterObservation").value=p.observation;
+ byId("rosterActivity").value=p.activity||"not_reported";
  byId("bandConfirmed").checked=false;
  byId("rosterStatus").textContent=(p.paused?"PAUSED: ต้องตรวจอุปกรณ์ก่อนเปิดรับ BPM อีกครั้ง":"พร้อมแก้ไข")
   +" • รุ่นข้อมูล "+p.version+(p.acknowledged?" • รับทราบเหตุแล้ว":"");
@@ -196,7 +222,7 @@ async function rosterAction(action){
  }
  const url="/api/roster/"+p.id+(action==="save"?"":"/"+(action==="ack"?"acknowledge":action));
  const method=action==="save"?"PUT":"POST";
- const payload=action==="save"?{version:p.version,code,restriction:byId("rosterRestriction").value,observation:byId("rosterObservation").value}:
+ const payload=action==="save"?{version:p.version,code,restriction:byId("rosterRestriction").value,observation:byId("rosterObservation").value,activity:byId("rosterActivity").value}:
   action==="replace"?{version:p.version,code}:
   action==="resume"?{version:p.version,confirmed:true}:{version:p.version};
  const button=byId("roster"+({save:"Save",replace:"Replace",resume:"Resume",ack:"Acknowledge"}[action]));
@@ -215,6 +241,19 @@ byId("rosterSave").onclick=()=>rosterAction("save");
 byId("rosterReplace").onclick=()=>rosterAction("replace");
 byId("rosterResume").onclick=()=>rosterAction("resume");
 byId("rosterAcknowledge").onclick=()=>rosterAction("ack");
+async function syncRoster(){
+ if(!rosterData)return;
+ const epoch=viewEpoch;
+ try{
+  const r=await fetch("/api/roster",{credentials:"same-origin",cache:"no-store"});
+  if(epoch!==viewEpoch)return;
+  if(r.status===401){disconnect();return;}
+  if(!r.ok)return;
+  const data=await r.json();
+  if(epoch!==viewEpoch)return;
+  if(JSON.stringify(rosterData.slots)!==JSON.stringify(data.slots)){rosterData=data;if(last)draw(last);}
+ }catch{}
+}
 async function gatewayStatus(){try{const r=await fetch('/api/gateways',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;const d=await r.json();document.getElementById('gateways').textContent='Gateway: '+d.gateways.map(g=>g.id+' '+(g.online?'ออนไลน์':'ออฟไลน์')).join(' • ');}catch{document.getElementById('gateways').textContent='Gateway: ตรวจสอบสถานะไม่ได้';}}
 async function demoStatus(){
  try{
@@ -240,7 +279,7 @@ document.getElementById('demoRestore').onclick=()=>demoAction('restore');
 document.getElementById('demoStop').onclick=()=>demoAction('stop');
 async function contextStatus(){try{const r=await fetch("/api/context",{credentials:"same-origin",cache:"no-store"});if(!r.ok)return;const d=await r.json();document.getElementById("conditions").textContent=d.timestamp?(d.stale?"WBGT: ค่าเก่ากว่า 30 นาที ต้องวัดใหม่":"WBGT (กรอกมือ): "+d.wbgtC+" °C • "+new Date(d.timestamp).toLocaleTimeString("th-TH")):"WBGT: ยังไม่มีข้อมูลการวัด";}catch{document.getElementById("conditions").textContent="WBGT: ตรวจข้อมูลไม่ได้";}}
 async function snapshot(){const epoch=viewEpoch;try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(epoch!==viewEpoch)return;if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(epoch!==viewEpoch)return;transportUp=true;draw(data);await gatewayStatus();await contextStatus();}catch(e){if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='DISCONNECTED — โหลดข้อมูลไม่สำเร็จ';}}
-function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;rosterData=null;cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused'])byId(id).textContent='—';summary.textContent='กรุณาเข้าสู่ระบบ';}
+function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;rosterData=null;cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
 function connect(){const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
  events.onopen=()=>{if(epoch!==viewEpoch)return;transportUp=true;conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
  events.onmessage=e=>{if(epoch!==viewEpoch)return;try{transportUp=true;draw(JSON.parse(e.data))}catch{}};
@@ -252,5 +291,6 @@ document.getElementById('logout').onclick=async()=>{disconnect();try{const r=awa
 document.getElementById('refresh').onclick=()=>{snapshot();loadRoster(true).catch(()=>{});};
 setInterval(()=>{if(last)draw(last);},1000);
 setInterval(()=>{if(last){gatewayStatus();contextStatus();demoStatus();}},5000);
+setInterval(()=>{if(last&&rosterData)syncRoster();},10000);
 snapshot().then(()=>{if(last)connect();});
 </script></body></html>
