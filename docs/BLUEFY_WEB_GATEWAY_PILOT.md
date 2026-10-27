@@ -236,3 +236,19 @@ soft-reset and repeat background/foreground three times. Background is unmonitor
 NO DATA is correct until fresh packets return. Verify WATCH and EMERGENCY remain visible
 on signal loss and acknowledgement leaves EMERGENCY active. Check presentation mode on
 phone and presentation display. Do not treat this research prototype as a medical device.
+
+## HR-first Bluefy compatibility v6 — 27 October 2026
+
+Operator screenshots show the iPhone Bluetooth settings connected to both Band 10 devices but the Bluefy native device chooser has an empty list and the STEVE tiles report stage 2/9 NativeError. This indicates a chooser-stage failure, not an HTTPS credential or backend ingest failure. An iOS settings connection does **not** prove that Bluefy can discover an advertising peripheral, and the native error does not identify a unique root cause.
+
+PR #19 added optional `battery_service` to BOTH standard and broad `requestDevice` option objects. This valid Web Bluetooth request is an unverified compatibility variable in Bluefy 2.01. Restore the **previous HR-only requests as modes A and B by default**, retaining optional battery as **explicit modes D and E**. The modes are:
+- A: `{filters:[{services:["heart_rate"]}]}` (basic Heart Rate)
+- B: `{acceptAllDevices:true,optionalServices:["heart_rate"]}` (broad Heart Rate)
+- C: reconnect previously authorized Bluetooth device if supported (no chooser)
+- D/E: original standard/broad requests WITH extra optional Battery Service; use only after validating HR-only mode
+
+Only D/E attempt to read Battery Service after HR subscription; the battery row remains UNKNOWN when unsupported or not requested. Background recovery may reuse battery permissions only when the previously bound device was explicitly authorized for battery access. Never degrade HR continuity or slot/device verification to obtain battery. No auto-triggered chooser, unpairing or background-safety claims.
+
+CI validates option shapes, mocked chooser behavior, independent HR sessions and optional battery behavior; **physical Bluefy acceptance remains pending**. A/B success would implicate the optional battery permission but not conclusively prove root cause. If both still fail at stage 2, test advertisement/ownership in nRF Connect separately while no other scanner/GATT client is active, then investigate the Bluefy native bridge. Do not use "Forget This Device" merely to troubleshoot without a recovery plan.
+
+To release: merge only after backend CI passes, then **manually deploy the verified merged SHA** on the existing Render service (auto-deploy is off). Confirm "Bluefy HR-first compatibility v6" on /gateway. Do not modify Render secrets or slot maps. Keep the experimental gateway in foreground only; NO DATA on interruption.
