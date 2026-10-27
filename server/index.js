@@ -226,7 +226,7 @@ const server=http.createServer(async(req,res)=>{
   }
   const now=Date.now(),start=now-WINDOW_MS;
   const hours=Number(url.searchParams.get("hours")||4);
-  if(![0.5,1,2,4].includes(hours)){send(res,422,{error:"invalid history window"});return;}
+  if(![0.25,0.5,1,2,4].includes(hours)){send(res,422,{error:"invalid history window"});return;}
   const points=pulseHistory.get(slot,now),phases=roster.getTrainingTimeline(start,now);
   send(res,200,{slot,windowStart:start,windowEnd:now,windowHours:4,
    sampleIntervalSeconds:5,ephemeral:!durable.enabled,points,phases,
