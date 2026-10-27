@@ -1,6 +1,7 @@
 name: STEVE 1.0 backend tests
 on:
   push:
+    branches: [main]
     paths:
       - 'server/**'
       - 'dashboard/live.html'
@@ -79,6 +80,7 @@ jobs:
           test "$status" = 401
 
   dashboard-browser:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
