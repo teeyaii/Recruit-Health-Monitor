@@ -194,7 +194,7 @@ async function upload(s,bpm,timestamp,disconnect=false){
 }
 function paint(s){
  const tile=tiles.get(s.slot);
- if(tile)tile.dataset.status=s.closed||s.bpm===null||!s.lastAt||Date.now()-s.lastAt>15000?"NO_DATA":"LIVE";
+ if(tile?.dataset)tile.dataset.status=s.closed||s.bpm===null||!s.lastAt||Date.now()-s.lastAt>15000?"NO_DATA":"LIVE";
  s.indicator.textContent=s.closed?"NO DATA • กดเชื่อมต่อใหม่":s.bpm===null?"NO DATA • รอสัญญาณใหม่":s.error?"ส่งข้อมูลไม่สำเร็จ":"กำลังรับข้อมูล";
  s.diagnostics.textContent=s.lifecycle+" • "+s.state;
  s.measure.textContent=s.bpm===null?"NO DATA":String(s.bpm)+" BPM";
