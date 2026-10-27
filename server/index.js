@@ -143,7 +143,7 @@ const server=http.createServer(async(req,res)=>{
  // retained for existing Render dashboards, not a substitute for individual attribution.
  if(url.pathname==="/api/operator/me" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
-  send(res,200,{role:isViewer,permissions:["roster:read","roster:write","audit:read","context:write"]});return;
+  send(res,200,{role:isViewer,permissions:["roster:read","roster:write","audit:read","context:write","training:read","training:write"]});return;
  }
  if(url.pathname==="/api/roster" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
@@ -153,6 +153,18 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==="/api/roster/audit" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,{events:roster.getAudit()});return;
+ }
+ if(url.pathname==="/api/training"&&req.method==="GET"){
+  if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
+  send(res,200,{...roster.getGroupPhase(),ephemeral:!roster.filename});return;
+ }
+ if(url.pathname==="/api/training"&&req.method==="PUT"){
+  if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
+  if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
+  if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
+  try{const body=await readBody(req,512);send(res,200,{ok:true,...roster.setGroupPhase(body,isViewer),ephemeral:!roster.filename});}
+  catch(e){send(res,e.status||500,{error:e.status?e.message:"training phase update unavailable"});}
+  return;
  }
  const rosterRoute=url.pathname.match(/^\/api\/roster\/(R(?:0[1-9]|1[0-5]))(?:\/(replace|resume|acknowledge))?$/);
  if(rosterRoute && (req.method==="PUT"||req.method==="POST")){
