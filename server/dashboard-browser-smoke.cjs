@@ -55,7 +55,7 @@ await page.route('**/api/medic-reviews/R01',route=>{
   points:[[now-14000,78],[now-7000,81],[now,78]]
  })});
 });
-await page.evaluate(()=>{operatorRole='medic';byId('medicPanel').hidden=false;byId('medicPanel').open=true;});
+await page.evaluate(()=>{operatorRole='medic';byId('rosterBox').hidden=false;byId('medicPanel').hidden=false;byId('medicPanel').open=true;});
 await page.waitForFunction(()=>document.getElementById('medicReviewState').textContent.includes('รอเจ้าหน้าที่ประเมิน'));
 if(!await page.locator('#medicClinicalContext').textContent().then(t=>t.includes('PRIVATE-TEST-MEDS')))throw Error('private medic context missing');
 if(await page.locator('#commandStats').textContent().then(t=>t.includes('PRIVATE-TEST')))throw Error('medical context leaked to commander');
@@ -64,7 +64,7 @@ if(!await page.locator('#medicChart svg').count())throw Error('measured medic tr
 await page.setViewportSize({width:390,height:844});
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('medic panel overflows iPhone viewport');
 await page.screenshot({path:'ui-artifacts/steve-medic-review-390.png',fullPage:true});
-await page.evaluate(()=>{byId('medicPanel').open=false;byId('medicPanel').hidden=true;operatorRole=null;});
+await page.evaluate(()=>{byId('medicPanel').open=false;byId('medicPanel').hidden=true;byId('rosterBox').hidden=true;operatorRole=null;});
 for(const width of [390,1440]){await page.setViewportSize({width,height:900});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('horizontal overflow '+width);
 const dims=await page.evaluate(()=>{const a=document.getElementById('emergencyAlerts').getBoundingClientRect();const b=document.getElementById('trainingPanel').getBoundingClientRect();return {emergencyWidth:a.width,trainingWidth:b.width,emergencyHeight:a.height,trainingHeight:b.height};});
 if(dims.emergencyWidth>760.5)throw Error('alert wider than compact limit '+width);
