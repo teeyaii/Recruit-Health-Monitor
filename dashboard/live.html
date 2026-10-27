@@ -567,7 +567,7 @@ function clearTrainingPreview(){
  byId("trainingPreview").hidden=true;
  byId("trainingPreviewToggle").setAttribute("aria-pressed","false");
  byId("trainingPreviewToggle").textContent="กราฟสาธิต R01 / R02";
- for(const id of ["trainingPreviewR01","trainingPreviewR02","trainingPreviewDays"])byId(id).replaceChildren();
+ for(const id of ["trainingPreviewR01","trainingPreviewR02","trainingPreviewDays"])byId(id).textContent="";
 }
 function openTrainingPreview(){
  for(const [slot,values] of Object.entries(trainingPreviewSamples))
