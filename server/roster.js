@@ -10,7 +10,10 @@ const observations=new Set(["none","dizzy_weak_nausea","confusion_collapse_seizu
 const restrictions=new Set(["none","watch","no_training"]);
 const activities=new Set(["not_reported","training","resting","assessment"]); // Legacy per-person field is read-only in the current operator UI.
 const groupPhases=new Set(["not_started","training","hourly_rest"]);
-const shortCode=/^[A-Z0-9][A-Z0-9_-]{3,23}$/;
+// Preserve the recruit's chosen letter case. Compare case-insensitively only
+// when verifying slot identity and duplicate assignments.
+const shortCode=/^[A-Za-z0-9][A-Za-z0-9_-]{3,23}$/;
+const sameCode=(a,b)=>typeof a==="string"&&typeof b==="string"&&a.toUpperCase()===b.toUpperCase();
 function problem(status,message){const err=new Error(message);err.status=status;throw err;}
 function blank(id){return {id,code:null,restriction:"none",observation:"none",activity:"not_reported",acknowledged:false,paused:false,version:0,updatedAt:null};}
 function verifyShape(d){
@@ -32,8 +35,8 @@ function validateVersion(input,p){
  if(!Number.isSafeInteger(input?.version)||input.version!==p.version)problem(409,"stale version; reload roster");
 }
 function validateCode(value){
- if(typeof value!=="string"||!shortCode.test(value)||value.startsWith("STEVE_"))
-  problem(422,"use an anonymous code: 4–24 uppercase letters/digits/underscore/hyphen");
+ if(typeof value!=="string"||!shortCode.test(value)||/^STEVE_/i.test(value))
+  problem(422,"use an anonymous 4–24 character code: A–Z, a–z, digits, underscore or hyphen");
  return value;
 }
 export class RosterStore {
@@ -92,8 +95,8 @@ export class RosterStore {
   const p=this.get(id);validateVersion(input,p);
   if(p.paused)problem(409,"slot paused; verify new band then resume");
   const code=validateCode(input?.code);
-  if(p.code!==null&&p.code!==code)problem(409,"use Replace to change occupant");
-  if(slotIDs.some(other=>other!==id&&this.data.slots[other].code===code))
+  if(p.code!==null&&!sameCode(p.code,code))problem(409,"use Replace to change occupant");
+  if(slotIDs.some(other=>other!==id&&sameCode(this.data.slots[other].code,code)))
    problem(409,"anonymous code already active on another slot");
   if(!restrictions.has(input?.restriction)||!observations.has(input?.observation)||!activities.has(input?.activity??p.activity))problem(422,"invalid restriction, observation or activity");
   const observation=input.observation;
@@ -104,8 +107,8 @@ export class RosterStore {
  replace(id,input,actor){
   const p=this.get(id);validateVersion(input,p);
   const code=validateCode(input?.code);
-  if(code===p.code)problem(422,"replacement requires a different anonymous code");
-  if(slotIDs.some(other=>other!==id&&this.data.slots[other].code===code))
+  if(sameCode(code,p.code))problem(422,"replacement requires a different anonymous code");
+  if(slotIDs.some(other=>other!==id&&sameCode(this.data.slots[other].code,code)))
    problem(409,"anonymous code already active on another slot");
   // PAUSED rejects all new BLE readings until a human verifies the physical reassignment.
   const next={...p,code,paused:true,restriction:"none",observation:"none",activity:"not_reported",acknowledged:false};
