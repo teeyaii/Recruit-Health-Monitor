@@ -7,6 +7,7 @@ import { PulseHistory, WINDOW_MS } from "./pulse-history.js";
 import { DurableState } from "./durable-state.js";
 import { RollingArchive, HISTORY_HOURS } from "./rolling-archive.js";
 import { PrivateProfiles } from "./private-profiles.js";
+import { MedicReviews, describeSignal } from "./medic-review.js";
 import { trainingSummary } from "./training-summary.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
@@ -22,9 +23,10 @@ const pulseHistory=new PulseHistory();
 const durable=new DurableState();
 const archive=new RollingArchive(durable);
 const privateProfiles=new PrivateProfiles();
+const medicReviews=new MedicReviews();
 let writeQueue=Promise.resolve(),historyDirty=false;
 function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
- profiles:privateProfiles.export(),conditions};}
+ profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions};}
 function persistState(){
  if(!durable.enabled)return Promise.resolve();
  writeQueue=writeQueue.catch(()=>{}).then(()=>durable.save(stateSnapshot()));
@@ -183,6 +185,51 @@ const server=http.createServer(async(req,res)=>{
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,{events:roster.getAudit()});return;
  }
+ // The commander and legacy viewer receive only the aggregate review count.
+ // Notes, reasons, identity and medical context stay behind trainer/medic access.
+ if(url.pathname==="/api/medic-reviews/summary"&&req.method==="GET"){
+  if(!isViewer){send(res,403,{error:"viewer session required"});return;}
+  send(res,200,{pending:medicReviews.countPending(roster)});return;
+ }
+ const medicRoute=url.pathname.match(/^\/api\/medic-reviews\/(R(?:0[1-9]|1[0-5]))$/);
+ if(medicRoute){
+  if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
+  if(!durable.enabled){send(res,503,{error:"encrypted durable store required"});return;}
+  const slot=medicRoute[1],code=roster.get(slot).code;
+  if(!code){send(res,409,{error:"register wearer before medical review"});return;}
+  if(req.method==="GET"){
+   try{
+    const profile=privateProfiles.get(slot,code),review=medicReviews.get(slot,code);
+    const phase=roster.getGroupPhase();
+    const points=archive.enabled?await archive.get(slot,code,4):pulseHistory.get(slot,Date.now());
+    // Comparison is descriptive only; rest phase must be recorded by a human.
+    const baseline=profile.baselineConfirmed&&phase.phase==="hourly_rest"?
+     profile.restingBaselineBpm:null;
+    const signal=describeSignal(points,Date.now(),baseline);
+    const restVerified=phase.phase==="hourly_rest"&&Number.isSafeInteger(phase.changedAt)&&
+     Date.now()-phase.changedAt>=3*60000;
+    if(!restVerified)signal.deltaBpm=null;
+    send(res,200,{slot,review,signal,phase:phase.phase,
+     restPhaseRecorded:restVerified,baselineConfigured:profile.baselineConfirmed,
+     context:{ageYears:profile.ageYears,bmi:profile.bmi,medications:profile.medications,
+      conditions:profile.conditions,wbgtC:conditions.timestamp&&Date.now()-conditions.timestamp<=1800000?conditions.wbgtC:null},
+     // Actual accepted measurements only; never synthesize missing points.
+     points:points.slice(-200),medicalDisclaimer:"Signal/context only; requires human clinical assessment"});
+   }catch{send(res,503,{error:"private medical review unavailable"});}
+   return;
+  }
+  if(req.method!=="PUT"){send(res,405,{error:"method not allowed"});return;}
+  if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
+  if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
+  try{
+   const body=await readBody(req,900),backup=medicReviews.export();
+   const review=medicReviews.update(slot,code,body,isViewer);
+   try{await persistState();}
+   catch{medicReviews.load(backup);send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
+   send(res,200,{review});
+  }catch(e){send(res,e.status||500,{error:e.status?e.message:"review request unavailable"});}
+  return;
+ }
  const privateRoute=url.pathname.match(/^\/api\/private-profile\/(R(?:0[1-9]|1[0-5]))$/);
  if(privateRoute){
   if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
@@ -265,7 +312,7 @@ const server=http.createServer(async(req,res)=>{
    const firstAssignment=previous.code===null&&current.code!==null;
    if(action==="replace"||wearerChanged||firstAssignment){
     // Never attribute a previously measured BPM to a new wearer.
-    recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);
+    recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);
     await archive.forget(slot);
     reassignmentCutoff.set(slot,Date.now());publish();
    }else if(action==="resume")publish();
@@ -358,6 +405,7 @@ async function boot(){
   if(state){
    if(!state.roster||!state.profiles||!state.history)throw Error("Incomplete encrypted STEVE snapshot");
    roster.loadData(state.roster);privateProfiles.load(state.profiles);pulseHistory.load(state.history);
+   if(state.medicReviews)medicReviews.load(state.medicReviews);
    if(state.conditions&&typeof state.conditions==="object")conditions=state.conditions;
   }
  }
