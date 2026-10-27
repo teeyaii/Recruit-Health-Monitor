@@ -11,7 +11,7 @@ function fixture(){
   STEVE_DATA_ENCRYPTION_KEY:randomBytes(32).toString("base64")
  });
  const rows=new Map();let failWrite=false;
- durable.request=async(url,options={},consume){
+ durable.request=async (url,options={},consume)=>{
   const u=new URL(url),method=options.method||"GET";
   if(method==="POST"){
    if(failWrite)throw Error("mock storage down");
