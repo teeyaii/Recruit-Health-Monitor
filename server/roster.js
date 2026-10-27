@@ -8,13 +8,17 @@ export const slotIDs=Array.from({length:15},(_,i)=>"R"+String(i+1).padStart(2,"0
 const slotSet=new Set(slotIDs);
 const observations=new Set(["none","dizzy_weak_nausea","confusion_collapse_seizure"]);
 const restrictions=new Set(["none","watch","no_training"]);
-const activities=new Set(["not_reported","training","resting","assessment"]);
+const activities=new Set(["not_reported","training","resting","assessment"]); // Legacy per-person field is read-only in the current operator UI.
+const groupPhases=new Set(["not_started","training","hourly_rest"]);
 const shortCode=/^[A-Z0-9][A-Z0-9_-]{3,23}$/;
 function problem(status,message){const err=new Error(message);err.status=status;throw err;}
 function blank(id){return {id,code:null,restriction:"none",observation:"none",activity:"not_reported",acknowledged:false,paused:false,version:0,updatedAt:null};}
 function verifyShape(d){
  if(!d || typeof d!=="object" || Array.isArray(d))throw Error("Invalid persisted STEVE roster file");
  if(d.schema!==1||!d.slots||!Array.isArray(d.audit))throw Error("Unsupported STEVE roster file format");
+ if(d.groupPhase!==undefined && (typeof d.groupPhase!=="object"||!d.groupPhase||
+   !groupPhases.has(d.groupPhase.phase)||!Number.isSafeInteger(d.groupPhase.version)||d.groupPhase.version<0||
+   (d.groupPhase.changedAt!==null && (!Number.isSafeInteger(d.groupPhase.changedAt)||d.groupPhase.changedAt<0))))throw Error("Invalid STEVE group phase");
  for(const id of slotIDs){
   const p=d.slots[id];
   if(!p||p.id!==id||!Number.isSafeInteger(p.version)||p.version<0||
@@ -47,6 +51,22 @@ export class RosterStore {
  all(){return slotIDs.map(id=>this.get(id));}
  get(id){if(!slotSet.has(id))problem(404,"unknown slot");return {activity:"not_reported",...this.data.slots[id]};}
  getAudit(){return this.data.audit.slice(-100).map(item=>({...item}));}
+ // One operational training/rest phase applies to the whole supervised cohort.
+ // It never overwrites a member's medical restriction, WATCH or EMERGENCY.
+ getGroupPhase(){return {...{phase:"not_started",version:0,changedAt:null,changedBy:null},...(this.data.groupPhase||{})};}
+ setGroupPhase(input,actor){
+  const old=this.getGroupPhase();
+  if(!Number.isSafeInteger(input?.version)||input.version!==old.version)problem(409,"stale group phase; refresh before changing");
+  if(!groupPhases.has(input?.phase)||input.phase==="not_started")problem(422,"select training or hourly_rest");
+  if(old.phase===input.phase)return old;
+  const saved=this.data.groupPhase,history=this.data.audit.slice();
+  const now=Date.now();
+  this.data.groupPhase={phase:input.phase,version:old.version+1,changedAt:now,changedBy:actor};
+  this.data.audit.push({id:"GROUP",action:"phase_"+input.phase,actor,at:now,version:old.version+1});
+  if(this.data.audit.length>250)this.data.audit.splice(0,this.data.audit.length-250);
+  try{this.persist();}catch(e){if(saved===undefined)delete this.data.groupPhase;else this.data.groupPhase=saved;this.data.audit=history;throw e;}
+  return this.getGroupPhase();
+ }
  canIngest(id){return slotSet.has(id)&&!this.data.slots[id].paused;}
  persist(){
   if(!this.filename)return;
