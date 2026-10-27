@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
-import {GatewaySessions,GATEWAY_SESSION_MS,gatewayBrowserRequest} from './gateway-session.js';
+import {GatewaySessions,GATEWAY_SESSION_MS,EXTENDED_GATEWAY_SESSION_MS,gatewayBrowserRequest} from './gateway-session.js';
 
 test('independent browser sessions retain absolute expiry and revoke only their own cookie',()=>{
  const sessions=new GatewaySessions(),req={headers:{}};
@@ -10,12 +10,14 @@ test('independent browser sessions retain absolute expiry and revoke only their 
  const first=cookie(sessions.create(req,'G01',1000));
  const second=cookie(sessions.create(req,'G01',2000));
  const other=cookie(sessions.create(req,'G02',3000));
- assert.equal(sessions.get(first,5000).expiry,1000+GATEWAY_SESSION_MS);
+ const short=cookie(sessions.create(req,'G04',5000));
+ assert.equal(sessions.get(first,5000).expiry,1000+EXTENDED_GATEWAY_SESSION_MS);
  sessions.revoke(second);
  assert.equal(sessions.get(second,5000),null);
  assert.equal(sessions.get(first,5000).gateway,'G01');
- assert.equal(sessions.get(first,1000+GATEWAY_SESSION_MS),null);
- assert.equal(sessions.get(other,1000+GATEWAY_SESSION_MS).gateway,'G02');
+ assert.equal(sessions.get(short,5000+GATEWAY_SESSION_MS),null,'G04 remains 2 hours');
+ assert.equal(sessions.get(first,1000+EXTENDED_GATEWAY_SESSION_MS),null);
+ assert.equal(sessions.get(other,3000+EXTENDED_GATEWAY_SESSION_MS-1).gateway,'G02');
 });
 
 test('gateway sessions expire absolutely, rotate, revoke, and store only hashed random keys',()=>{
@@ -23,7 +25,7 @@ test('gateway sessions expire absolutely, rotate, revoke, and store only hashed 
  const key=sessions.create(req,'G01',1000),cookie={headers:{cookie:'steve_gateway='+key}};
  assert.equal(sessions.records.has(key),false);assert.equal(key.length,64);
  assert.equal(sessions.get(cookie,1001).gateway,'G01');
- assert.equal(sessions.get(cookie,1000+GATEWAY_SESSION_MS),null);
+ assert.equal(sessions.get(cookie,1000+EXTENDED_GATEWAY_SESSION_MS),null);
  const a=sessions.create(req,'G01'),request={headers:{cookie:'steve_gateway='+a}};
  const b=sessions.create(request,'G01');assert.equal(sessions.get(request),null);
  const fresh={headers:{cookie:'steve_gateway='+b}};sessions.revoke(fresh);assert.equal(sessions.get(fresh),null);
@@ -42,7 +44,7 @@ test('HTTP session restores own provision, enforces slots and CSRF, cannot read 
   let r=await fetch(base+'/api/gateway/session',{...login,headers:{...login.headers,Origin:'http://evil.test'}});assert.equal(r.status,403);
   r=await fetch(base+'/api/gateway/session',{method:'POST',headers:{'X-STEVE-Gateway':'1'}});assert.equal(r.status,401);
   r=await fetch(base+'/api/gateway/session',login);assert.equal(r.status,200);
-  const setCookie=r.headers.get('set-cookie');assert.match(setCookie,/HttpOnly; SameSite=Strict; Path=\/api\/; Max-Age=7200/);assert.ok(!setCookie.includes(token));
+  const setCookie=r.headers.get('set-cookie');assert.match(setCookie,/HttpOnly; SameSite=Strict; Path=\/api\/; Max-Age=36000/);assert.ok(!setCookie.includes(token));
   const headers={Cookie:setCookie.split(';')[0],'X-STEVE-Gateway':'1','Content-Type':'application/json'};
   r=await fetch(base+'/api/gateway/provision',{headers});assert.deepEqual((await r.json()).slots.map(x=>x.id),['R01','R02']);
   r=await fetch(base+'/api/gateway/provision',{headers:{Cookie:headers.Cookie}});assert.equal(r.status,401);

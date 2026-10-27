@@ -89,6 +89,13 @@ body.presentation #trainingActions{display:none!important}
 .history-graph{background:#0d1713;border:1px solid #34483d;border-radius:12px;overflow:hidden}
 .history-graph svg{display:block;width:100%;height:auto}
 .history-stats{display:flex;flex-wrap:wrap;gap:8px 20px;margin:9px 0;color:#cbded2}
+.history-breakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:8px;margin:10px 0}
+.history-breakdown .phase-summary{padding:10px;border:1px solid #3d5847;background:#19271e;border-radius:9px;font-size:.82rem}
+.history-breakdown .phase-summary b{display:block;color:#e2f0df;margin-bottom:5px}
+.private-medical{border:1px solid #51715d;border-radius:12px;padding:13px;margin-top:14px;background:#18281f}
+.private-medical summary{cursor:pointer;font-weight:800;padding:6px 0}
+.private-medical textarea{width:100%;min-height:70px;background:#26372c;color:#f0f6ef;border:1px solid #597465;border-radius:9px;padding:10px}
+.private-medical input{background:#26372c;color:#f0f6ef;border:1px solid #597465;border-radius:8px;padding:10px}
 .history-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.8rem;color:#bfcebf;margin:8px 0}
 .history-legend span:before{content:"";display:inline-block;width:12px;height:8px;margin-right:6px;border-radius:2px;background:var(--mark)}
 .history-note{font-size:.77rem;color:#b5c6b4;line-height:1.5}
@@ -146,8 +153,23 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  </div>
  <p id="rosterStatus" role="status">ระบบจะตรวจสอบเวอร์ชันข้อมูลก่อนบันทึกเสมอ</p>
  <p class="safety">เมื่อเปลี่ยนผู้สวม ให้ย้ายและตรวจสายรัด Band ของช่องนั้นกับทหารใหม่ก่อนแก้รหัสแล้วกดบันทึกครั้งเดียว ระบบล้าง BPM และสถานะของผู้สวมเดิมโดยอัตโนมัติและรอข้อมูลใหม่ ไม่ต้องเปิดรับซ้ำ หากมีเหตุ EMERGENCY ค้าง ต้องให้เจ้าหน้าที่ประเมินและปิดเหตุก่อนเปลี่ยนผู้สวม</p>
+ <p id="privateStorageNotice" class="status-note" hidden>ข้อมูลสุขภาพส่วนตัวเปิดใช้ได้เมื่อเชื่อมฐานข้อมูลเข้ารหัส และลงชื่อเข้าใช้ด้วยบัญชีครูฝึกหรือแพทย์</p>
+ <details id="privatePanel" class="private-medical" hidden>
+  <summary>ข้อมูลส่วนตัว • เฉพาะผู้รับผิดชอบ (ไม่แสดงบน Dashboard)</summary>
+  <p class="history-note">เก็บเฉพาะข้อมูลที่ได้รับอนุญาต หลีกเลี่ยงชื่อจริงและเลขประจำตัวจริง</p>
+  <div class="operator-fields">
+   <label>น้ำหนัก (กก.)<input id="privateWeight" type="number" inputmode="decimal" min="20" max="300" step="0.1" autocomplete="off"></label>
+   <label>ส่วนสูง (ซม.)<input id="privateHeight" type="number" inputmode="decimal" min="80" max="230" step="0.1" autocomplete="off"></label>
+  </div>
+  <label>โรคประจำตัว / ข้อควรระวัง (เฉพาะที่จำเป็น ไม่เกิน 300 ตัวอักษร)
+   <textarea id="privateConditions" maxlength="300" autocomplete="off" spellcheck="false"></textarea>
+  </label>
+  <p id="privateBmi" class="status-note">BMI: —</p>
+  <button type="button" id="privateSave">บันทึกข้อมูลส่วนตัวแบบเข้ารหัส</button>
+  <p id="privateStatus" role="status">เลือกผู้สวมที่ลงทะเบียนแล้ว</p>
+ </details>
  <details><summary>ประวัติการเปลี่ยนแปลง (ไม่มีรายละเอียดสุขภาพ)</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
-</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden><div class="history-header"><div><small>HR TREND • ย้อนหลังสูงสุด 4 ชั่วโมง</small><h2 id="historyTitle">กราฟชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div><div class="history-ranges" id="historyRanges"><button data-history-hours="0.5" aria-pressed="false">30 นาที</button><button data-history-hours="1" aria-pressed="false">1 ชั่วโมง</button><button data-history-hours="2" aria-pressed="false">2 ชั่วโมง</button><button data-history-hours="4" aria-pressed="true">4 ชั่วโมง</button></div><p id="historyStatus" class="status-note" role="status">กำลังโหลดข้อมูล...</p><div id="historyStats" class="history-stats"></div><div id="historyChart" class="history-graph"></div><div class="history-legend"><span style="--mark:#71b28c">กำลังทำการฝึก</span><span style="--mark:#689cc8">พักประจำชั่วโมง</span><span style="--mark:#c3e1cb">เส้น BPM ที่วัดได้จริง</span></div><p class="history-note">กราฟเป็นข้อมูลย้อนหลังใน RAM เท่านั้น • ไม่มีเส้นต่อเนื่องข้ามช่วง NO DATA • ไม่ใช้วินิจฉัยหรืออนุญาตให้กลับไปฝึก</p></section>
+</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden><div class="history-header"><div><small>HR TREND • ย้อนหลังสูงสุด 4 ชั่วโมง</small><h2 id="historyTitle">กราฟชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div><div class="history-ranges" id="historyRanges"><button data-history-hours="0.5" aria-pressed="false">30 นาที</button><button data-history-hours="1" aria-pressed="false">1 ชั่วโมง</button><button data-history-hours="2" aria-pressed="false">2 ชั่วโมง</button><button data-history-hours="4" aria-pressed="true">4 ชั่วโมง</button></div><p id="historyStatus" class="status-note" role="status">กำลังโหลดข้อมูล...</p><div id="historyStats" class="history-stats"></div><div id="historyBreakdown" class="history-breakdown"></div><div id="historyChart" class="history-graph"></div><div class="history-legend"><span style="--mark:#71b28c">กำลังทำการฝึก</span><span style="--mark:#689cc8">พักประจำชั่วโมง</span><span style="--mark:#c3e1cb">เส้น BPM ที่วัดได้จริง</span></div><p class="history-note">กราฟเป็นข้อมูลย้อนหลังใน RAM เท่านั้น • ไม่มีเส้นต่อเนื่องข้ามช่วง NO DATA • ไม่ใช้วินิจฉัยหรืออนุญาตให้กลับไปฝึก</p></section>
 <script>
 "use strict";
 let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,viewEpoch=0,historySlot=null,historyHours=4,historyRequest=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
@@ -216,7 +238,7 @@ function historyIsLive(slot){
 function closeHistory(){
  historyRequest++;historySlot=null;historyCode=null;
  byId("historyPanel").hidden=true;
- byId("historyChart").innerHTML="";byId("historyStats").textContent="";
+ byId("historyChart").innerHTML="";byId("historyStats").textContent="";byId("historyBreakdown").textContent="";
 }
 function historyTime(t){return new Date(t).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});}
 function renderHistory(data){
@@ -226,12 +248,18 @@ function renderHistory(data){
   p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240);
  byId("historyStatus").textContent="บันทึกจริง "+points.length+" จุด • สูงสุด 1 จุดทุก 5 วินาที • เก็บใน RAM";
  if(!points.length){
-  byId("historyStats").textContent="ยังไม่มี BPM ที่บันทึกในช่วงนี้";
+  byId("historyStats").textContent="ยังไม่มี BPM ที่บันทึกในช่วงนี้";byId("historyBreakdown").textContent="";
   byId("historyChart").innerHTML="";return;
  }
  const values=points.map(p=>p[1]),lo=Math.min(...values),hi=Math.max(...values);
  const avg=Math.round(values.reduce((a,b)=>a+b,0)/values.length);
  byId("historyStats").textContent="ต่ำสุด "+lo+" BPM • เฉลี่ย "+avg+" BPM • สูงสุด "+hi+" BPM";
+ byId("historyBreakdown").innerHTML=data.summary?[["training","ช่วงฝึก"],["hourly_rest","ช่วงพัก"]].map(([key,label])=>{
+  const row=data.summary[key];if(!row)return "";
+  return '<div class="phase-summary"><b>'+label+'</b>'+
+   (row.samples?'วัดได้ '+row.samples+' จุด • เฉลี่ย '+row.mean+' BPM • สูงสุด '+row.max+' BPM':
+    'ไม่มีข้อมูลชีพจรในช่วงนี้')+'</div>';
+ }).join(""):"";
  const W=940,H=302,L=55,R=14,T=16,B=240,BAND=255,inner=W-L-R;
  const yMin=Math.max(25,Math.floor((lo-10)/10)*10),yMax=Math.min(240,Math.ceil((hi+10)/10)*10);
  const x=t=>L+Math.max(0,Math.min(1,(t-start)/(end-start)))*inner;
@@ -272,7 +300,7 @@ async function refreshHistory(){
  if(!historyIsLive(slot)){closeHistory();return;}
  const token=++historyRequest,epoch=viewEpoch;
  try{
-  const r=await fetch("/api/history/"+slot,{credentials:"same-origin",cache:"no-store"});
+  const r=await fetch("/api/history/"+slot+"?hours="+historyHours,{credentials:"same-origin",cache:"no-store"});
   if(token!==historyRequest||epoch!==viewEpoch||slot!==historySlot)return;
   if(r.status===401){disconnect();return;}
   if(r.status===409){closeHistory();return;}
@@ -287,7 +315,7 @@ function openHistory(slot){
  historyRequest++;historySlot=slot;historyCode=rosterData.slots.find(p=>p.id===slot).code;historyHours=4;
  byId("historyTitle").textContent=historyCode+" • "+slot;
  byId("historyPanel").hidden=false;
- byId("historyStats").textContent="";byId("historyChart").innerHTML="";
+ byId("historyStats").textContent="";byId("historyBreakdown").textContent="";byId("historyChart").innerHTML="";
  byId("historyStatus").textContent="กำลังโหลดกราฟ...";
  for(const b of byId("historyRanges").querySelectorAll("button[data-history-hours]"))
   b.setAttribute("aria-pressed",String(Number(b.dataset.historyHours)===4));
@@ -326,6 +354,7 @@ function fillRoster(){
  byId("rosterCode").value=p.code||"";
  byId("rosterRestriction").value=p.restriction;
  byId("rosterObservation").value=p.observation;
+ if(byId("privatePanel").open)loadPrivateProfile();
  byId("rosterStatus").textContent=(p.paused?"ช่องนี้ถูกพักไว้ • ตรวจผู้สวมแล้วกดบันทึกเพื่อเปิดรับ BPM อีกครั้ง":"พร้อมแก้ไข")
   +" • รุ่นข้อมูล "+p.version+(p.acknowledged?" • รับทราบเหตุแล้ว":"");
 }
@@ -345,6 +374,8 @@ async function loadRoster(keepSelection=false){
  byId("operatorRole").textContent="เข้าสู่ระบบ: "+({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ใช้รหัสร่วมเดิม"}[info.role]||"ผู้ปฏิบัติงาน")
   +" • สิทธิ์อ่านและแก้ไขเท่ากัน • "+(data.ephemeral?"ข้อมูลจะหายเมื่อเซิร์ฟเวอร์รีสตาร์ต":"มีไฟล์จัดเก็บแบบกำหนดเอง");
  byId("rosterBox").hidden=false;
+ byId("privatePanel").hidden=!info.privateProfilesEnabled;
+ byId("privateStorageNotice").hidden=!!info.privateProfilesEnabled;
  if(keepSelection)byId("rosterSlot").value=previous;
  fillRoster();
  byId("rosterAudit").textContent=audit.events.length?
@@ -382,6 +413,49 @@ async function rosterAction(action){
 byId("rosterSlot").onchange=fillRoster;
 byId("rosterSave").onclick=()=>rosterAction("save");
 byId("rosterAcknowledge").onclick=()=>rosterAction("ack");
+let privateSlot=null,privateVersion=0,privateBusy=false;
+function updatePrivateBmi(){
+ const w=Number(byId("privateWeight").value),h=Number(byId("privateHeight").value);
+ const bmi=w>0&&h>0?Math.round(w/Math.pow(h/100,2)*10)/10:null;
+ byId("privateBmi").textContent="BMI: "+(bmi===null?"—":bmi.toFixed(1))+" • ใช้ประกอบข้อมูล ไม่ใช้ตัดสินความพร้อมฝึก";
+}
+function clearPrivate(){
+ privateSlot=null;privateVersion=0;
+ for(const id of ["privateWeight","privateHeight","privateConditions"])byId(id).value="";
+ byId("privateStatus").textContent="เลือกผู้สวมที่ลงทะเบียนแล้ว";updatePrivateBmi();
+}
+async function loadPrivateProfile(){
+ if(byId("privatePanel").hidden||!byId("privatePanel").open)return;
+ const p=selectedRecord(),epoch=viewEpoch;clearPrivate();
+ if(!p?.code){byId("privateStatus").textContent="โปรดลงทะเบียนรหัสผู้สวมก่อน";return;}
+ const slot=p.id,code=p.code;byId("privateStatus").textContent="กำลังโหลดข้อมูลส่วนตัว...";
+ try{
+  const r=await fetch("/api/private-profile/"+slot,{credentials:"same-origin",cache:"no-store"});
+  if(epoch!==viewEpoch||!byId("privatePanel").open||selectedRecord()?.code!==code)return;
+  if(!r.ok)throw Error("โหลดข้อมูลส่วนตัวไม่ได้ (HTTP "+r.status+")");
+  const data=await r.json();privateSlot=slot;privateVersion=data.profile.version;
+  byId("privateWeight").value=data.profile.weightKg??"";
+  byId("privateHeight").value=data.profile.heightCm??"";
+  byId("privateConditions").value=data.profile.conditions||"";
+  updatePrivateBmi();byId("privateStatus").textContent="พร้อมแก้ไข • เก็บในระบบเข้ารหัส";
+ }catch(e){if(epoch===viewEpoch)byId("privateStatus").textContent=e.message;}
+}
+byId("privatePanel").ontoggle=()=>{if(byId("privatePanel").open)loadPrivateProfile();else clearPrivate();};
+for(const id of ["privateWeight","privateHeight"])byId(id).oninput=updatePrivateBmi;
+byId("privateSave").onclick=async()=>{
+ const p=selectedRecord();if(privateBusy||!p?.code||privateSlot!==p.id)return;
+ privateBusy=true;byId("privateSave").disabled=true;
+ try{
+  const body={version:privateVersion,confirmed:true,weightKg:byId("privateWeight").value||null,
+   heightCm:byId("privateHeight").value||null,conditions:byId("privateConditions").value};
+  const r=await fetch("/api/private-profile/"+p.id,{method:"PUT",credentials:"same-origin",
+   headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok)throw Error("บันทึกไม่สำเร็จ (HTTP "+r.status+")");
+  const data=await r.json();privateVersion=data.profile.version;
+  byId("privateStatus").textContent="บันทึกข้อมูลส่วนตัวแบบเข้ารหัสสำเร็จ";updatePrivateBmi();
+ }catch(e){byId("privateStatus").textContent=e.message+" • โหลดข้อมูลล่าสุดก่อนลองใหม่";}
+ finally{privateBusy=false;byId("privateSave").disabled=false;}
+};
 function paintGroupPhase(){
  const panel=byId("trainingPanel");panel.hidden=false;
  const phase=groupPhaseData?.phase||"not_started";
@@ -479,7 +553,7 @@ document.getElementById('demoRestore').onclick=()=>demoAction('restore');
 document.getElementById('demoStop').onclick=()=>demoAction('stop');
 async function contextStatus(){try{const r=await fetch("/api/context",{credentials:"same-origin",cache:"no-store"});if(!r.ok)return;const d=await r.json();document.getElementById("conditions").textContent=d.timestamp?(d.stale?"WBGT: ค่าเก่ากว่า 30 นาที ต้องวัดใหม่":"WBGT (กรอกมือ): "+d.wbgtC+" °C • "+new Date(d.timestamp).toLocaleTimeString("th-TH")):"WBGT: ยังไม่มีข้อมูลการวัด";}catch{document.getElementById("conditions").textContent="WBGT: ตรวจข้อมูลไม่ได้";}}
 async function snapshot(){const epoch=viewEpoch;try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(epoch!==viewEpoch)return;if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(epoch!==viewEpoch)return;transportUp=true;draw(data);await gatewayStatus();await contextStatus();}catch(e){if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='DISCONNECTED — โหลดข้อมูลไม่สำเร็จ';}}
-function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
+function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
 function connect(){const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
  events.onopen=()=>{if(epoch!==viewEpoch)return;transportUp=true;conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
  events.onmessage=e=>{if(epoch!==viewEpoch)return;try{transportUp=true;draw(JSON.parse(e.data))}catch{}};

@@ -8,6 +8,25 @@ export const SLOT_IDS=Array.from({length:15},(_,i)=>"R"+String(i+1).padStart(2,"
 
 export class PulseHistory {
  constructor(){this.bySlot=new Map();}
+ export(now=Date.now()){
+  return Object.fromEntries(SLOT_IDS.map(slot=>[slot,this.get(slot,now)]).filter(([,v])=>v.length));
+ }
+ load(raw,now=Date.now()){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("Invalid persisted HR history");
+  const restored=new Map();
+  for(const [slot,points] of Object.entries(raw)){
+   if(!SLOT_IDS.includes(slot)||!Array.isArray(points)||points.length>MAX_POINTS)throw Error("Invalid persisted HR slot");
+   let prev=0;
+   const validated=[];
+   for(const p of points){
+    if(!Array.isArray(p)||p.length!==2||!Number.isSafeInteger(p[0])||
+       !Number.isInteger(p[1])||p[1]<25||p[1]>240||p[0]<=prev||p[0]>now+1000)throw Error("Invalid persisted HR data");
+    prev=p[0];if(p[0]>=now-WINDOW_MS)validated.push(p.slice());
+   }
+   if(validated.length)restored.set(slot,validated);
+  }
+  this.bySlot=restored;
+ }
  clear(slot){this.bySlot.delete(slot);}
  record(slot,hr,timestamp,now=Date.now()){
   if(!SLOT_IDS.includes(slot)||!Number.isInteger(hr)||hr<25||hr>240||

@@ -22,7 +22,7 @@ const assert=require('assert/strict');
   });
   await page.goto(base+'/gateway');await page.locator('#token').fill(token);await page.locator('#load').click();await page.waitForFunction(()=>document.getElementById('loginFields').hidden);
   assert.equal(await page.locator('#token').inputValue(),'');
-  const cookies=await context.cookies();const cookie=cookies.find(c=>c.name==='steve_gateway');assert.ok(cookie.httpOnly);assert.equal(cookie.sameSite,'Strict');assert.ok(cookie.expires-Date.now()/1000<=7200);
+  const cookies=await context.cookies();const cookie=cookies.find(c=>c.name==='steve_gateway');assert.ok(cookie.httpOnly);assert.equal(cookie.sameSite,'Strict');assert.ok(cookie.expires-Date.now()/1000<=36000&&cookie.expires-Date.now()/1000>=35990);
   assert.equal(await page.evaluate(()=>document.cookie.includes('steve_gateway')),false);
   await page.reload();await page.waitForFunction(()=>!document.getElementById('quickR01').disabled);
   assert.equal(await page.evaluate(()=>window.choices.length),0);

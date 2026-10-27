@@ -1,6 +1,8 @@
 import { randomBytes, createHash } from 'node:crypto';
 
 export const GATEWAY_SESSION_MS=2*60*60*1000;
+export const EXTENDED_GATEWAY_SESSION_MS=10*60*60*1000;
+export const sessionDuration=gateway=>["G01","G02","G03"].includes(gateway)?EXTENDED_GATEWAY_SESSION_MS:GATEWAY_SESSION_MS;
 const digest=value=>createHash('sha256').update(value).digest('hex');
 export class GatewaySessions {
  constructor(){this.records=new Map();}
@@ -11,7 +13,7 @@ export class GatewaySessions {
   for(const [key,value] of this.records)if(value.expiry<=now)this.records.delete(key);
   if(this.records.size>=256)return null;
   const key=randomBytes(32).toString('hex');
-  this.records.set(digest(key),{gateway,expiry:now+GATEWAY_SESSION_MS});
+  this.records.set(digest(key),{gateway,expiry:now+sessionDuration(gateway)});
   return key;
  }
  get(req,now=Date.now()){
@@ -20,7 +22,10 @@ export class GatewaySessions {
   if(!value||value.expiry<=now){this.revoke(req);return null;}
   return value;
  }
- cookie(key){return `steve_gateway=${key}; HttpOnly; SameSite=Strict; Path=/api/; Max-Age=${key?7200:0}${process.env.NODE_ENV==='production'||process.env.COOKIE_SECURE==='1'?'; Secure':''}`;}
+ cookie(key,gateway){
+  const duration=key?sessionDuration(gateway||this.records.get(digest(key))?.gateway)/1000:0;
+  return `steve_gateway=${key}; HttpOnly; SameSite=Strict; Path=/api/; Max-Age=${duration}${process.env.NODE_ENV==='production'||process.env.COOKIE_SECURE==='1'?'; Secure':''}`;
+ }
 }
 
 // Require a custom same-origin request header for cookie authority, including GET.

@@ -288,7 +288,7 @@ async function connectBand(slot,expected,mode){
 
 function applyProvision(payload){
  if(!/^G0[1-5]$/.test(payload.gateway)||!Array.isArray(payload.slots)||!payload.slots.every(s=>/^R(0[1-9]|1[0-5])$/.test(s.id)&&/^[a-zA-Z0-9_-]{4,64}$/.test(s.device_id)))throw Error("Invalid provision");
- bindings.clear();auth={gateway:payload.gateway,expiresAt:payload.expiresAt||Date.now()+7200000};provision=payload.slots;
+ bindings.clear();auth={gateway:payload.gateway,expiresAt:payload.expiresAt||Date.now()+(["G01","G02","G03"].includes(payload.gateway)?36000000:7200000)};provision=payload.slots;
  $("token").value="";$("gateway").value=payload.gateway;$("gateway").disabled=true;$("loginFields").hidden=true;
  $("slot").replaceChildren();
  for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}

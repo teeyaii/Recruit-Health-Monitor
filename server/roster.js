@@ -51,6 +51,8 @@ export class RosterStore {
    }catch(e){if(e.code!=="ENOENT")throw e;}
   }
  }
+ loadData(data){verifyShape(data);this.data=structuredClone(data);}
+ exportData(){return structuredClone(this.data);}
  all(){return slotIDs.map(id=>this.get(id));}
  get(id){if(!slotSet.has(id))problem(404,"unknown slot");return {activity:"not_reported",...this.data.slots[id]};}
  getAudit(){return this.data.audit.slice(-100).map(item=>({...item}));}
