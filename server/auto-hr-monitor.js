@@ -11,10 +11,10 @@ export class AutoHRMonitor {
   let old=this.records.get(slot);
   if(!valid){this.reset(slot);return {trigger:false,reason:"not_configured_or_training"};}
   if(!old||old.code!==code||old.limitBpm!==limit||at<=old.lastAt||at-old.lastAt>15000)
-   old={code,limitBpm:limit,lastAt:at,samples:[],latched:false,belowSince:null};
-  const prior=old.samples.at(-1);
+   old={code,limitBpm:limit,lastAt:at,samples:[],latched:false,belowSince:null,lastReading:null};
+  const prior=old.lastReading;
   const plausible=!(prior&&at-prior.at<=15000&&Math.abs(bpm-prior.bpm)>=45);
-  old.lastAt=at;
+  old.lastAt=at;old.lastReading={at,bpm};
   if(!plausible){old.samples=[];old.belowSince=null;this.records.set(slot,old);
    return {trigger:false,reason:"check_sensor",limitBpm:limit};}
   if(bpm<limit){
