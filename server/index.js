@@ -5,6 +5,7 @@ import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, pro
 import { RosterStore } from "./roster.js";
 import { PulseHistory, WINDOW_MS } from "./pulse-history.js";
 import { DurableState } from "./durable-state.js";
+import { RollingArchive } from "./rolling-archive.js";
 import { PrivateProfiles } from "./private-profiles.js";
 import { trainingSummary } from "./training-summary.js";
 import { fileURLToPath } from "node:url";
@@ -19,6 +20,7 @@ const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && proce
 const recruits=new Map();
 const pulseHistory=new PulseHistory();
 const durable=new DurableState();
+const archive=new RollingArchive(durable);
 const privateProfiles=new PrivateProfiles();
 let writeQueue=Promise.resolve(),historyDirty=false;
 function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
@@ -163,6 +165,10 @@ const server=http.createServer(async(req,res)=>{
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,durable.status());return;
  }
+ if(url.pathname==="/api/archive/status" && req.method==="GET"){
+  if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
+  send(res,200,archive.status());return;
+ }
  if(url.pathname==="/api/operator/me" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,{role:isViewer,permissions:["roster:read","roster:write","audit:read","context:write","training:read","training:write",...(["trainer","medic"].includes(isViewer)&&durable.enabled?["private-profile:read","private-profile:write"]:[])],
@@ -194,6 +200,20 @@ const server=http.createServer(async(req,res)=>{
    catch{privateProfiles.load(backup);send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
    send(res,200,{profile,sensitive:true});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"private profile unavailable"});}
+  return;
+ }
+ const archiveRoute=url.pathname.match(/^\/api\/archive\/(R(?:0[1-9]|1[0-5]))$/);
+ if(archiveRoute&&req.method==="GET"){
+  if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
+  if(!archive.enabled){send(res,503,{error:"seven-day archive not enabled"});return;}
+  const hours=Number(url.searchParams.get("hours")||24);
+  if(![4,24,168].includes(hours)){send(res,422,{error:"invalid archive window"});return;}
+  const slot=archiveRoute[1],code=roster.get(slot).code;
+  if(!code){send(res,409,{error:"recruit not registered"});return;}
+  try{
+   const points=await archive.get(slot,code,hours);
+   send(res,200,{slot,windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,source:"actual accepted HR only"});
+  }catch{send(res,503,{error:"encrypted archive unavailable"});}
   return;
  }
  const historyRoute=url.pathname.match(/^\/api\/history\/(R(?:0[1-9]|1[0-5]))$/);
@@ -245,6 +265,7 @@ const server=http.createServer(async(req,res)=>{
    if(action==="replace"||wearerChanged||firstAssignment){
     // Never attribute a previously measured BPM to a new wearer.
     recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);
+    await archive.forget(slot);
     reassignmentCutoff.set(slot,Date.now());publish();
    }else if(action==="resume")publish();
    await persistState();send(res,200,{ok:true,slot:current});
@@ -309,7 +330,10 @@ const server=http.createServer(async(req,res)=>{
     eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});
    // Only enrolled recruits with genuine accepted HR measurements create history.
    // NO DATA/disconnect and unregistered slots produce no history points.
-   if(!disconnected&&roster.get(item.id).code&&pulseHistory.record(item.id,item.hr,item.timestamp,now))historyDirty=true;
+   if(!disconnected&&roster.get(item.id).code){
+    if(pulseHistory.record(item.id,item.hr,item.timestamp,now))historyDirty=true;
+    archive.record(item.id,roster.get(item.id).code,item.hr,item.timestamp,now);
+   }
    accepted++;
   }
   lastByGateway.set(body.gateway,now);
@@ -322,7 +346,12 @@ setInterval(()=>{
  if(!durable.enabled||!historyDirty)return;
  historyDirty=false;persistState().catch(()=>{historyDirty=true;});
 },30000).unref();
+// Closed 1-minute encrypted HR buckets are checkpointed separately from the small operational snapshot.
+setInterval(()=>archive.flush().catch(()=>{}),30000).unref();
+setInterval(()=>archive.cleanup().catch(()=>{}),3600000).unref();
 async function boot(){
+ await archive.verify();
+ if(archive.enabled)await archive.cleanup();
  if(durable.enabled){
   const state=await durable.load();
   if(state){
