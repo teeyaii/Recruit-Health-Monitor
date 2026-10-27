@@ -79,6 +79,21 @@ header h1{line-height:1.25;text-wrap:balance}
 #groupPhaseMessage{width:100%;font-size:.86rem;color:#f5d492;margin:0}
 body.presentation #trainingActions{display:none!important}
 @media(max-width:480px){.phase-actions{width:100%}.phase-actions button{flex:1}}
+.history-open{margin-top:10px;width:100%;min-height:44px;background:#2a4337;border-color:#6b9079;color:#e0f2e6}
+.history-detail{background:#121e19;border:1px solid #536b57;border-radius:15px;padding:clamp(13px,2vw,22px);margin:18px 0;max-width:100%;scroll-margin-top:12px}
+.history-header{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:start}
+.history-header h2{font-size:1.14rem;margin:4px 0}
+.history-ranges{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.history-ranges button{padding:8px 11px;min-height:44px}
+.history-ranges button[aria-pressed="true"]{background:#a8cfae;color:#11251a}
+.history-graph{background:#0d1713;border:1px solid #34483d;border-radius:12px;overflow:hidden}
+.history-graph svg{display:block;width:100%;height:auto}
+.history-stats{display:flex;flex-wrap:wrap;gap:8px 20px;margin:9px 0;color:#cbded2}
+.history-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.8rem;color:#bfcebf;margin:8px 0}
+.history-legend span:before{content:"";display:inline-block;width:12px;height:8px;margin-right:6px;border-radius:2px;background:var(--mark)}
+.history-note{font-size:.77rem;color:#b5c6b4;line-height:1.5}
+body.presentation .history-open{display:none!important}
+@media(max-width:480px){.history-ranges button{flex:1;min-width:70px}}
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 </style></head><body>
@@ -132,12 +147,13 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  <p id="rosterStatus" role="status">ระบบจะตรวจสอบเวอร์ชันข้อมูลก่อนบันทึกเสมอ</p>
  <p class="safety">เมื่อเปลี่ยนผู้สวม ให้ย้ายและตรวจสายรัด Band ของช่องนั้นกับทหารใหม่ก่อนแก้รหัสแล้วกดบันทึกครั้งเดียว ระบบล้าง BPM และสถานะของผู้สวมเดิมโดยอัตโนมัติและรอข้อมูลใหม่ ไม่ต้องเปิดรับซ้ำ หากมีเหตุ EMERGENCY ค้าง ต้องให้เจ้าหน้าที่ประเมินและปิดเหตุก่อนเปลี่ยนผู้สวม</p>
  <details><summary>ประวัติการเปลี่ยนแปลง (ไม่มีรายละเอียดสุขภาพ)</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
-</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div>
+</section><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form><p id="summary" role="status">รอการเข้าสู่ระบบ</p><div id="cards" class="grid"></div><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden><div class="history-header"><div><small>HR TREND • ย้อนหลังสูงสุด 4 ชั่วโมง</small><h2 id="historyTitle">กราฟชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div><div class="history-ranges" id="historyRanges"><button data-history-hours="0.5" aria-pressed="false">30 นาที</button><button data-history-hours="1" aria-pressed="false">1 ชั่วโมง</button><button data-history-hours="2" aria-pressed="false">2 ชั่วโมง</button><button data-history-hours="4" aria-pressed="true">4 ชั่วโมง</button></div><p id="historyStatus" class="status-note" role="status">กำลังโหลดข้อมูล...</p><div id="historyStats" class="history-stats"></div><div id="historyChart" class="history-graph"></div><div class="history-legend"><span style="--mark:#71b28c">กำลังทำการฝึก</span><span style="--mark:#689cc8">พักประจำชั่วโมง</span><span style="--mark:#c3e1cb">เส้น BPM ที่วัดได้จริง</span></div><p class="history-note">กราฟเป็นข้อมูลย้อนหลังใน RAM เท่านั้น • ไม่มีเส้นต่อเนื่องข้ามช่วง NO DATA • ไม่ใช้วินิจฉัยหรืออนุญาตให้กลับไปฝึก</p></section>
 <script>
 "use strict";
-let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,viewEpoch=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
+let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,viewEpoch=0,historySlot=null,historyHours=4,historyRequest=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
+ if(historySlot&&!historyIsLive(historySlot))closeHistory();
  const now=Date.now(),panel=byId("emergencyAlerts");
  if(!rosterData?.slots){
   cards.innerHTML='<p class="notice">กำลังตรวจสอบทะเบียนกลุ่มเสี่ยง • ไม่สามารถยืนยันจำนวนผู้สวมได้</p>';
@@ -174,7 +190,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const alertClass=emergencyFlag?"alert-emergency":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=stale?"NO DATA":"LIVE";
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">รหัสประจำตัวทหารใหม่</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่องอุปกรณ์ '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สถานะเฝ้าระวัง</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div><div><small>Last: '+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString("th-TH")):'—')+'</small></div>'+(registered&&!stale?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูกราฟย้อนหลัง 4 ชั่วโมง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
  panel.hidden=critical.length===0;
