@@ -70,3 +70,56 @@ test("case can be closed by a human but active high HR will not spam another req
  for(let i=7;i<22;i++)assert.equal(auto.ingest("R01","UNIT001",165,start+i*7000,150,{training:true,real:true}).trigger,false);
  assert.equal(reviews.get("R01","UNIT001").status,"closed");
 });
+
+test("TEST ONLY: replay cannot erase a sustained streak or rearm a latched alert",()=>{
+ const monitor=new AutoHRMonitor(),start=1793100000000;
+ const ingest=t=>monitor.ingest("R01","TEST001",160,start+t,150,{training:true,real:true});
+ for(const t of [0,7000,14000,21000,28000])assert.equal(ingest(t).trigger,false);
+ assert.equal(ingest(28000).reason,"duplicate_or_out_of_order");
+ assert.equal(ingest(35000).trigger,true);
+ assert.equal(ingest(7000).reason,"duplicate_or_out_of_order");
+ assert.equal(ingest(42000).reason,"already_alerted");
+ assert.equal(monitor.ingest("R02","TEST002",160,start+42000,150,{training:true,real:true}).trigger,false);
+});
+
+
+test("TEST ONLY: an existing manual case cannot mask automatic pause/check",()=>{
+ const reviews=new MedicReviews();
+ const first=reviews.update("R01","TEST001",{version:0,action:"request",reason:"other",note:"TEST ONLY"},"trainer");
+ const result=reviews.autoRequest("R01","TEST001","high_sustained");
+ assert.equal(result.created,false);assert.equal(result.escalated,true);
+ assert.equal(result.review.autoPauseRequired,true);assert.equal(result.review.note,"TEST ONLY");
+ assert.equal(result.review.requestedAt,first.requestedAt);
+ assert.equal(reviews.autoRequest("R01","TEST001","high_sustained").escalated,undefined);
+ const restored=new MedicReviews();restored.load(reviews.export());
+ assert.equal(restored.get("R01","TEST001").autoPauseRequired,true);
+ assert.throws(()=>restored.update("R01","TEST001",{version:first.version,action:"close"},"medic"),{status:409});
+});
+
+
+test("TEST ONLY: failed review rollback preserves other slots and newer automatic cases",()=>{
+ const r=new MedicReviews();
+ const a=r.update("R01","TEST001",{version:0,action:"request",reason:"other"},"trainer");
+ r.autoRequest("R02","TEST002","high_sustained");
+ assert.equal(r.rollback("R01",a,undefined),true);
+ assert.equal(r.get("R02","TEST002").status,"pending");
+ const b=r.update("R01","TEST001",{version:0,action:"request",reason:"other"},"trainer");
+ r.autoRequest("R01","TEST001","high_sustained");
+ assert.equal(r.rollback("R01",b,undefined),false);
+ assert.equal(r.get("R01","TEST001").autoPauseRequired,true);
+});
+
+test("TEST ONLY: failed private write rollback cannot erase another wearer or newer edit",()=>{
+ const p=new PrivateProfiles();
+ const input={version:0,confirmed:true,weightKg:null,heightCm:null,conditions:"TEST ONLY"};
+ const first=p.update("R01","TEST001",input);
+ p.update("R02","TEST002",input);
+ assert.equal(p.rollback("R01",first,undefined),true);
+ assert.equal(p.get("R02","TEST002").version,1);
+ const second=p.update("R01","TEST001",input);
+ p.update("R01","TEST001",{...input,version:1});
+ assert.equal(p.rollback("R01",second,undefined),false);
+ p.clear("R01");p.update("R01","TEST003",input);
+ assert.equal(p.rollback("R01",second,undefined),false);
+ assert.equal(p.get("R01","TEST003").version,1);
+});

@@ -18,6 +18,7 @@ export class MedicReviews{
   for(const [slot,p] of Object.entries(data)){
    if(!validSlots.has(slot)||p?.slot!==slot||typeof p.code!=="string"||
     !["pending","closed"].includes(p.status)||!REVIEW_REASONS.has(p.reason)||
+    (p.autoPauseRequired!==undefined&&typeof p.autoPauseRequired!=="boolean")||
     !noteValid(p.note)||!Number.isSafeInteger(p.version)||p.version<1||
     !Number.isSafeInteger(p.requestedAt)||p.requestedAt<0||
     (p.closedAt!==null&&(!Number.isSafeInteger(p.closedAt)||p.closedAt<p.requestedAt))||
@@ -27,6 +28,13 @@ export class MedicReviews{
   this.records=structuredClone(data);
  }
  clear(slot){delete this.records[slot];}
+ rollback(slot,expected,previous){
+  const current=this.records[slot];
+  if(!current||current.code!==expected.code||current.version!==expected.version)return false;
+  if(previous)this.records[slot]=structuredClone(previous);
+  else delete this.records[slot];
+  return true;
+ }
  get(slot,code){
   if(!validSlots.has(slot)||!code)throw err(404,"registered slot required");
   const p=this.records[slot];
@@ -41,7 +49,13 @@ export class MedicReviews{
  autoRequest(slot,code,reason,now=Date.now()){
   if(!REVIEW_REASONS.has(reason))throw err(422,"Invalid automatic review reason");
   const prev=this.get(slot,code);
-  if(prev.status==="pending")return {created:false,review:prev};
+  if(prev.status==="pending"){
+   if(prev.openedBy==="system"||prev.autoPauseRequired)return {created:false,review:prev};
+   // Escalate the existing ticket without duplicating it or overwriting notes.
+   const next={...prev,autoPauseRequired:true,version:prev.version+1};
+   this.records[slot]=next;
+   return {created:false,escalated:true,review:structuredClone(next)};
+  }
   const next={slot,code,status:"pending",reason,note:"",version:prev.version+1,
    requestedAt:now,closedAt:null,openedBy:"system",closedBy:null};
   this.records[slot]=next;

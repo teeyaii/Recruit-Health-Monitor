@@ -36,7 +36,7 @@ function persistState(){
 }
 // Reject queued measurements recorded before a wearer changed.
 const reassignmentCutoff=new Map();
-const clients=new Set();
+const clients=new Map();
 const sessions=new Map();
 const gatewaySessions=new GatewaySessions();
 const failedLogins=new Map();
@@ -78,11 +78,13 @@ function snapshot(){const now=Date.now();
   const state=paused?"PAUSED":r?.state==="DISCONNECTED"?"DISCONNECTED":!r?.timestamp?"NO DATA":
     (!gatewayOnline||now-r.timestamp>TTL_MS)?"STALE":"CONNECTED";
   const code=roster.get(id).code,rev=code?medicReviews.get(id,code):null;
-  const autoCheck=!!(rev?.status==="pending"&&rev?.openedBy==="system");
-  return {id,autoCheck,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
+  const autoCheck=!!(rev?.status==="pending"&&(rev?.openedBy==="system"||rev?.autoPauseRequired));
+  const profile=code?privateProfiles.get(id,code):null;
+  const monitoringStatus=profile?.reviewThresholdConfirmed&&profile?.reviewThresholdBpm!==null?"OPERATOR_CONFIGURED_UNVERIFIED":"MONITORING_NOT_CONFIGURED";
+  return {id,autoCheck,monitoringStatus,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
    stale:state!=="CONNECTED",state,paused,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
-function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const c of clients){try{c.write(msg)}catch{clients.delete(c)}}}
+function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const [c,req] of clients){if(!viewer(req)){clients.delete(c);c.end();continue;}try{c.write(msg)}catch{clients.delete(c)}}}
 // Deliberately synthetic only. Demo cannot run when NODE_ENV=production.
 function demoTick(){
  if(!demoActive)return;
@@ -199,7 +201,7 @@ const server=http.createServer(async(req,res)=>{
  if(medicRoute){
   if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
   if(!durable.enabled){send(res,503,{error:"encrypted durable store required"});return;}
-  const slot=medicRoute[1],code=roster.get(slot).code;
+  const slot=medicRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"register wearer before medical review"});return;}
   if(req.method==="GET"){
    try{
@@ -207,6 +209,7 @@ const server=http.createServer(async(req,res)=>{
     const phase=roster.getGroupPhase();
     let archiveUnavailable=false,points=pulseHistory.get(slot,Date.now());
     if(archive.enabled){try{points=await archive.get(slot,code,4);}catch{archiveUnavailable=true;}}
+    if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
     // Comparison is descriptive only; rest phase must be recorded by a human.
     const baseline=profile.baselineConfirmed&&phase.phase==="hourly_rest"?
      profile.restingBaselineBpm:null;
@@ -227,10 +230,13 @@ const server=http.createServer(async(req,res)=>{
   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{
-   const body=await readBody(req,900),backup=medicReviews.export();
+   const body=await readBody(req,900);
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   const backup=medicReviews.export()[slot];
    const review=medicReviews.update(slot,code,body,isViewer);
    try{await persistState();}
-   catch{medicReviews.load(backup);send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
+   catch{if(roster.get(slot).version===rosterVersion)medicReviews.rollback(slot,review,backup);historyDirty=true;send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{review});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"review request unavailable"});}
   return;
@@ -239,17 +245,20 @@ const server=http.createServer(async(req,res)=>{
  if(privateRoute){
   if(!["trainer","medic"].includes(isViewer)){send(res,403,{error:"trainer/medic session required"});return;}
   if(!durable.enabled){send(res,503,{error:"secure external storage not yet configured"});return;}
-  const slot=privateRoute[1],code=roster.get(slot).code;
+  const slot=privateRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"register recruit before storing private information"});return;}
   if(req.method==="GET"){send(res,200,{profile:privateProfiles.get(slot,code),sensitive:true});return;}
   if(req.method!=="PUT"){send(res,405,{error:"method not allowed"});return;}
   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{
-   const body=await readBody(req,1024),backup=privateProfiles.export();
+   const body=await readBody(req,1024);
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   const backup=privateProfiles.export()[slot];
    const profile=privateProfiles.update(slot,code,body);
    try{await persistState();}
-   catch{privateProfiles.load(backup);send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
+   catch{if(roster.get(slot).version===rosterVersion)privateProfiles.rollback(slot,profile,backup);historyDirty=true;send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{profile,sensitive:true});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"private profile unavailable"});}
   return;
@@ -260,11 +269,12 @@ const server=http.createServer(async(req,res)=>{
   if(!archive.enabled){send(res,503,{error:"seven-day archive not enabled"});return;}
   const hours=Number(url.searchParams.get("hours")||24);
   if(![...HISTORY_HOURS,24].includes(hours)){send(res,422,{error:"invalid archive window"});return;}
-  const slot=archiveRoute[1],code=roster.get(slot).code;
+  const slot=archiveRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"recruit not registered"});return;}
   try{
    const compact=url.searchParams.get("compact")==="1";
    const points=await archive.get(slot,code,hours,Date.now(),compact);
+   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{slot,windowStart:Date.now()-hours*3600000,windowEnd:Date.now(),windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,compacted:compact&&(hours===8||hours===168),source:"actual accepted HR only"});
   }catch{send(res,503,{error:"encrypted archive unavailable"});}
   return;
@@ -318,8 +328,9 @@ const server=http.createServer(async(req,res)=>{
    if(action==="replace"||wearerChanged||firstAssignment){
     // Never attribute a previously measured BPM to a new wearer.
     recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);autoHR.reset(slot);
-    await archive.forget(slot);
-    reassignmentCutoff.set(slot,Date.now());publish();
+    reassignmentCutoff.set(slot,Number.MAX_SAFE_INTEGER);
+    try{await archive.forget(slot);}
+    finally{if(roster.get(slot).version===current.version)reassignmentCutoff.set(slot,Date.now());publish();}
    }else if(action==="resume")publish();
    await persistState();send(res,200,{ok:true,slot:current});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"roster update unavailable"});}
@@ -344,6 +355,7 @@ const server=http.createServer(async(req,res)=>{
   if(slots===null){send(res,503,{error:"provisioning unavailable; configure STEVE_SLOT_MAP_JSON"});return;}
   send(res,200,{gateway:gatewayId,slots,kind:"anonymous_device_ids",sensor_verified:false,...(browserGateway?{expiresAt:browserGateway.expiry}:{})});return;
  }
+ if(strictMode&&!isViewer&&["/api/snapshot","/api/events","/api/gateways","/api/context"].includes(url.pathname)){send(res,403,{error:"viewer session required"});return;}
  if(req.method==="GET"&&url.pathname==="/api/gateways"){const now=Date.now();send(res,200,{gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)??null;return {id,lastSeen:last,online:last!==null&&now-last<=TTL_MS};})});return;}
  if(req.method==="GET"&&url.pathname==="/api/snapshot"){send(res,200,{type:"snapshot",recruits:snapshot()});return;}
  if(req.method==="GET"&&url.pathname==="/api/context"){send(res,200,{...conditions,stale:!conditions.timestamp||Date.now()-conditions.timestamp>1800000});return;}
@@ -358,7 +370,7 @@ const server=http.createServer(async(req,res)=>{
  }
  if(req.method==="GET"&&url.pathname==="/api/events"){
   res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-store","Connection":"keep-alive","X-Accel-Buffering":"no"});
-  res.write("retry: 3000\n\n");clients.add(res);res.write("data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n");
+  res.write("retry: 3000\n\n");clients.set(res,req);res.write("data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n");
   req.on("close",()=>clients.delete(res));return;
  }
  if(req.method==="POST"&&url.pathname==="/api/ingest"){
@@ -395,22 +407,23 @@ const server=http.createServer(async(req,res)=>{
      {training:roster.getGroupPhase().phase==="training",real:!SYNTHETIC});
     if(decision.trigger){
      const outcome=medicReviews.autoRequest(item.id,code,"high_sustained",now);
-     if(outcome.created)autoCreated++;
+     if(outcome.created||outcome.escalated)autoCreated++;
     }
    }
    accepted++;
   }
   lastByGateway.set(body.gateway,now);
+  if(accepted)publish();
   if(autoCreated){
    // Alert is surfaced immediately even if archive persistence fails; never
    // claim durable confirmation on storage failure.
    try{await persistState();}catch{
-    if(accepted)publish();
-    send(res,503,{error:"automatic review pending but encrypted persistence failed",accepted,autoCreated});
+    historyDirty=true; // Retry the pending case even if no further readings arrive.
+    send(res,503,{error:"storage unavailable",accepted});
     return;
    }
   }
-  if(accepted)publish();send(res,200,{accepted,received:body.readings.length,autoCreated,request_id:randomUUID()});return;
+  send(res,200,{accepted,received:body.readings.length,request_id:randomUUID()});return;
  }
  send(res,404,{error:"not found"});
 });

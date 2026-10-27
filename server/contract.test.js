@@ -43,17 +43,20 @@ test("strict gateway isolation, mapping, viewer permissions, manual WBGT and sta
   ]},headers("G02"));
   assert.equal((await r.json()).accepted,1,"reject slot owned by another gateway");
   r=await fetch(base+"/api/snapshot",{headers:{Authorization:"Bearer "+gatewayTokens.G02}});
-  assert.equal(r.status,200);
-  let slots=(await r.json()).recruits;
-  assert.equal(slots.find(x=>x.id==="R01").hr,null,"missing readings must remain unknown");
-  assert.equal(slots.find(x=>x.id==="R02").hr,75);
-  assert.equal(slots.find(x=>x.id==="R03").gateway,"G02");
+  assert.equal(r.status,403,"gateway cannot read other wearers or medical workflow state");
   r=await post("/api/context",{wbgtC:28},headers("G01"));
   assert.equal(r.status,403,"gateway cannot edit operator context");
   r=await post("/api/login",{token:viewerSecret});
   assert.equal(r.status,200);
   const cookie=r.headers.get("set-cookie")?.split(";")[0];
   assert.ok(cookie);
+  r=await fetch(base+"/api/snapshot",{headers:{Cookie:cookie}});
+  assert.equal(r.status,200);
+  let slots=(await r.json()).recruits;
+  assert.equal(slots.find(x=>x.id==="R01").hr,null,"missing readings must remain unknown");
+  assert.equal(slots.find(x=>x.id==="R02").hr,75);
+  assert.equal(slots.find(x=>x.id==="R03").gateway,"G02");
+
   r=await post("/api/ingest",{gateway:"G01",readings:[]},{Cookie:cookie});
   assert.equal(r.status,403,"logged-in viewer cannot inject measurements");
   r=await post("/api/context",{wbgtC:29.5},{Cookie:cookie});
