@@ -25,7 +25,7 @@ if(!await page.locator('#rosterBox').textContent().then(t=>t.includes('รหั
 // Per-recruit graph must only be created on demand for registered LIVE slots.
 if(await page.locator('.history-open').count()!==2)throw Error('LIVE wearers should have exactly two graph buttons');
 if(await page.locator('#historyPanel').isVisible())throw Error('chart should not render before click');
-await page.route('**/api/history/R01',route=>{
+await page.route('**/api/history/R01**',route=>{
  const now=Date.now(),windowStart=now-4*3600000;
  return route.fulfill({contentType:'application/json',body:JSON.stringify({
   slot:'R01',windowStart,windowEnd:now,windowHours:4,ephemeral:true,
