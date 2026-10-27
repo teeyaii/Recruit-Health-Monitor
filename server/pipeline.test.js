@@ -19,7 +19,7 @@ test("15 slots / 5 authenticated gateways → HTTP ingest → SSE → live dashb
   const login=await fetch(base+"/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:viewer})});
   assert.equal(login.status,200);cookie=login.headers.get("set-cookie").split(";")[0];
   const elements=new Map();
-  const el=id=>{if(!elements.has(id))elements.set(id,{hidden:false,value:"",textContent:"",innerHTML:""});return elements.get(id);};
+  const el=id=>{if(!elements.has(id))elements.set(id,{hidden:false,value:"",textContent:"",innerHTML:"",setAttribute(name,value){this[name]=value;}});return elements.get(id);};
   class EventSource {
    constructor(path){
     this.controller=new AbortController();streams.push(this);
