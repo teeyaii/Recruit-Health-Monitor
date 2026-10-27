@@ -60,6 +60,7 @@ header h1{line-height:1.25;text-wrap:balance}
 #gateways,#conditions{padding:5px 0}
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
+.battery-line{font-variant-numeric:tabular-nums;border-top:1px solid #506054;padding-top:7px}.battery-low{color:#edc783}.battery-unknown{color:#bac7bd}
 </style></head><body>
 <header><h1>STEVE 1.0 <span style="color:#a8c49d">/ TACTICAL COMMAND</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="command-bar"><div><div class="command-eyebrow">FIELD OPERATIONS / HEALTH TELEMETRY</div><small>STEVE • RECRUIT MONITORING / 15 SLOTS</small></div><button id="presentationToggle" type="button" aria-pressed="false">เปิดโหมดนำเสนอ</button></div>
@@ -111,6 +112,10 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 "use strict";
 let events=null,last=null,transportUp=false,rosterData=null;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function batteryLabel(b,now){
+ if(!b||!Number.isInteger(b.percent)||b.percent<0||b.percent>100||!Number.isSafeInteger(b.timestamp)||b.timestamp>now||now-b.timestamp>900000)return "UNKNOWN";
+ return b.percent+"% · "+Math.floor((now-b.timestamp)/60000)+" นาทีที่แล้ว";
+}
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  const now=Date.now();let fresh=0,watchCount=0,pausedCount=0;const critical=[];
  cards.innerHTML=data.recruits.map(r=>{
@@ -128,8 +133,9 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   if(!stale)fresh++;
   const chip=emergencyFlag?"EMERGENCY":watchFlag?"WATCH":r.paused?"PAUSED":"NO ALERT";
   const signal=stale?"NO DATA":"LIVE";
+  const battery=batteryLabel(r.battery,now);
   const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ขาดสัญญาณ "+(age>=60000?Math.floor(age/60000)+" นาที ":"")+Math.floor((age%60000)/1000)+" วินาที":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><div class="signal-line"><span>HEALTH STATUS</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>TELEMETRY</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'"><strong>'+escapeHtml(r.id)+'</strong><div class="status-chip">'+chip+'</div><div><small>'+escapeHtml(profile?.code||"ยังไม่ได้กำหนดรหัส")+'</small></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:'BPM')+'</small></div><div class="signal-line"><span>HEALTH STATUS</span><span class="'+(emergencyFlag?'risk-emergency':watchFlag?'risk-watch':'risk-normal')+'">'+chip+'</span></div><div class="signal-line"><span>TELEMETRY</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><div class="signal-line battery-line"><span>BATTERY</span><span class="'+(battery==='UNKNOWN'?'battery-unknown':r.battery.percent<=20?'battery-low':'signal-ok')+'">'+battery+'</span></div><small class="status-note">'+elapsed+'</small><div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':' • LIVE')+"</small></div><div><small>Last: "+(r.timestamp?escapeHtml(new Date(r.timestamp).toLocaleTimeString('th-TH')):'—')+'</small></div>'+(safetyNote?'<p class="safety">'+escapeHtml(safetyNote)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  const panel=byId("emergencyAlerts");
  panel.hidden=critical.length===0;

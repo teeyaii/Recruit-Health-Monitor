@@ -1,6 +1,7 @@
 name: STEVE 1.0 backend tests
 on:
   push:
+    branches: [main]
     paths:
       - 'server/**'
       - 'dashboard/live.html'
@@ -77,3 +78,25 @@ jobs:
           test "$ready" -eq 1
           status=$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/api/snapshot)
           test "$status" = 401
+
+  dashboard-browser:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated browser test runtime
+        run: |
+          npm install --prefix /tmp/steve-ui playwright@1.62.1
+          /tmp/steve-ui/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify mobile and presentation rendering
+        env:
+          STEVE_PLAYWRIGHT_PATH: /tmp/steve-ui/node_modules/playwright
+        run: node server/dashboard-browser-smoke.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tactical-dashboard-screenshots
+          path: ui-artifacts/

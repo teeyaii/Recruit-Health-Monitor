@@ -200,3 +200,39 @@ v4`. Connect both physical bands, verify independent fresh BPM/acks, switch away
 and observe automatic reconnection. Repeat three times. Also verify manual Disconnect
 stays disconnected, Soft Reset keeps G01, and native permission failure offers manual
 recovery without automatically opening a chooser. Keep NO DATA during interruption.
+
+## Optional battery v5 / final prototype verification
+
+PRs 15–18 already provide the Tactical Dashboard, presentation mode and separate
+health/telemetry states. This update preserves them and adds a small battery row.
+Standard Battery Service 180F (`battery_service`) is requested as optional access;
+Battery Level 2A19 (`battery_level`) is read only after HR notifications are active.
+No proprietary Xiaomi protocol is used. Actual Band 10 exposure remains unverified.
+
+Battery reads are non-blocking to the HR path, limited to once per five minutes,
+with three-second bounds per GATT battery step. Unsupported/failed discovery disables
+battery reads for that session; reconnect permits another capability check. Values
+must be one byte in 0–100. Last valid readings expire after 15 minutes in Gateway,
+server and Dashboard. UNKNOWN never means 0%. Cached percentages include their age;
+they do not imply live HR or safe health. Reconnection starts a fresh local cache.
+
+Optional ingest metadata is `battery: {percent: integer, timestamp: epoch_ms}` on an
+otherwise valid HR reading. The server ignores invalid/missing battery metadata without
+rejecting valid BPM, retains only a fresh prior battery for the same device/gateway,
+and never updates battery through an unauthorized slot. Legacy gateways remain valid.
+Battery metadata is delivered with the next HR upload, not a separate battery endpoint.
+Existing authorized device handles may lack battery permission: UNKNOWN is expected
+until an operator explicitly selects the device again with optional battery access.
+
+Deployment: existing Render Docker/8080 health check /health, auto-deploy disabled.
+No secrets, slot map, service, database or Event Log added. Deploy the merged SHA manually
+unless an authenticated Render deployment tool is available. Build/CI success is not
+proof that a Render deployment or physical BLE battery read succeeded.
+
+Physical check: connect R01/47FD and R02/A746, verify independent fresh BPM and server
+acknowledgements, then inspect battery (real 0–100% with age, or UNKNOWN). Run foreground
+for ten minutes. Disconnect just one band; the other must keep updating. Reconnect,
+soft-reset and repeat background/foreground three times. Background is unmonitored;
+NO DATA is correct until fresh packets return. Verify WATCH and EMERGENCY remain visible
+on signal loss and acknowledgement leaves EMERGENCY active. Check presentation mode on
+phone and presentation display. Do not treat this research prototype as a medical device.
