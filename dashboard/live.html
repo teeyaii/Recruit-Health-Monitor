@@ -241,6 +241,19 @@ byId("rosterSave").onclick=()=>rosterAction("save");
 byId("rosterReplace").onclick=()=>rosterAction("replace");
 byId("rosterResume").onclick=()=>rosterAction("resume");
 byId("rosterAcknowledge").onclick=()=>rosterAction("ack");
+async function syncRoster(){
+ if(!rosterData)return;
+ const epoch=viewEpoch;
+ try{
+  const r=await fetch("/api/roster",{credentials:"same-origin",cache:"no-store"});
+  if(epoch!==viewEpoch)return;
+  if(r.status===401){disconnect();return;}
+  if(!r.ok)return;
+  const data=await r.json();
+  if(epoch!==viewEpoch)return;
+  if(JSON.stringify(rosterData.slots)!==JSON.stringify(data.slots)){rosterData=data;if(last)draw(last);}
+ }catch{}
+}
 async function gatewayStatus(){try{const r=await fetch('/api/gateways',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;const d=await r.json();document.getElementById('gateways').textContent='Gateway: '+d.gateways.map(g=>g.id+' '+(g.online?'ออนไลน์':'ออฟไลน์')).join(' • ');}catch{document.getElementById('gateways').textContent='Gateway: ตรวจสอบสถานะไม่ได้';}}
 async function demoStatus(){
  try{
@@ -266,7 +279,7 @@ document.getElementById('demoRestore').onclick=()=>demoAction('restore');
 document.getElementById('demoStop').onclick=()=>demoAction('stop');
 async function contextStatus(){try{const r=await fetch("/api/context",{credentials:"same-origin",cache:"no-store"});if(!r.ok)return;const d=await r.json();document.getElementById("conditions").textContent=d.timestamp?(d.stale?"WBGT: ค่าเก่ากว่า 30 นาที ต้องวัดใหม่":"WBGT (กรอกมือ): "+d.wbgtC+" °C • "+new Date(d.timestamp).toLocaleTimeString("th-TH")):"WBGT: ยังไม่มีข้อมูลการวัด";}catch{document.getElementById("conditions").textContent="WBGT: ตรวจข้อมูลไม่ได้";}}
 async function snapshot(){const epoch=viewEpoch;try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(epoch!==viewEpoch)return;if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(epoch!==viewEpoch)return;transportUp=true;draw(data);await gatewayStatus();await contextStatus();}catch(e){if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='DISCONNECTED — โหลดข้อมูลไม่สำเร็จ';}}
-function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;rosterData=null;cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused'])byId(id).textContent='—';summary.textContent='กรุณาเข้าสู่ระบบ';}
+function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;rosterData=null;cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
 function connect(){const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
  events.onopen=()=>{if(epoch!==viewEpoch)return;transportUp=true;conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
  events.onmessage=e=>{if(epoch!==viewEpoch)return;try{transportUp=true;draw(JSON.parse(e.data))}catch{}};
@@ -278,5 +291,6 @@ document.getElementById('logout').onclick=async()=>{disconnect();try{const r=awa
 document.getElementById('refresh').onclick=()=>{snapshot();loadRoster(true).catch(()=>{});};
 setInterval(()=>{if(last)draw(last);},1000);
 setInterval(()=>{if(last){gatewayStatus();contextStatus();demoStatus();}},5000);
+setInterval(()=>{if(last&&rosterData)syncRoster();},10000);
 snapshot().then(()=>{if(last)connect();});
 </script></body></html>
