@@ -52,7 +52,13 @@ body.presentation .grid{gap:16px}
 body.presentation .card{min-height:210px}
 @media(max-width:800px){.command-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:480px){.command-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat{padding:11px}.command-bar{align-items:stretch}.command-bar button{width:100%}}
-.signal-line{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px;font-size:.78rem}.signal-line span:last-child{font-weight:800}.signal-ok{color:#a1dfb4}.signal-lost{color:#f2aaa4}.risk-watch{color:#edc783}.risk-emergency{color:#ff8585}.risk-normal{color:#b8cbb8}.alert-panel{border:2px solid #d76d68;background:#382124;border-radius:14px;padding:14px 18px;margin:14px 0}.alert-panel strong{color:#ffb0aa}.alert-panel button{margin:7px 8px 0 0}.alert-panel small{display:block;margin-top:6px}.status-note{color:#a9baa9;font-size:.78rem}.command-stats{scroll-margin-top:12px}body.presentation #gateways,body.presentation #conditions{display:block}body.presentation .notice{font-size:.8rem;padding:8px}body.presentation #summary{margin:8px 0}body.presentation .card{min-height:190px}@media(min-width:1100px){body.presentation .card{padding:14px}}
+.signal-line{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px;font-size:.78rem}.signal-line span:last-child{font-weight:800}.signal-ok{color:#a1dfb4}.signal-lost{color:#f2aaa4}.risk-watch{color:#edc783}.risk-emergency{color:#ff8585}.risk-normal{color:#b8cbb8}.alert-panel{width:100%;max-width:760px;border:1px solid #855456;border-left:3px solid #d4827e;background:#221c1e;border-radius:10px;padding:9px 13px;margin:9px 0}
+.alert-panel .emergency-title{display:block;font-size:.9rem;line-height:1.4;font-weight:800;color:#ffb7b1}
+.alert-panel .emergency-items{display:grid;gap:4px;margin-top:5px}
+.alert-panel .emergency-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.84rem;line-height:1.35}
+.alert-panel .emergency-row button{min-height:44px;padding:8px 11px;margin:0;font-size:.79rem}
+.alert-panel .emergency-row button[disabled]{opacity:.7}
+.alert-panel small{display:block;margin-top:5px;font-size:.73rem;color:#cbb9b9;line-height:1.3}.status-note{color:#a9baa9;font-size:.78rem}.command-stats{scroll-margin-top:12px}body.presentation #gateways,body.presentation #conditions{display:block}body.presentation .notice{font-size:.8rem;padding:8px}body.presentation #summary{margin:8px 0}body.presentation .card{min-height:190px}@media(min-width:1100px){body.presentation .card{padding:14px}}
 /* Refined tactical presentation polish */
 :root{--tactical-edge:#3e5548;--tactical-glow:#b4d6a6}
 header h1{line-height:1.25;text-wrap:balance}
@@ -62,7 +68,7 @@ header h1{line-height:1.25;text-wrap:balance}
 .card{position:relative;overflow:hidden}
 .card:before{content:"";position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,#9bc39b50,transparent);pointer-events:none}
 .card .status-chip{letter-spacing:.11em}
-.alert-panel{box-shadow:0 0 0 1px #ff969622,0 8px 28px #0005}
+.alert-panel{box-shadow:none}
 #gateways,#conditions{padding:5px 0}
 .training-phase{background:linear-gradient(125deg,#20382e,#17251f);border:1px solid #53725c;border-radius:16px;padding:clamp(15px,2.2vw,24px);margin:16px 0;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
 .training-phase strong{font-size:clamp(1.2rem,2.3vw,1.7rem);color:#e5f3d8}
@@ -91,7 +97,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  <div><div class="command-eyebrow">GROUP ACTIVITY • สถานะภาพรวม</div><strong id="groupPhaseLabel">ยังไม่ระบุสถานะการฝึก</strong>
  <small id="groupPhaseTime">ควบคุมทั้งกลุ่ม ไม่กระทบ WATCH/EMERGENCY รายบุคคล</small></div>
  <div id="trainingActions" class="phase-actions">
-  <button type="button" id="startTraining" aria-pressed="false">▶ กำลังฝึก</button>
+  <button type="button" id="startTraining" aria-pressed="false">▶ กำลังทำการฝึก</button>
   <button type="button" id="startHourlyRest" aria-pressed="false">◷ พักประจำชั่วโมง</button>
  </div>
  <p id="groupPhaseMessage" role="status"></p>
@@ -172,7 +178,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน • ลงทะเบียนด้วยรหัสไม่ระบุตัวตนในส่วนผู้ฝึก/แพทย์ก่อนเริ่มเฝ้าระวัง</p>';
  panel.hidden=critical.length===0;
- panel.innerHTML=critical.length?'<strong>EMERGENCY / ต้องหยุดกิจกรรมและเรียกเจ้าหน้าที่แพทย์ทันที ('+critical.length+')</strong><div>'+critical.map(x=>'<div>'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>การรับทราบไม่ยกเลิกสถานะฉุกเฉิน ต้องประเมินและแก้ไขเหตุแยกต่างหาก</small>':'';
+ panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>รับทราบเหตุแล้วก็ยังเป็น EMERGENCY จนกว่าจะประเมินและแก้ไขเหตุโดยเจ้าหน้าที่</small>':'';
  byId("statTotal").textContent=enrolled;
  byId("statLive").textContent=fresh;
  byId("statNoData").textContent=Math.max(0,enrolled-fresh);
@@ -260,7 +266,7 @@ byId("rosterAcknowledge").onclick=()=>rosterAction("ack");
 function paintGroupPhase(){
  const panel=byId("trainingPanel");panel.hidden=false;
  const phase=groupPhaseData?.phase||"not_started";
- byId("groupPhaseLabel").textContent=phase==="training"?"กำลังฝึกทั้งกลุ่ม":phase==="hourly_rest"?"พักประจำชั่วโมงทั้งกลุ่ม":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
+ byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมงทั้งกลุ่ม":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
  const changedAt=groupPhaseData?.changedAt;
  const elapsed=Number.isSafeInteger(changedAt)?Math.max(0,Math.floor((Date.now()-changedAt)/60000)):null;
  byId("groupPhaseTime").textContent=changedAt?"เริ่มสถานะ "+new Date(changedAt).toLocaleTimeString("th-TH")+" • ผ่านไป "+elapsed+" นาที • ผู้ฝึก/แพทย์กดเปลี่ยนเอง":"ยังไม่ได้ตั้งค่า • กดปุ่มเพื่อบันทึกสถานะรวมของกลุ่ม";
