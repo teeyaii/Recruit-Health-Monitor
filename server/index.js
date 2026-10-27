@@ -13,6 +13,8 @@ const DEMO_ENABLED=process.env.STEVE_DEMO_MODE==="1" && process.env.NODE_ENV!=="
 const MAX_AGE_MS=15000;
 const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && process.env.NODE_ENV!=="production");
 const recruits=new Map();
+// Reject queued measurements recorded before a wearer changed.
+const reassignmentCutoff=new Map();
 const clients=new Set();
 const sessions=new Map();
 const gatewaySessions=new GatewaySessions();
@@ -175,12 +177,18 @@ const server=http.createServer(async(req,res)=>{
   if((action && req.method!=="POST")||(!action && req.method!=="PUT")){send(res,405,{error:"method not allowed"});return;}
   try{
    const body=await readBody(req);
+   const previous=roster.get(slot);
    const current=action==="replace"?roster.replace(slot,body,isViewer):
       action==="resume"?roster.resume(slot,body,isViewer):
       action==="acknowledge"?roster.acknowledge(slot,body,isViewer):
       roster.update(slot,body,isViewer);
-   if(action==="replace")recruits.delete(slot); // Never reuse the last person's BPM.
-   if(action==="replace"||action==="resume")publish();
+   const wearerChanged=previous.code!==null&&current.code!==null&&
+     previous.code.toUpperCase()!==current.code.toUpperCase();
+   const firstAssignment=previous.code===null&&current.code!==null;
+   if(action==="replace"||wearerChanged||firstAssignment){
+    // Never attribute a previously measured BPM to a new wearer.
+    recruits.delete(slot);reassignmentCutoff.set(slot,Date.now());publish();
+   }else if(action==="resume")publish();
    send(res,200,{ok:true,slot:current});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"roster update unavailable"});}
   return;
@@ -232,6 +240,7 @@ const server=http.createServer(async(req,res)=>{
   for(const item of body.readings){
    if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)|| (item.state!=="DISCONNECTED" && (!Number.isInteger(item.hr)||item.hr<25||item.hr>240))||!Number.isSafeInteger(item.timestamp)||item.timestamp>now+1000||item.timestamp<now-MAX_AGE_MS)continue;
    if(!slotIsAuthorized(body.gateway,item)||!roster.canIngest(item.id))continue;
+   if(item.timestamp<=(reassignmentCutoff.get(item.id)??0))continue;
    if(seen.has(item.id))continue;
    seen.add(item.id);
    const prior=recruits.get(item.id);if(prior&&(prior.eventAt??prior.timestamp)>=item.timestamp)continue;
