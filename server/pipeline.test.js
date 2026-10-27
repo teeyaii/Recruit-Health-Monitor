@@ -54,7 +54,9 @@ test("15 slots / 5 authenticated gateways → HTTP ingest → SSE → live dashb
   vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1],context);
   async function until(predicate){for(let i=0;i<100;i++){if(predicate())return;await delay(50);}assert.fail("condition timed out");}
   await until(()=>streams.length===1 && lastEvent);
-  assert.match(el("cards").innerHTML,/NO DATA/);
+  // SSE can open before the separately authorized roster request completes; wait for the
+  // enrolled/synthetic cards instead of asserting against the temporary loading placeholder.
+  await until(()=>el("cards").innerHTML.includes("NO DATA"));
   assert.ok(lastEvent.recruits.every(r=>r.source==="SIMULATED"),"empty synthetic slots retain mode labels");
   assert.match(el("cards").innerHTML,/G05/,"provisioned ownership visible before first measurement");
   const packet=(g,ts=Date.now())=>Object.entries(mapping[g]).map(([id,device_id])=>({id,device_id,hr:70+Number(id.slice(1)),timestamp:ts}));
