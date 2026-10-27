@@ -118,6 +118,7 @@ function expireSession(){
  serverStatus("หมดเวลาเข้าใช้งาน • กรอกรหัสเพื่อเข้าใหม่");controls();
 }
 function paintGatewayOverview(){
+ if(!$("gatewayBadge")||!$("gatewayDevices")||!$("gatewayUpload"))return;
  const now=Date.now(),fresh=[...live.values()].filter(x=>
   !x.closed&&x.bpm!==null&&Number.isSafeInteger(x.lastAt)&&now-x.lastAt<=15000);
  $("gatewayBadge").textContent=auth?.gateway||"ยังไม่เข้าสู่ระบบ";
