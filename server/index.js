@@ -159,6 +159,10 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==="GET"&&url.pathname==="/"){res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(dashboard));return;}
  // Trainer and medical accounts have identical capabilities. Legacy operator token is
  // retained for existing Render dashboards, not a substitute for individual attribution.
+ if(url.pathname==="/api/storage/status" && req.method==="GET"){
+  if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
+  send(res,200,durable.status());return;
+ }
  if(url.pathname==="/api/operator/me" && req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,{role:isViewer,permissions:["roster:read","roster:write","audit:read","context:write","training:read","training:write",...(["trainer","medic"].includes(isViewer)&&durable.enabled?["private-profile:read","private-profile:write"]:[])],
