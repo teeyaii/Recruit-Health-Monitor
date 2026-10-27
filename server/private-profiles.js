@@ -2,6 +2,11 @@ import {slotIDs} from "./roster.js";
 const valid=new Set(slotIDs);
 const blank=(slot,code)=>({slot,code,weightKg:null,heightCm:null,conditions:"",version:0,updatedAt:null});
 const reject=(status,message)=>{const e=new Error(message);e.status=status;throw e;};
+export function bmi(weightKg,heightCm){
+ if(!Number.isFinite(weightKg)||!Number.isFinite(heightCm)||heightCm<=0)return null;
+ return Math.round((weightKg/((heightCm/100)**2))*10)/10;
+}
+const withBmi=p=>({...p,bmi:bmi(p.weightKg,p.heightCm)});
 export class PrivateProfiles {
  constructor(){this.records={};}
  export(){return structuredClone(this.records);}
@@ -19,7 +24,7 @@ export class PrivateProfiles {
  get(slot,code){
   if(!valid.has(slot)||!code)reject(404,"slot not registered");
   const existing=this.records[slot];
-  return existing?.code.toUpperCase()===code.toUpperCase()?structuredClone(existing):blank(slot,code);
+  return withBmi(existing?.code.toUpperCase()===code.toUpperCase()?structuredClone(existing):blank(slot,code));
  }
  clear(slot){delete this.records[slot];}
  update(slot,code,input){
@@ -34,6 +39,6 @@ export class PrivateProfiles {
   if(typeof conditions!=="string"||conditions.length>300||/[<>\u0000-\u001f]/.test(conditions))
    reject(422,"Invalid condition notes (max 300 characters)");
   const next={slot,code,weightKg,heightCm,conditions:conditions.trim(),version:p.version+1,updatedAt:Date.now()};
-  this.records[slot]=next;return structuredClone(next);
+  this.records[slot]=next;return withBmi(structuredClone(next));
  }
 }
