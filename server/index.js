@@ -3,6 +3,7 @@ import { GatewaySessions, gatewayBrowserRequest } from './gateway-session.js';
 import { randomUUID, randomBytes } from "node:crypto";
 import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway, provisionedDevicesForGateway } from "./contract.js";
 import { RosterStore } from "./roster.js";
+import { PulseHistory, WINDOW_MS } from "./pulse-history.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -13,6 +14,7 @@ const DEMO_ENABLED=process.env.STEVE_DEMO_MODE==="1" && process.env.NODE_ENV!=="
 const MAX_AGE_MS=15000;
 const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && process.env.NODE_ENV!=="production");
 const recruits=new Map();
+const pulseHistory=new PulseHistory();
 // Reject queued measurements recorded before a wearer changed.
 const reassignmentCutoff=new Map();
 const clients=new Set();
@@ -72,6 +74,7 @@ function demoTick(){
   const gateway="G0"+(Math.floor(i/3)+1);
   const hr=72+((i*11+demoRound*3)%41);
   recruits.set(id,{hr,timestamp:now,gateway,source:"SIMULATED",state:"CONNECTED",eventAt:now});
+  if(roster.get(id).code)pulseHistory.record(id,hr,now,now);
   lastByGateway.set(gateway,now);
  }
  demoRound++;publish();
@@ -156,6 +159,20 @@ const server=http.createServer(async(req,res)=>{
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,{events:roster.getAudit()});return;
  }
+ const historyRoute=url.pathname.match(/^\/api\/history\/(R(?:0[1-9]|1[0-5]))$/);
+ if(historyRoute&&req.method==="GET"){
+  if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
+  const slot=historyRoute[1],item=snapshot().find(p=>p.id===slot);
+  if(!roster.get(slot).code||item?.state!=="CONNECTED"){
+   send(res,409,{error:"NO DATA: กราฟใช้ได้เฉพาะทหารที่มี BPM สด"});return;
+  }
+  const now=Date.now(),start=now-WINDOW_MS;
+  send(res,200,{slot,windowStart:start,windowEnd:now,windowHours:4,
+   sampleIntervalSeconds:5,ephemeral:true,
+   points:pulseHistory.get(slot,now),
+   phases:roster.getTrainingTimeline(start,now)});
+  return;
+ }
  if(url.pathname==="/api/training"&&req.method==="GET"){
   if(!isViewer){send(res,403,{error:"operator authorization required"});return;}
   send(res,200,{...roster.getGroupPhase(),ephemeral:!roster.filename});return;
@@ -187,7 +204,8 @@ const server=http.createServer(async(req,res)=>{
    const firstAssignment=previous.code===null&&current.code!==null;
    if(action==="replace"||wearerChanged||firstAssignment){
     // Never attribute a previously measured BPM to a new wearer.
-    recruits.delete(slot);reassignmentCutoff.set(slot,Date.now());publish();
+    recruits.delete(slot);pulseHistory.clear(slot);
+    reassignmentCutoff.set(slot,Date.now());publish();
    }else if(action==="resume")publish();
    send(res,200,{ok:true,slot:current});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"roster update unavailable"});}
@@ -247,7 +265,11 @@ const server=http.createServer(async(req,res)=>{
    if(prior && prior.gateway!==body.gateway && now-prior.timestamp<=TTL_MS)continue;
    const disconnected=item.state==="DISCONNECTED";
    recruits.set(item.id,{device_id:item.device_id,hr:disconnected?null:item.hr,timestamp:disconnected?(prior?.timestamp??null):item.timestamp,
-    eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});accepted++;
+    eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});
+   // Only enrolled recruits with genuine accepted HR measurements create history.
+   // NO DATA/disconnect and unregistered slots produce no history points.
+   if(!disconnected&&roster.get(item.id).code)pulseHistory.record(item.id,item.hr,item.timestamp,now);
+   accepted++;
   }
   lastByGateway.set(body.gateway,now);
   if(accepted)publish();send(res,200,{accepted,received:body.readings.length,request_id:randomUUID()});return;
