@@ -97,3 +97,22 @@ test("archive is opt-in and never runs on an unconfigured store",()=>{
  assert.equal(disabled.status().state,"disabled");
  assert.throws(()=>new RollingArchive({enabled:false},{STEVE_ARCHIVE_ENABLED:"1"}),/requires configured/);
 });
+
+test("all requested time windows are supported and long ranges retain measured extrema",async()=>{
+ const {archive}=fixture();
+ const now=Math.floor(Date.now()/60000)*60000+20000,at=now-180000;
+ for(const hours of [0.25,0.5,1,4,8,168]){
+  const result=await archive.get("R01","DEMO-R01",hours,now,true);
+  assert.deepEqual(result,[]);
+ }
+ archive.record("R01","DEMO-R01",72,at,at);
+ archive.record("R01","DEMO-R01",160,at+8000,at+8000);
+ archive.record("R01","DEMO-R01",110,at+16000,at+16000);
+ await archive.flush(now);
+ for(const hours of [0.25,0.5,1,4,8,168]){
+  const result=await archive.get("R01","DEMO-R01",hours,now,hours>=8);
+  assert.ok(result.some(p=>p[1]===72),hours+"h retains actual minimum");
+  assert.ok(result.some(p=>p[1]===160),hours+"h retains actual maximum");
+  assert.ok(result.every(p=>p[0]>=now-hours*3600000));
+ }
+});
