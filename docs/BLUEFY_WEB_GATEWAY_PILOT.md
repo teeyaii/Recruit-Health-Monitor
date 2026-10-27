@@ -201,54 +201,11 @@ and observe automatic reconnection. Repeat three times. Also verify manual Disco
 stays disconnected, Soft Reset keeps G01, and native permission failure offers manual
 recovery without automatically opening a chooser. Keep NO DATA during interruption.
 
-## Optional battery v5 / final prototype verification
 
-PRs 15–18 already provide the Tactical Dashboard, presentation mode and separate
-health/telemetry states. This update preserves them and adds a small battery row.
-Standard Battery Service 180F (`battery_service`) is requested as optional access;
-Battery Level 2A19 (`battery_level`) is read only after HR notifications are active.
-No proprietary Xiaomi protocol is used. Actual Band 10 exposure remains unverified.
+## HR-only rollback v7 — 27 October 2026
 
-Battery reads are non-blocking to the HR path, limited to once per five minutes,
-with three-second bounds per GATT battery step. Unsupported/failed discovery disables
-battery reads for that session; reconnect permits another capability check. Values
-must be one byte in 0–100. Last valid readings expire after 15 minutes in Gateway,
-server and Dashboard. UNKNOWN never means 0%. Cached percentages include their age;
-they do not imply live HR or safe health. Reconnection starts a fresh local cache.
+Owner decision: disable all battery collection and battery displays until both Band 10 units are reliably working again. The Gateway uses HR-only Web Bluetooth mode A (`filters:[{services:["heart_rate"]}]`) and mode B (`acceptAllDevices:true,optionalServices:["heart_rate"]`). Mode C remains previously-authorized-device reconnection where Bluefy supports `getDevices`. No optional Battery Service is requested; no battery GATT reads; no battery in ingest or server snapshots; no battery row in Gateway or Tactical Dashboard. Keep the WATCH/EMERGENCY distinction and separate signal status.
 
-Optional ingest metadata is `battery: {percent: integer, timestamp: epoch_ms}` on an
-otherwise valid HR reading. The server ignores invalid/missing battery metadata without
-rejecting valid BPM, retains only a fresh prior battery for the same device/gateway,
-and never updates battery through an unauthorized slot. Legacy gateways remain valid.
-Battery metadata is delivered with the next HR upload, not a separate battery endpoint.
-Existing authorized device handles may lack battery permission: UNKNOWN is expected
-until an operator explicitly selects the device again with optional battery access.
+Operator screenshots show both Xiaomi Band 10 units connected in iPhone Bluetooth Settings but Bluefy 2.01's native chooser empty at stage 2/9 NativeError. iOS Bluetooth Settings alone does not prove a device is discoverable/available to Bluefy. The native chooser failure was seen before the optional battery integration, so this rollback is for isolation and reliability, not a proven root-cause fix. A native browser bridge cannot be repaired by backend tests. Do not unpair devices in iOS Settings as the first troubleshooting step.
 
-Deployment: existing Render Docker/8080 health check /health, auto-deploy disabled.
-No secrets, slot map, service, database or Event Log added. Deploy the merged SHA manually
-unless an authenticated Render deployment tool is available. Build/CI success is not
-proof that a Render deployment or physical BLE battery read succeeded.
-
-Physical check: connect R01/47FD and R02/A746, verify independent fresh BPM and server
-acknowledgements, then inspect battery (real 0–100% with age, or UNKNOWN). Run foreground
-for ten minutes. Disconnect just one band; the other must keep updating. Reconnect,
-soft-reset and repeat background/foreground three times. Background is unmonitored;
-NO DATA is correct until fresh packets return. Verify WATCH and EMERGENCY remain visible
-on signal loss and acknowledgement leaves EMERGENCY active. Check presentation mode on
-phone and presentation display. Do not treat this research prototype as a medical device.
-
-## HR-first Bluefy compatibility v6 — 27 October 2026
-
-Operator screenshots show the iPhone Bluetooth settings connected to both Band 10 devices but the Bluefy native device chooser has an empty list and the STEVE tiles report stage 2/9 NativeError. This indicates a chooser-stage failure, not an HTTPS credential or backend ingest failure. An iOS settings connection does **not** prove that Bluefy can discover an advertising peripheral, and the native error does not identify a unique root cause.
-
-PR #19 added optional `battery_service` to BOTH standard and broad `requestDevice` option objects. This valid Web Bluetooth request is an unverified compatibility variable in Bluefy 2.01. Restore the **previous HR-only requests as modes A and B by default**, retaining optional battery as **explicit modes D and E**. The modes are:
-- A: `{filters:[{services:["heart_rate"]}]}` (basic Heart Rate)
-- B: `{acceptAllDevices:true,optionalServices:["heart_rate"]}` (broad Heart Rate)
-- C: reconnect previously authorized Bluetooth device if supported (no chooser)
-- D/E: original standard/broad requests WITH extra optional Battery Service; use only after validating HR-only mode
-
-Only D/E attempt to read Battery Service after HR subscription; the battery row remains UNKNOWN when unsupported or not requested. Background recovery may reuse battery permissions only when the previously bound device was explicitly authorized for battery access. Never degrade HR continuity or slot/device verification to obtain battery. No auto-triggered chooser, unpairing or background-safety claims.
-
-CI validates option shapes, mocked chooser behavior, independent HR sessions and optional battery behavior; **physical Bluefy acceptance remains pending**. A/B success would implicate the optional battery permission but not conclusively prove root cause. If both still fail at stage 2, test advertisement/ownership in nRF Connect separately while no other scanner/GATT client is active, then investigate the Bluefy native bridge. Do not use "Forget This Device" merely to troubleshoot without a recovery plan.
-
-To release: merge only after backend CI passes, then **manually deploy the verified merged SHA** on the existing Render service (auto-deploy is off). Confirm "Bluefy HR-first compatibility v6" on /gateway. Do not modify Render secrets or slot maps. Keep the experimental gateway in foreground only; NO DATA on interruption.
+Release process: merge only if backend tests, Docker and browser smoke pass; Render Free auto-deploy is disabled, so manually deploy the merged main commit on the existing service, without touching secrets/slot map. Verify the `Bluefy HR-only recovery v7` banner in /gateway. If an empty chooser persists after the correctly deployed HR-only build, close competing BLE clients, ensure each Band is actively sharing HR and attempt A then B from Bluefy. Report stage/error and whether either Band appears. Never treat NO DATA as a safe HR value.

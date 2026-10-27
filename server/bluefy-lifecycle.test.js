@@ -196,44 +196,14 @@ test('R01 auto failure leaves R02 restored; background cancels in-progress auto 
  a.gatt.connect=async()=>{throw {name:'NetworkError'};};foreground(h);await drain();assert.equal(h.api.live.has('R01'),false);assert.equal(h.api.live.get('R02').ready,true);
  h.hide();await drain();let resolve;b.gatt.connect=()=>new Promise(r=>resolve=r);foreground(h);await drain();h.hide();await drain();b.gatt.connected=true;resolve(b.gatt);await drain();assert.equal(h.api.live.size,0);assert.equal(b.gatt.connected,false);
 });
-function withBattery(d,read){
- const get=d.gatt.getPrimaryService;
- d.gatt.getPrimaryService=async uuid=>uuid==='battery_service'?{getCharacteristic:async name=>{assert.equal(name,'battery_level');return {readValue:read};}}:get(uuid);
- return d;
-}
-test('two batteries independent, cached and included in authenticated HR without extra polling',async()=>{
- const h=harness();await h.login();let reads=0;
- const a=withBattery(device(),async()=>{reads++;return packet([82]);}),b=withBattery(device('two','CD34'),async()=>packet([29]));
- await h.connect(a,'R01','AB12','battery-standard');await h.connect(b,'R02','CD34','battery-broad');await drain();a.emit();b.emit();await drain();
- assert.equal(h.api.live.get('R01').battery.percent,82);assert.equal(h.api.live.get('R02').battery.percent,29);
- const payload=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body));assert.equal(payload[0].readings[0].battery.percent,82);
- h.tick(1000);await drain();assert.equal(reads,1);
- await h.api.stopped(h.api.live.get('R01'));h.tick(1000);b.emit();await drain();assert.equal(h.api.live.get('R02').bpm,66);
-});
-test('unavailable, invalid and hanging battery do not block HR; stale battery expires',async()=>{
- for(const read of [async()=>packet([101]),async()=>{throw Error('unsupported');},()=>new Promise(()=>{})]){
-  const h=harness();await h.login();const d=withBattery(device(),read);await h.connect(d,'R01','AB12','battery-standard');d.emit();await drain();assert.match(h.api.live.get('R01').state,/LIVE/);assert.equal(h.api.live.get('R01').battery,undefined);
-  h.tick(4000);await drain();assert.equal(h.api.live.get('R01').batteryBusy,false);
- }
- const h=harness();await h.login();let good=true;
- const d=withBattery(device(),async()=>{if(!good)throw Error();return packet([0]);});await h.connect(d,'R01','AB12','battery-standard');await drain();assert.equal(h.api.live.get('R01').battery.percent,0);
- good=false;h.tick(300000);await drain();h.tick(600001);d.emit();await drain();assert.match(h.api.live.get('R01').batteryNode.textContent,/UNKNOWN/);
- const last=h.fetches.filter(x=>x.url==='/api/ingest').at(-1);assert.equal(JSON.parse(last.options.body).readings[0].battery,undefined);
-});
-test('late battery completion after disconnect cannot affect new session',async()=>{
- const h=harness();await h.login();let resolve;const d=withBattery(device(),()=>new Promise(r=>resolve=r));await h.connect(d,'R01','AB12','battery-standard');await drain();h.hide();await drain();resolve(packet([99]));await drain();assert.equal(h.api.live.size,0);
-});
 
-test('HR-first scans do not request or read battery, opt-in scans request extra GATT permission',async()=>{
-  const h=harness();await h.login();
-  const a=withBattery(device(),async()=>packet([78]));
-  await h.connect(a,'R01','AB12','standard');await drain();
-  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0])),{filters:[{services:['heart_rate']}]});
-  assert.equal(h.api.live.get('R01').battery,undefined);
-  assert.equal(a.calls.includes('battery_service'),false);
-  await h.api.stopped(h.api.live.get('R01'));
-  const b=withBattery(device('two','CD34'),async()=>packet([88]));
-  await h.connect(b,'R02','CD34','battery-broad');await drain();
-  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[1])),{acceptAllDevices:true,optionalServices:['heart_rate','battery_service']});
-  assert.equal(h.api.live.get('R02').battery.percent,88);
+// Battery telemetry remains disabled: every scan must request HR only.
+test('HR-only Gateway does not request battery service or display battery',async()=>{
+ const h=harness();await h.login();const a=device(),b=device('two','CD34');
+ await h.connect(a);await h.connect(b,'R02','CD34','broad');
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls)),[{filters:[{services:['heart_rate']}]},{acceptAllDevices:true,optionalServices:['heart_rate']}]);
+ a.emit([6,62]);b.emit([6,58]);await flush();
+ assert.equal(h.api.live.get('R01').bpm,62);assert.equal(h.api.live.get('R02').bpm,58);
+ for(const payload of h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body))){assert.equal('battery' in payload.readings[0],false);}
+ assert.equal(h.get('slots').children.some(tile=>tile.children.some(child=>/BATTERY/i.test(child.textContent))),false);
 });
