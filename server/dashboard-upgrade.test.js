@@ -13,7 +13,7 @@ test("commander chart shows all six requested ranges and uses private archive fo
  assert.match(live,/compact=1/);
  assert.match(live,/archiveAllowed\(\)/);
  assert.match(live,/historyIsLive/);
- assert.match(live,/ข้อมูลหัวใจจากเซนเซอร์จริง/);
+ assert.match(live,/ข้อมูลที่วัดได้จริง/);
 });
 
 test("training phase clock is based on operator-entered timestamps only",()=>{
@@ -22,7 +22,7 @@ test("training phase clock is based on operator-entered timestamps only",()=>{
  }
  assert.match(live,/groupPhaseData\?\.transitions/);
  assert.match(live,/groupPhaseData\?\.changedAt/);
- assert.match(live,/นับต่อเนื่องจนผู้ฝึก\/แพทย์เปลี่ยนสถานะ/);
+ assert.match(live,/prettyDuration\(elapsed\)/);
 });
 
 test("gateway modern presentation retains all actual BLE and auth controls",()=>{
