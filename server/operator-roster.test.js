@@ -128,3 +128,19 @@ test("bad duplicate or incomplete trainer/medic tokens fail server startup",asyn
   assert.notEqual(exit,0);
  }
 });
+
+test("operator-confirmed activity survives updates, replacement resets it, and legacy roster files remain readable",()=>{
+ const dir=mkdtempSync(path.join(os.tmpdir(),"steve-activity-"));
+ const file=path.join(dir,"roster.json");
+ try{
+  const store=new RosterStore(file);
+  let p=store.update("R01",{version:0,code:"TEST-R01",restriction:"watch",observation:"none",activity:"training"},"medic");
+  assert.equal(p.activity,"training");
+  p=store.update("R01",{version:1,code:"TEST-R01",restriction:"watch",observation:"none",activity:"resting"},"trainer");
+  assert.equal(new RosterStore(file).get("R01").activity,"resting");
+  assert.throws(()=>store.update("R01",{version:2,code:"TEST-R01",restriction:"none",observation:"none",activity:"unverified"},"medic"),{status:422});
+  p=store.replace("R01",{version:2,code:"TEST-R01B"},"medic");
+  assert.equal(p.activity,"not_reported");
+  assert.equal(p.paused,true);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
