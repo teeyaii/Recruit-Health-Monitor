@@ -44,6 +44,27 @@ if(await page.locator('[data-history-slot="R01"]').count()!==1)throw Error('othe
 await page.evaluate(()=>{const copy=last.recruits.map(r=>({...r}));copy[0].stale=true;copy[0].hr=null;draw({recruits:copy});});
 if(await page.locator('#historyPanel').isVisible())throw Error('open graph was not dismissed when its wearer became NO DATA');
 await page.evaluate(()=>{const copy=last.recruits.map(r=>({...r}));copy[0].stale=false;copy[0].hr=52;copy[0].timestamp=Date.now();copy[1].stale=false;copy[1].hr=58;copy[1].timestamp=Date.now();draw({recruits:copy});});
+
+/* Private medical review remains behind authorized account and never leaks
+   medications/conditions into commander KPIs or ordinary wearer cards. */
+await page.route('**/api/medic-reviews/R01',route=>{
+ const now=Date.now();return route.fulfill({contentType:'application/json',body:JSON.stringify({
+  slot:'R01',review:{status:'pending',version:1,reason:'rest_recovery',note:'Test reviewed by medic'},
+  signal:{quality:'usable_for_description',latestBpm:78,observedMeanBpm:82,baselineBpm:65,deltaBpm:17},
+  context:{ageYears:21,bmi:24.5,wbgtC:29,medications:'PRIVATE-TEST-MEDS',conditions:'PRIVATE-TEST-CONTEXT'},
+  points:[[now-14000,78],[now-7000,81],[now,78]]
+ })});
+});
+await page.evaluate(()=>{operatorRole='medic';byId('rosterBox').hidden=false;byId('medicPanel').hidden=false;byId('medicPanel').open=true;});
+await page.waitForFunction(()=>document.getElementById('medicReviewState').textContent.includes('รอเจ้าหน้าที่ประเมิน'));
+if(!await page.locator('#medicClinicalContext').textContent().then(t=>t.includes('PRIVATE-TEST-MEDS')))throw Error('private medic context missing');
+if(await page.locator('#commandStats').textContent().then(t=>t.includes('PRIVATE-TEST')))throw Error('medical context leaked to commander');
+if(await page.locator('#cards').textContent().then(t=>t.includes('PRIVATE-TEST')))throw Error('medical context leaked to wearer cards');
+if(!await page.locator('#medicChart svg').count())throw Error('measured medic trend chart missing');
+await page.setViewportSize({width:390,height:844});
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('medic panel overflows iPhone viewport');
+await page.screenshot({path:'ui-artifacts/steve-medic-review-390.png',fullPage:true});
+await page.evaluate(()=>{byId('medicPanel').open=false;byId('medicPanel').hidden=true;byId('rosterBox').hidden=true;operatorRole=null;});
 for(const width of [390,1440]){await page.setViewportSize({width,height:900});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('horizontal overflow '+width);
 const dims=await page.evaluate(()=>{const a=document.getElementById('emergencyAlerts').getBoundingClientRect();const b=document.getElementById('trainingPanel').getBoundingClientRect();return {emergencyWidth:a.width,trainingWidth:b.width,emergencyHeight:a.height,trainingHeight:b.height};});
 if(dims.emergencyWidth>760.5)throw Error('alert wider than compact limit '+width);
