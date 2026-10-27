@@ -206,6 +206,108 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
 }
 
 const byId=id=>document.getElementById(id);
+let historyCode=null;
+function historyIsLive(slot){
+ const p=rosterData?.slots?.find(x=>x.id===slot),r=last?.recruits?.find(x=>x.id===slot);
+ return !!p?.code&&(!historySlot||slot!==historySlot||p.code===historyCode)&&
+  !!r&&transportUp&&!r.stale&&Number.isInteger(r.hr)&&
+  Number.isFinite(r.timestamp)&&Date.now()-r.timestamp<=15000;
+}
+function closeHistory(){
+ historyRequest++;historySlot=null;historyCode=null;
+ byId("historyPanel").hidden=true;
+ byId("historyChart").innerHTML="";byId("historyStats").textContent="";
+}
+function historyTime(t){return new Date(t).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});}
+function renderHistory(data){
+ if(!historySlot)return;
+ const start=Math.max(data.windowStart,data.windowEnd-historyHours*3600000),end=data.windowEnd;
+ const points=(data.points||[]).filter(p=>Array.isArray(p)&&Number.isSafeInteger(p[0])&&p[0]>=start&&
+  p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240);
+ byId("historyStatus").textContent="บันทึกจริง "+points.length+" จุด • สูงสุด 1 จุดทุก 5 วินาที • เก็บใน RAM";
+ if(!points.length){
+  byId("historyStats").textContent="ยังไม่มี BPM ที่บันทึกในช่วงนี้";
+  byId("historyChart").innerHTML="";return;
+ }
+ const values=points.map(p=>p[1]),lo=Math.min(...values),hi=Math.max(...values);
+ const avg=Math.round(values.reduce((a,b)=>a+b,0)/values.length);
+ byId("historyStats").textContent="ต่ำสุด "+lo+" BPM • เฉลี่ย "+avg+" BPM • สูงสุด "+hi+" BPM";
+ const W=940,H=302,L=55,R=14,T=16,B=240,BAND=255,inner=W-L-R;
+ const yMin=Math.max(25,Math.floor((lo-10)/10)*10),yMax=Math.min(240,Math.ceil((hi+10)/10)*10);
+ const x=t=>L+Math.max(0,Math.min(1,(t-start)/(end-start)))*inner;
+ const y=bpm=>B-(bpm-yMin)/(yMax-yMin)*(B-T);
+ const f=n=>Number(n.toFixed(2));
+ let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="กราฟชีพจรจริง พร้อมช่วงฝึกและพัก โดยไม่ลากเส้นข้ามช่วงสัญญาณขาด">';
+ for(let i=0;i<=3;i++){
+  const value=yMin+(yMax-yMin)*i/3,py=f(y(value));
+  svg+='<line x1="'+L+'" y1="'+py+'" x2="'+(W-R)+'" y2="'+py+'" stroke="#34473b"/>';
+  svg+='<text x="'+(L-8)+'" y="'+(py+4)+'" fill="#a8c4ad" font-size="14" text-anchor="end">'+Math.round(value)+'</text>';
+ }
+ let phase=null,begin=start;
+ const transitions=(data.phases||[]).filter(p=>Number.isSafeInteger(p.at)&&
+  (p.phase==="training"||p.phase==="hourly_rest")).sort((a,b)=>a.at-b.at);
+ const bars=[];
+ for(const event of transitions){
+  if(event.at<=start){phase=event.phase;continue;}
+  if(event.at>end)break;
+  if(phase)bars.push([begin,event.at,phase]);phase=event.phase;begin=event.at;
+ }
+ if(phase)bars.push([begin,end,phase]);
+ for(const [from,to,kind] of bars)svg+='<rect x="'+f(x(from))+'" y="'+BAND+
+  '" width="'+f(Math.max(0,x(to)-x(from)))+'" height="13" fill="'+
+  (kind==="training"?"#71b28c":"#689cc8")+'"/>';
+ let group=[],previous=null,groups=[];
+ for(const [at,bpm] of points){
+  if(previous!==null&&at-previous>15000){if(group.length>1)groups.push(group);group=[];}
+  group.push(f(x(at))+','+f(y(bpm)));previous=at;
+ }
+ if(group.length>1)groups.push(group);
+ for(const path of groups)svg+='<polyline fill="none" stroke="#c3e1cb" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round" points="'+path.join(" ")+'"/>';
+ if(points.length===1)svg+='<circle cx="'+f(x(points[0][0]))+'" cy="'+f(y(points[0][1]))+'" r="4" fill="#c3e1cb"/>';
+ for(let i=0;i<=4;i++){const t=start+(end-start)*i/4;svg+='<text x="'+f(x(t))+'" y="292" text-anchor="'+(i===0?"start":i===4?"end":"middle")+'" fill="#adc3b0" font-size="14">'+historyTime(t)+'</text>';}
+ byId("historyChart").innerHTML=svg+'</svg>';
+}
+async function refreshHistory(){
+ const slot=historySlot;if(!slot)return;
+ if(!historyIsLive(slot)){closeHistory();return;}
+ const token=historyRequest,epoch=viewEpoch;
+ try{
+  const r=await fetch("/api/history/"+slot,{credentials:"same-origin",cache:"no-store"});
+  if(token!==historyRequest||epoch!==viewEpoch||slot!==historySlot)return;
+  if(r.status===401){disconnect();return;}
+  if(r.status===409){closeHistory();return;}
+  if(!r.ok)throw Error("HTTP "+r.status);
+  const data=await r.json();
+  if(token!==historyRequest||epoch!==viewEpoch||slot!==historySlot||!historyIsLive(slot))return;
+  renderHistory(data);
+ }catch{if(token===historyRequest&&slot===historySlot)byId("historyStatus").textContent="โหลดกราฟไม่ได้ • ตรวจเครือข่ายแล้วลองใหม่";}
+}
+function openHistory(slot){
+ if(!/^R(0[1-9]|1[0-5])$/.test(slot)||!historyIsLive(slot))return;
+ historyRequest++;historySlot=slot;historyCode=rosterData.slots.find(p=>p.id===slot).code;historyHours=4;
+ byId("historyTitle").textContent=historyCode+" • "+slot;
+ byId("historyPanel").hidden=false;
+ byId("historyStats").textContent="";byId("historyChart").innerHTML="";
+ byId("historyStatus").textContent="กำลังโหลดกราฟ...";
+ for(const b of byId("historyRanges").querySelectorAll("button[data-history-hours]"))
+  b.setAttribute("aria-pressed",String(Number(b.dataset.historyHours)===4));
+ refreshHistory();
+ byId("historyPanel").scrollIntoView?.({behavior:"smooth",block:"start"});
+}
+byId("cards").onclick=e=>{
+ const slot=e.target.closest("button[data-history-slot]")?.dataset.historySlot;
+ if(slot)openHistory(slot);
+};
+byId("historyClose").onclick=closeHistory;
+byId("historyRanges").onclick=e=>{
+ const hours=Number(e.target.closest("button[data-history-hours]")?.dataset.historyHours);
+ if(!historySlot||![0.5,1,2,4].includes(hours))return;
+ historyHours=hours;
+ for(const b of byId("historyRanges").querySelectorAll("button[data-history-hours]"))
+  b.setAttribute("aria-pressed",String(Number(b.dataset.historyHours)===hours));
+ refreshHistory();
+};
+
 byId("emergencyAlerts").onclick=async e=>{
  const slot=e.target.closest("button[data-ack-slot]")?.dataset.ackSlot;
  if(!slot)return;
@@ -239,6 +341,7 @@ async function loadRoster(keepSelection=false){
  if(epoch!==viewEpoch)return;
  const previous=byId("rosterSlot").value;
  rosterData=data;
+ if(historySlot&&!historyIsLive(historySlot))closeHistory();
  byId("operatorRole").textContent="เข้าสู่ระบบ: "+({trainer:"ครูฝึก",medic:"เจ้าหน้าที่แพทย์",legacy:"ผู้ใช้รหัสร่วมเดิม"}[info.role]||"ผู้ปฏิบัติงาน")
   +" • สิทธิ์อ่านและแก้ไขเท่ากัน • "+(data.ephemeral?"ข้อมูลจะหายเมื่อเซิร์ฟเวอร์รีสตาร์ต":"มีไฟล์จัดเก็บแบบกำหนดเอง");
  byId("rosterBox").hidden=false;
@@ -376,7 +479,7 @@ document.getElementById('demoRestore').onclick=()=>demoAction('restore');
 document.getElementById('demoStop').onclick=()=>demoAction('stop');
 async function contextStatus(){try{const r=await fetch("/api/context",{credentials:"same-origin",cache:"no-store"});if(!r.ok)return;const d=await r.json();document.getElementById("conditions").textContent=d.timestamp?(d.stale?"WBGT: ค่าเก่ากว่า 30 นาที ต้องวัดใหม่":"WBGT (กรอกมือ): "+d.wbgtC+" °C • "+new Date(d.timestamp).toLocaleTimeString("th-TH")):"WBGT: ยังไม่มีข้อมูลการวัด";}catch{document.getElementById("conditions").textContent="WBGT: ตรวจข้อมูลไม่ได้";}}
 async function snapshot(){const epoch=viewEpoch;try{const r=await fetch('/api/snapshot',{credentials:'same-origin',cache:'no-store'});if(epoch!==viewEpoch)return;if(r.status===401){disconnect();return;}if(!r.ok)throw Error('HTTP '+r.status);const data=await r.json();if(epoch!==viewEpoch)return;transportUp=true;draw(data);await gatewayStatus();await contextStatus();}catch(e){if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='DISCONNECTED — โหลดข้อมูลไม่สำเร็จ';}}
-function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;rosterData=null;groupPhaseData=null;groupPhaseBusy=false;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
+function disconnect(){viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;byId('trainingPanel').hidden=true;byId('groupPhaseMessage').textContent='';cards.innerHTML='';byId('emergencyAlerts').hidden=true;byId('emergencyAlerts').innerHTML='';for(const id of ['statTotal','statLive','statNoData','statWatch','statPaused','statUnregistered'])byId(id).textContent='—';byId('cohortNotice').textContent='ยังไม่ได้เข้าสู่ระบบ';summary.textContent='กรุณาเข้าสู่ระบบ';}
 function connect(){const epoch=viewEpoch;if(events)events.close();document.getElementById('login').hidden=true;document.getElementById('controls').hidden=false;document.getElementById('wbgtForm').hidden=false;demoStatus();events=new EventSource('/api/events');
  events.onopen=()=>{if(epoch!==viewEpoch)return;transportUp=true;conn.textContent='เชื่อมต่อข้อมูลสดแล้ว';};events.onerror=()=>{if(epoch!==viewEpoch)return;transportUp=false;if(last)draw(last);conn.textContent='สัญญาณขาด / กำลังเชื่อมใหม่';snapshot();};
  events.onmessage=e=>{if(epoch!==viewEpoch)return;try{transportUp=true;draw(JSON.parse(e.data))}catch{}};
@@ -389,5 +492,6 @@ document.getElementById('refresh').onclick=()=>{snapshot();loadRoster(true).catc
 setInterval(()=>{if(last)draw(last);if(groupPhaseData)paintGroupPhase();},1000);
 setInterval(()=>{if(last){gatewayStatus();contextStatus();demoStatus();}},5000);
 setInterval(()=>{if(last&&rosterData)syncRoster();if(events)loadGroupPhase();},10000);
+setInterval(()=>{if(historySlot)refreshHistory();},15000);
 snapshot().then(()=>{if(last)connect();});
 </script></body></html>
