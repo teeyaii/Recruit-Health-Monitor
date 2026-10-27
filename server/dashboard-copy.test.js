@@ -5,28 +5,29 @@ const dashboard=readFileSync(new URL("../dashboard/live.html",import.meta.url),"
 const gateway=readFileSync(new URL("../dashboard/gateway.html",import.meta.url),"utf8");
 
 test("Gateway removes presentation-only pilot warnings but retains real telemetry",()=>{
- assert.doesNotMatch(gateway,/ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น/);
- assert.doesNotMatch(gateway,/Web BLE Gateway Pilot/);
- assert.doesNotMatch(gateway,/<div class="card warning"/);
+ assert.equal(gateway.includes("ต้นแบบเพื่อทดสอบอุปกรณ์เท่านั้น"),false);
+ assert.equal(gateway.includes("Web BLE Gateway Pilot"),false);
+ assert.equal(gateway.includes('<div class="card warning"'),false);
  for(const id of ["gatewayBadge","gatewayDevices","gatewayUpload","quickR01","quickR02","slots","load"]){
-  assert.match(gateway,new RegExp('id="'+id+'"'));
+  assert.ok(gateway.includes('id="'+id+'"'));
  }
- assert.match(gateway,/NO DATA/);
- assert.match(gateway,/navigator\\.bluetooth/);
+ assert.ok(gateway.includes("NO DATA"));
+ assert.ok(gateway.includes("navigator.bluetooth"));
 });
 
-test("Dashboard uses lean commander copy and keeps essential risk status intact",()=>{
- assert.doesNotMatch(dashboard,/>PROTOTYPE —/);
- assert.doesNotMatch(dashboard,/ผู้ฝึกและแพทย์มีสิทธิ์เท่ากัน/);
- assert.doesNotMatch(dashboard,/สถานะภาพรวม ไม่เปลี่ยนข้อจำกัดการฝึก/);
- assert.doesNotMatch(dashboard,/พักประจำชั่วโมงทั้งกลุ่ม/);
- assert.doesNotMatch(dashboard,/เมื่อเปลี่ยนผู้สวม ให้ย้ายและตรวจสายรัด/);
- assert.match(dashboard,/พักประจำชั่วโมง/);
- assert.match(dashboard,/รหัสประจำตัว \\(หน่วยกำหนด\\)/);
- for(const id of ["trainingPanel","phaseClock","trainingDuration","restDuration","statLive","statNoData","statWatch","statPaused","rosterBox","historyPanel"]){
-  assert.match(dashboard,new RegExp('id="'+id+'"'));
+test("Dashboard uses concise commander copy and keeps real emergency indicators",()=>{
+ for(const phrase of ["PROTOTYPE —","ผู้ฝึกและแพทย์มีสิทธิ์เท่ากัน",
+   "สถานะภาพรวม ไม่เปลี่ยนข้อจำกัดการฝึก","พักประจำชั่วโมงทั้งกลุ่ม",
+   "เมื่อเปลี่ยนผู้สวม ให้ย้ายและตรวจสายรัด"]){
+  assert.equal(dashboard.includes(phrase),false,phrase);
  }
- assert.match(dashboard,/data-ack-slot/);
- assert.match(dashboard,/ยังเป็น EMERGENCY/);
- assert.match(dashboard,/NO DATA/);
+ assert.ok(dashboard.includes("พักประจำชั่วโมง"));
+ assert.ok(dashboard.includes("รหัสประจำตัว (หน่วยกำหนด)"));
+ for(const id of ["trainingPanel","phaseClock","trainingDuration","restDuration",
+   "statLive","statNoData","statWatch","statPaused","rosterBox","historyPanel"]){
+  assert.ok(dashboard.includes('id="'+id+'"'),id);
+ }
+ assert.ok(dashboard.includes("data-ack-slot"));
+ assert.ok(dashboard.includes("ยังเป็น EMERGENCY"));
+ assert.ok(dashboard.includes("NO DATA"));
 });
