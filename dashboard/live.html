@@ -398,6 +398,7 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
  </section>
 <script>
 "use strict";
+let lastAutomaticAlerts=new Set();
 let events=null,last=null,transportUp=false,rosterData=null,groupPhaseData=null,groupPhaseBusy=false,operatorRole=null,viewEpoch=0,historySlot=null,historyHours=4,historyRequest=0;const cards=document.getElementById("cards"),summary=document.getElementById("summary"),conn=document.getElementById("connection");
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
@@ -407,7 +408,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   cards.innerHTML='<p class="notice">กำลังโหลดทะเบียน...</p>';
   for(const id of ["statTotal","statLive","statNoData","statWatch","statPaused","statMedicPending","statUnregistered"])byId(id).textContent="—";
   byId("cohortNotice").textContent="";
-  panel.hidden=true;panel.innerHTML="";byId("autoPauseAlerts").hidden=true;byId("autoPauseAlerts").textContent="";byId("autoAlertStat").hidden=true;
+  panel.hidden=true;panel.innerHTML="";byId("autoPauseAlerts").hidden=true;byId("autoPauseAlerts").textContent="";byId("autoAlertStat").hidden=true;lastAutomaticAlerts.clear();
   summary.textContent="รอข้อมูลทะเบียน";
   return;
  }
@@ -451,6 +452,9 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   '<small>ระบบพบ BPM สูงต่อเนื่องเกินเกณฑ์เฉพาะบุคคลที่เจ้าหน้าที่รับรอง • ตรวจอาการและยืนยันค่าจากอุปกรณ์ก่อนดำเนินการตาม SOP • ไม่ใช่การวินิจฉัย</small>':"";
  byId("autoAlertStat").hidden=autoCases.length===0;
  byId("statAutoCheck").textContent=String(autoCases.length);
+ const newAuto=autoCases.some(id=>!lastAutomaticAlerts.has(id));
+ lastAutomaticAlerts=new Set(autoCases);
+ if(newAuto)refreshMedicPending();
  byId("statTotal").textContent=enrolled;
  byId("statLive").textContent=fresh;
  byId("statNoData").textContent=Math.max(0,enrolled-fresh);
