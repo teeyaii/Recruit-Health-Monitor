@@ -8,6 +8,27 @@ export const ARCHIVE_RETENTION_MS=7*24*60*60*1000;
 const MINUTE_MS=60000;
 const CLOSED_GRACE_MS=15000;
 const SLOTS=new Set(Array.from({length:15},(_,i)=>"R"+String(i+1).padStart(2,"0")));
+export const HISTORY_HOURS=[0.25,0.5,1,4,8,168];
+
+// Preserve extrema as genuine measured samples instead of inventing mean BPM.
+// Long intervals are compacted to reduce transfer and SVG work on iPhones.
+export function compactActualPoints(points,hours){
+ const interval=hours===168?10*60*1000:hours>=8?2*60*1000:0;
+ if(!interval)return points;
+ const groups=new Map();
+ for(const p of points){
+  const key=Math.floor(p[0]/interval),g=groups.get(key)||[];
+  g.push(p);groups.set(key,g);
+ }
+ const selected=[];
+ for(const g of groups.values()){
+  const low=g.reduce((a,b)=>b[1]<a[1]?b:a);
+  const high=g.reduce((a,b)=>b[1]>a[1]?b:a);
+  selected.push(low);
+  if(high!==low)selected.push(high);
+ }
+ return selected.sort((a,b)=>a[0]-b[0]);
+}
 
 export class RollingArchive {
  constructor(durable,env=process.env){
@@ -98,9 +119,9 @@ export class RollingArchive {
   this.queue=this.queue.catch(()=>{}).then(job);
   return this.queue;
  }
- async get(slot,code,hours=24,now=Date.now()){
+ async get(slot,code,hours=24,now=Date.now(),compact=false){
   if(!this.enabled)throw Error("Archive not enabled");
-  if(!SLOTS.has(slot)||!code||![4,24,168].includes(hours))throw Error("Invalid archive query");
+  if(!SLOTS.has(slot)||!code||![...HISTORY_HOURS,24].includes(hours))throw Error("Invalid archive query");
   const owner=this.owner(slot,code),since=now-hours*3600000,from=Math.floor(since/MINUTE_MS)*MINUTE_MS;
   const cutoff=Math.max(since,now-ARCHIVE_RETENTION_MS);
   const result=[];
@@ -127,6 +148,7 @@ export class RollingArchive {
    if(offset===11000)throw Error("Archive page safety limit exceeded");
   }
   this.lastReadAt=new Date().toISOString();this.failed=false;
-  return result.sort((a,b)=>a[0]-b[0]);
+  const sorted=result.sort((a,b)=>a[0]-b[0]);
+  return compact?compactActualPoints(sorted,hours):sorted;
  }
 }
