@@ -37,7 +37,7 @@ const assert=require('assert/strict');
   assert.equal(await page.evaluate(()=>live.size),2,'presentation slots must not create BLE sessions');
   for(const width of [390,1440]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);fs.mkdirSync('ui-artifacts',{recursive:true});await page.screenshot({path:'ui-artifacts/gateway-'+width+'.png',fullPage:true});}
   const text=await page.locator('body').innerText();assert.ok(!/Notifications:|Backend:|GATT|BATTERY/i.test(text));
-  await page.locator('#presentation').click();assert.equal(await page.locator('#loginFields').isVisible(),false);assert.equal(await page.locator('.warning').isVisible(),true);
+  await page.locator('#presentation').click();assert.equal(await page.locator('#loginFields').isVisible(),false);assert.equal(await page.locator('.warning').count(),0,'prototype warning banner should no longer clutter the Gateway');
   assert.equal(await page.locator('#reservedSlots').isVisible(),true);
   await page.locator('#resetBle').click();await page.waitForFunction(()=>live.size===2&&Array.from(live.values()).every(s=>s.ready));
   assert.equal(await page.evaluate(()=>window.choices.length),2);assert.deepEqual(await page.evaluate(()=>Array.from(live.values()).map(s=>s.bpm)),[null,null]);
