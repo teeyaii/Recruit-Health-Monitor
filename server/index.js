@@ -201,7 +201,8 @@ const server=http.createServer(async(req,res)=>{
    try{
     const profile=privateProfiles.get(slot,code),review=medicReviews.get(slot,code);
     const phase=roster.getGroupPhase();
-    const points=archive.enabled?await archive.get(slot,code,4):pulseHistory.get(slot,Date.now());
+    let archiveUnavailable=false,points=pulseHistory.get(slot,Date.now());
+    if(archive.enabled){try{points=await archive.get(slot,code,4);}catch{archiveUnavailable=true;}}
     // Comparison is descriptive only; rest phase must be recorded by a human.
     const baseline=profile.baselineConfirmed&&phase.phase==="hourly_rest"?
      profile.restingBaselineBpm:null;
@@ -209,7 +210,7 @@ const server=http.createServer(async(req,res)=>{
     const restVerified=phase.phase==="hourly_rest"&&Number.isSafeInteger(phase.changedAt)&&
      Date.now()-phase.changedAt>=3*60000;
     if(!restVerified)signal.deltaBpm=null;
-    send(res,200,{slot,review,signal,phase:phase.phase,
+    send(res,200,{slot,review,signal,archiveUnavailable,phase:phase.phase,
      restPhaseRecorded:restVerified,baselineConfigured:profile.baselineConfirmed,
      context:{ageYears:profile.ageYears,bmi:profile.bmi,medications:profile.medications,
       conditions:profile.conditions,wbgtC:conditions.timestamp&&Date.now()-conditions.timestamp<=1800000?conditions.wbgtC:null},
