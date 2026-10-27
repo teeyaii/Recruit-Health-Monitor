@@ -15,7 +15,7 @@ export class RollingArchive {
   this.enabled=env.STEVE_ARCHIVE_ENABLED==="1";
   if(this.enabled&&!durable.enabled)throw Error("STEVE_ARCHIVE_ENABLED requires configured encrypted Supabase storage");
   this.endpoint=this.enabled?durable.endpoint.replace(/steve_secure_state$/,"steve_hr_archive"):null;
-  this.pending=new Map();this.queue=Promise.resolve();
+  this.pending=new Map();this.queue=Promise.resolve();this.generation=new Map();
   this.lastWriteAt=null;this.lastReadAt=null;this.lastCleanupAt=null;this.failed=false;
  }
  status(){return {enabled:this.enabled,state:!this.enabled?"disabled":this.failed?"unavailable":this.lastWriteAt?"write-confirmed":this.lastReadAt?"read-confirmed":"unverified",lastWriteAt:this.lastWriteAt,lastReadAt:this.lastReadAt,lastCleanupAt:this.lastCleanupAt,pendingMinutes:this.pending.size,intervalSeconds:7,retentionDays:7};}
@@ -28,7 +28,7 @@ export class RollingArchive {
     !Number.isSafeInteger(timestamp)||timestamp>now+1000||timestamp<now-15000)return false;
   const minute=Math.floor(timestamp/MINUTE_MS)*MINUTE_MS;
   const owner=this.owner(slot,code),key=slot+"|"+owner+"|"+minute;
-  const entry=this.pending.get(key)||{slot,owner,minute_ms:minute,points:[]};
+  const entry=this.pending.get(key)||{slot,owner,minute_ms:minute,points:[],generation:this.generation.get(slot)||0};
   const bucket=Math.floor(timestamp/ARCHIVE_STEP_MS);
   if(entry.points.some(p=>Math.floor(p[0]/ARCHIVE_STEP_MS)===bucket))return false;
   entry.points.push([timestamp,hr]);entry.points.sort((a,b)=>a[0]-b[0]);
@@ -36,6 +36,7 @@ export class RollingArchive {
   return true;
  }
  forget(slot){
+  this.generation.set(slot,(this.generation.get(slot)||0)+1);
   for(const key of this.pending.keys())if(key.startsWith(slot+"|"))this.pending.delete(key);
   if(!this.enabled)return Promise.resolve();
   // Serialize after earlier archive writes so an old wearer cannot reappear.
@@ -76,7 +77,7 @@ export class RollingArchive {
     });
     this.lastWriteAt=new Date().toISOString();this.failed=false;
    }catch(e){
-    for(const {key,item} of ready)if(!this.pending.has(key))this.pending.set(key,item);
+    for(const {key,item} of ready)if(item.generation===(this.generation.get(item.slot)||0)&&!this.pending.has(key))this.pending.set(key,item);
     this.failed=true;throw e;
    }
   };
