@@ -32,6 +32,32 @@ test("partial/unsafe storage config is rejected rather than pretending to persis
  assert.throws(()=>new DurableState({STEVE_SUPABASE_URL:env.STEVE_SUPABASE_URL}),/incomplete/);
  assert.throws(()=>new DurableState({...env,STEVE_DATA_ENCRYPTION_KEY:"a"}),/32 random bytes/);
  assert.throws(()=>new DurableState({...env,STEVE_SUPABASE_URL:"http://unit-pilot.supabase.co"}),/HTTPS/);
+ assert.throws(()=>new DurableState({...env,STEVE_SUPABASE_SERVICE_ROLE_KEY:"sb_publishable_"+"x".repeat(40)}),/secret service/);
+ const anon="eyJhbGciOiJIUzI1NiJ9."+Buffer.from(JSON.stringify({role:"anon"})).toString("base64url")+".test-only-signature";
+ assert.throws(()=>new DurableState({...env,STEVE_SUPABASE_SERVICE_ROLE_KEY:anon}),/service_role/);
+});
+
+test("storage status distinguishes reads from writes, reports failure, and never exposes secrets",async()=>{
+ let fail=false;
+ const store=new DurableState(env,async(_url,options)=>{
+  assert.equal(options.redirect,"error","never forward apikey to a redirect target");
+  if(fail)return {ok:false,status:503};
+  return {ok:true,json:async()=>[]};
+ });
+ assert.equal(store.status().state,"unverified");
+ assert.equal(await store.load(),null);
+ assert.equal(store.status().state,"read-confirmed");
+ assert.equal(store.status().lastWriteAt,null);
+ fail=true;
+ await assert.rejects(store.save({schema:1}),/HTTP 503/);
+ assert.equal(store.status().state,"unavailable");
+ assert.equal(store.status().lastWriteAt,null);
+ fail=false;await store.save({schema:1});
+ assert.equal(store.status().state,"write-confirmed");
+ assert.ok(store.status().lastWriteAt);
+ assert.equal(JSON.stringify(store.status()).includes(env.STEVE_SUPABASE_SERVICE_ROLE_KEY),false);
+ assert.equal(JSON.stringify(store.status()).includes(env.STEVE_DATA_ENCRYPTION_KEY),false);
+ assert.equal(new DurableState({}).status().state,"disabled");
 });
 test("private BMI is calculated from height and weight but not persisted as extra identifying metadata",()=>{
  const store=new PrivateProfiles();

@@ -12,6 +12,7 @@ export class DurableState {
   const present=fields.filter(key=>!!env[key]);
   if(present.length!==0&&present.length!==fields.length)throw Error("Durable state configuration incomplete: require all three Supabase settings");
   this.enabled=present.length===fields.length;
+  this.lastReadAt=null;this.lastWriteAt=null;this.lastOperationFailed=false;
   this.fetcher=fetcher;
   if(!this.enabled)return;
   const parsed=new URL(env.STEVE_SUPABASE_URL);
@@ -20,6 +21,11 @@ export class DurableState {
   this.endpoint=parsed.origin+"/rest/v1/"+TABLE;
   this.token=env.STEVE_SUPABASE_SERVICE_ROLE_KEY;
   if(this.token.length<32)throw Error("Invalid Supabase service role credential");
+  if(this.token.startsWith("sb_publishable_"))throw Error("Backend storage requires a secret service credential");
+  if(this.token.split(".").length===3){
+   let claims;try{claims=JSON.parse(Buffer.from(this.token.split(".")[1],"base64url").toString("utf8"));}catch{}
+   if(claims?.role!=="service_role")throw Error("Backend storage requires a service_role credential");
+  }
   const value=env.STEVE_DATA_ENCRYPTION_KEY;
   this.key=Buffer.from(value,"base64");
   if(this.key.length!==32||this.key.toString("base64").replace(/=+$/,"")!==value.replace(/=+$/,""))
@@ -44,7 +50,11 @@ export class DurableState {
   if(data?.schema!==1||typeof data!=="object")throw Error("Invalid STEVE durable state schema");
   return data;
  }
- async request(url,options){
+ status(){
+  return {configured:this.enabled,lastReadAt:this.lastReadAt,lastWriteAt:this.lastWriteAt,
+   state:!this.enabled?"disabled":this.lastOperationFailed?"unavailable":this.lastWriteAt?"write-confirmed":this.lastReadAt?"read-confirmed":"unverified"};
+ }
+ async request(url,options,consume=response=>response){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
   try{
    // New sb_secret_ keys are opaque API keys, NOT JWTs. Sending them as
@@ -55,24 +65,30 @@ export class DurableState {
     ...(this.token.startsWith("sb_secret_")?{}:{"Authorization":"Bearer "+this.token}),
     "Accept":"application/json",...(options?.headers||{})
    };
-   const response=await this.fetcher(url,{...options,signal:controller.signal,headers});
+   const response=await this.fetcher(url,{...options,signal:controller.signal,headers,redirect:"error"});
    if(!response.ok)throw Error("Durable storage request failed: HTTP "+response.status);
-   return response;
+   return await consume(response);
   }finally{clearTimeout(timeout);}
  }
  async load(){
   if(!this.enabled)return null;
-  const response=await this.request(this.endpoint+"?id=eq."+ROW+"&select=envelope",{method:"GET"});
-  const rows=await response.json();
+  try{
+  const rows=await this.request(this.endpoint+"?id=eq."+ROW+"&select=envelope",{method:"GET"},response=>response.json());
   if(!Array.isArray(rows)||rows.length>1)throw Error("Malformed durable storage response");
-  return rows.length?this.decrypt(rows[0].envelope):null;
+  const data=rows.length?this.decrypt(rows[0].envelope):null;
+  this.lastReadAt=new Date().toISOString();this.lastOperationFailed=false;
+  return data;
+  }catch(error){this.lastOperationFailed=true;throw error;}
  }
  async save(state){
   if(!this.enabled)throw Error("Durable storage is not configured");
+  try{
   const envelope=this.encrypt(state);
   await this.request(this.endpoint,{
    method:"POST",headers:{"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
    body:JSON.stringify({id:ROW,envelope})
   });
+  this.lastWriteAt=new Date().toISOString();this.lastOperationFailed=false;
+  }catch(error){this.lastOperationFailed=true;throw error;}
  }
 }
