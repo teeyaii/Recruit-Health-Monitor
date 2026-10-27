@@ -48,7 +48,7 @@ test('standard scan invokes chooser synchronously from click and discovers named
  assert.deepEqual(d.calls,['gatt','heart_rate','heart_rate_measurement','subscribe']);
  d.emit();await flush();const s=h.api.live.get('R01');assert.equal(s.bpm,66);assert.match(s.state,/LIVE/);assert.equal(s.notifications,'รับ Notify แล้ว');
  const request=h.fetches.find(x=>x.url==='/api/ingest');const body=JSON.parse(request.options.body);
- assert.equal(body.readings[0].device_id,'opaque-one');assert.equal(body.readings[0].id,'R01');assert.match(request.options.headers.Authorization,/^Bearer /);
+ assert.equal(body.readings[0].device_id,'opaque-one');assert.equal(body.readings[0].id,'R01');assert.equal(request.options.headers.Authorization,undefined);assert.equal(request.options.headers['X-STEVE-Gateway'],'1');assert.equal(request.options.credentials,'same-origin');
  assert.equal(h.get('token').value,'');
 });
 test('broad scan explicitly permits heart_rate, verifies service before accepting notifications',async()=>{
@@ -78,7 +78,7 @@ test('two sessions upload independently; duplicate and wrong slot cannot steal c
 });
 test('disconnect clears BPM and stale data never remains LIVE',async()=>{
  const h=harness();await h.login();const d=device();await h.connect(d);const s=h.api.live.get('R01');d.emit();await flush();h.tick(15001);
- assert.equal(s.bpm,null);assert.match(s.state,/STALE.*NO DATA/);d.gatt.disconnect();await flush();assert.equal(h.api.live.size,0);assert.match(s.state,/DISCONNECTED/);assert.equal(s.measure.textContent,'NO DATA');
+ assert.equal(s.bpm,null);assert.match(s.state,/STALE.*NO DATA/);d.gatt.disconnect();await flush();assert.equal(h.calls.length,1);assert.match(s.state,/DISCONNECTED/);assert.equal(s.measure.textContent,'NO DATA');assert.equal(h.api.live.get('R01').bpm,null);
 });
 test('background stops both connections and prevents further uploads',async()=>{
  const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');h.hide();await flush();
@@ -188,7 +188,7 @@ test('missing handles or native permission failure require manual action with bo
   a.gatt.connect=async()=>{attempts++;throw {name:'NotAllowedError'};};
   if(supported)h.context.navigator.bluetooth.getDevices=async()=>{lookups++;return [a];};
   foreground(h);await drain();assert.equal(h.calls.length,1);assert.equal(attempts,supported?2:1);assert.equal(lookups,supported?1:0);assert.equal(h.api.live.size,0);
-  assert.match(h.get('slots').children.at(-1).children[2].textContent,/Manual action required/);
+  assert.match(h.get('slots').children.at(-1).children[4].children[1].textContent,/Manual action required/);
  }
 });
 test('R01 auto failure leaves R02 restored; background cancels in-progress auto connect',async()=>{
@@ -206,4 +206,19 @@ test('HR-only Gateway does not request battery service or display battery',async
  assert.equal(h.api.live.get('R01').bpm,62);assert.equal(h.api.live.get('R02').bpm,58);
  for(const payload of h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body))){assert.equal('battery' in payload.readings[0],false);}
  assert.equal(h.get('slots').children.some(tile=>tile.children.some(child=>/BATTERY/i.test(child.textContent))),false);
+});
+
+test('quick R01/R02 taps preserve gesture and verify physical suffix',async()=>{
+ const h=harness();await h.login();h.select(device('one','47FD'));let p=h.get('quickR01').click();assert.equal(h.calls.length,1);await p;
+ h.select(device('two','A746'));p=h.get('quickR02').click();assert.equal(h.calls.length,2);await p;assert.equal(h.api.live.size,2);
+ h.get('resetBle').click();await drain();assert.equal(h.calls.length,2);assert.equal(h.api.live.size,2);
+});
+test('expiry stops both bands, clears BPM and offers login without opening chooser',async()=>{
+ const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();
+ h.tick(7200001);await drain();assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('quickR01').disabled,true);assert.equal(h.calls.length,2);
+ assert.equal(a.gatt.connected,false);assert.equal(b.gatt.connected,false);
+});
+test('server-revoked cookie clears live sessions instead of presenting unauthorized readings',async()=>{
+ const h=harness();await h.login();const a=device();await h.connect(a);h.reply({ok:false,status:401});a.emit();await drain();
+ assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('connect').disabled,true);
 });

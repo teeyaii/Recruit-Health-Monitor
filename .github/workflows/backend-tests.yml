@@ -94,7 +94,9 @@ jobs:
       - name: Verify mobile and presentation rendering
         env:
           STEVE_PLAYWRIGHT_PATH: /tmp/steve-ui/node_modules/playwright
-        run: node server/dashboard-browser-smoke.cjs
+        run: |
+          node server/dashboard-browser-smoke.cjs
+          node server/gateway-browser-smoke.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
