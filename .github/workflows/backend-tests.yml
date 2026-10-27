@@ -80,7 +80,9 @@ jobs:
           test "$status" = 401
 
   dashboard-browser:
-    timeout-minutes: 10
+    # First pinned-run smoke passed in logs, but the 10-minute job cap cancelled reporting.
+    # Apt/Playwright setup on hosted runner can consume nearly the entire allowance.
+    timeout-minutes: 25
     # Pin browser OS: ubuntu-latest rolled to 26.04 and dependency downloads timed out.
     runs-on: ubuntu-24.04
     steps:
