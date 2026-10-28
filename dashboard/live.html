@@ -273,13 +273,23 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.card,.stat{transition:none!important}.card:hover,.stat:hover{transform:none!important}}
 
-/* Isolated, browser-only R01/R02 seven-day visualisation. Never feeds LIVE alerts/history. */
+/* Isolated browser-only R03/R04 demonstration. Never feeds LIVE alerts/history. */
 .training-preview{margin:22px 0;padding:clamp(16px,2.4vw,25px);background:linear-gradient(145deg,#1b2d25,#101a16);border:1px solid #618369;border-radius:17px;box-shadow:0 18px 36px #0004}
 .training-preview h2{font-size:clamp(1.16rem,2vw,1.7rem);margin:5px 0 9px}
 .training-preview p{line-height:1.5}
 .preview-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .preview-warning{color:#f4ce84!important;font-weight:780}
 .preview-mark{display:inline-block;font-size:.73rem;color:#151f18;background:#f1d392;border-radius:5px;padding:5px 8px;font-weight:850;letter-spacing:.04em}
+.preview-personnel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+.preview-person{padding:14px;border:1px solid #53745b;border-left:5px solid #84d4a1;background:#15261d;border-radius:12px}
+.preview-person.risk{border-left-color:#ecc17c;border-color:#806b49;background:#30271b}
+.preview-person-head{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px}
+.preview-person-head strong{font-size:1.25rem}
+.preview-person .preview-bpm{font-size:2.25rem;font-weight:850;font-variant-numeric:tabular-nums;margin:6px 0}
+.preview-person .preview-bpm small{font-size:.9rem;font-weight:500}
+.preview-status{font-size:.78rem;border:1px solid #779b80;color:#b8e5c4;border-radius:30px;padding:4px 10px}
+.preview-person.risk .preview-status{color:#f2d09a;border-color:#b68c53}
+.preview-person p{font-size:.83rem;margin:4px 0;color:#d1dacd}
 .preview-graphs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:12px}
 .preview-series{min-width:0;background:#102019;border:1px solid #425d4a;border-radius:12px;padding:14px}
 .preview-series strong{font-size:1.12rem}
@@ -292,10 +302,10 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 .preview-training-label{font-size:.81rem;color:#bdd3c0}
 #trainingPreviewReset{border-color:#967c58;background:#453827;color:#f9e0ae}
 #trainingPreviewToggle[aria-pressed="true"]{background:#384b30;border-color:#b8dba8}
-@media(max-width:720px){.preview-graphs{grid-template-columns:1fr}.preview-heading button{width:100%}.preview-series{padding:10px}}
+@media(max-width:720px){.preview-personnel,.preview-graphs{grid-template-columns:1fr}.preview-heading button{width:100%}.preview-series{padding:10px}}
 </style></head><body>
 <header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
-<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="trainingPreviewToggle" type="button" aria-pressed="false" hidden>กราฟสาธิต R01 / R02</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
+<div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="trainingPreviewToggle" type="button" aria-pressed="false" hidden>ตัวอย่าง R03 / R04</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
 <section class="command-stats" id="commandStats" aria-label="สรุปสถานะการฝึก">
 <div class="stat"><span>ลงทะเบียนแล้ว</span><b id="statTotal">—</b></div>
 <div class="stat live"><span>รับสัญญาณ LIVE</span><b id="statLive">—</b></div>
@@ -408,25 +418,39 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
   <p id="medicMessage" role="status"></p>
  </details>
  <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
-</section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="trainingPreview" class="training-preview" aria-label="กราฟจำลองการฝึก 7 วัน R01 และ R02" hidden>
+</section><section class="telemetry-strip" aria-label="เครือข่ายและสภาพแวดล้อม"><p id="gateways" aria-live="polite">Gateway: ยังไม่มีข้อมูล</p><p id="conditions" role="status">WBGT: ยังไม่มีข้อมูล</p><form id="wbgtForm" hidden><label for="wbgt">กรอก WBGT จากเครื่องวัด (°C)</label><input id="wbgt" type="number" min="0" max="60" step="0.1" placeholder="WBGT °C" required><button>บันทึกค่าที่วัด</button></form></section><section class="monitor-section"><div class="monitor-heading"><div><span class="command-eyebrow">PERSONNEL MONITOR</span><h2>สัญญาณชีพรายบุคคล</h2></div><p id="summary" role="status">รอการเข้าสู่ระบบ</p></div><div id="cards" class="grid"></div></section><section id="trainingPreview" class="training-preview" aria-label="กราฟจำลอง 7 วัน R03 ปกติและ R04 เฝ้าระวัง" hidden>
  <div class="preview-heading">
   <div><span class="preview-mark">DEMO DATA • SIMULATED • ไม่ใช่การวัดจริง</span>
-   <h2>ตัวอย่างการติดตามการฝึก 7 วัน • R01 / R02</h2>
-   <p class="preview-warning">กราฟและตัวเลขในส่วนนี้เป็นข้อมูลสมมติทั้งหมด ไม่ใช่ชีพจรที่วัดจาก Smart Band และไม่มีผลต่อการแจ้งเตือน LIVE</p></div>
+   <h2>ตัวอย่าง R03 ปกติ เทียบกับ R04 เฝ้าระวัง</h2>
+   <p class="preview-warning">R03 / R04 เป็นสถานการณ์สมมติ ไม่ใช่ผู้สวม Smart Band จริง • ป้าย NORMAL / WATCH นี้เป็นบทสาธิต ไม่ใช่การประเมินความปลอดภัยหรือการวินิจฉัยจาก BPM</p></div>
   <button id="trainingPreviewReset" type="button">ล้างตัวอย่างและปิดกราฟ</button>
  </div>
+ <div id="trainingPreviewPeople" class="preview-personnel" aria-label="สถานการณ์จำลอง R03 R04">
+  <article class="preview-person">
+   <div class="preview-person-head"><strong>R03 <small>• DEMO</small></strong><span class="preview-status">NORMAL · ตัวอย่าง</span></div>
+   <div class="preview-bpm">84 <small>BPM · SIMULATED</small></div>
+   <p>ตัวอย่างกำลังพลที่ไม่มีเหตุเฝ้าระวังในสถานการณ์สมมติ</p>
+   <p>ข้อมูลสาธิต ไม่ใช่การรับรองว่าปลอดภัยจากโรคหรือความร้อน</p>
+  </article>
+  <article class="preview-person risk">
+   <div class="preview-person-head"><strong>R04 <small>• DEMO</small></strong><span class="preview-status">WATCH · ตัวอย่าง</span></div>
+   <div class="preview-bpm">132 <small>BPM · SIMULATED</small></div>
+   <p>ตัวอย่างได้รับรายงานอาการผิดปกติและให้ครูฝึกพักเพื่อประเมิน</p>
+   <p>ไม่ได้สรุปว่าเสี่ยงจากค่า 132 BPM เพียงตัวเดียว • ไม่ใช่เหตุเตือนจริง</p>
+  </article>
+ </div>
  <div class="preview-graphs">
-  <article class="preview-series"><div class="preview-series-head"><strong>R01 <small>• ตัวอย่าง</small></strong><span class="preview-training-label">เฉลี่ย BPM / วัน</span></div>
-   <div id="trainingPreviewR01" role="img" aria-label="กราฟชีพจรเฉลี่ยจำลอง 7 วันของ R01"></div>
+  <article class="preview-series"><div class="preview-series-head"><strong>R03 <small>• NORMAL DEMO</small></strong><span class="preview-training-label">BPM เฉลี่ยจำลอง / วัน</span></div>
+   <div id="trainingPreviewR03" role="img" aria-label="กราฟชีพจรเฉลี่ยจำลอง 7 วันของ R03"></div>
    <small>ตัวเลขสาธิต ไม่ใช่ประวัติการฝึกหรือข้อมูลสุขภาพจริง</small></article>
-  <article class="preview-series"><div class="preview-series-head"><strong>R02 <small>• ตัวอย่าง</small></strong><span class="preview-training-label">เฉลี่ย BPM / วัน</span></div>
-   <div id="trainingPreviewR02" role="img" aria-label="กราฟชีพจรเฉลี่ยจำลอง 7 วันของ R02"></div>
-   <small>ตัวเลขสาธิต ไม่ใช่ประวัติการฝึกหรือข้อมูลสุขภาพจริง</small></article>
+  <article class="preview-series"><div class="preview-series-head"><strong>R04 <small>• WATCH DEMO</small></strong><span class="preview-training-label">BPM เฉลี่ยจำลอง / วัน</span></div>
+   <div id="trainingPreviewR04" role="img" aria-label="กราฟชีพจรเฉลี่ยจำลอง 7 วันของ R04"></div>
+   <small>สถานะเฝ้าระวังจำลองเท่านั้น • ไม่ใช่ผลประเมินทางการแพทย์</small></article>
  </div>
  <h3 style="margin:20px 0 5px">กิจกรรมการฝึกประกอบตัวอย่าง</h3>
  <p class="status-note">กรอกหัวข้อกิจกรรมรายวันเพื่อประกอบการนำเสนอเท่านั้น ไม่มีการส่งข้อมูลขึ้นเซิร์ฟเวอร์</p>
  <div id="trainingPreviewDays" class="preview-activity-grid"></div>
- <p class="history-note">เมื่อต้องการกลับไปใช้ข้อมูลจริง ให้กด “ล้างตัวอย่างและปิดกราฟ” • ไม่มีการแก้ไขค่าชีพจร ประวัติ R01/R02 ทะเบียน หรือสถานะ WATCH / EMERGENCY</p>
+ <p class="history-note">เมื่อต้องการกลับไปใช้ข้อมูลจริง ให้กด “ล้างตัวอย่างและปิดกราฟ” • ไม่มีการเพิ่ม R03/R04 ลงทะเบียนจริง และไม่แก้ไขชีพจร R01/R02 หรือสถานะ WATCH / EMERGENCY จริง</p>
 </section><section id="historyPanel" class="history-detail" aria-label="กราฟชีพจรรายบุคคล" hidden>
  <div class="history-header"><div><small>HR TREND / 7-DAY HISTORY</small><h2 id="historyTitle">แนวโน้มชีพจร</h2></div><button id="historyClose" type="button">ปิดกราฟ</button></div>
  <div class="history-ranges" id="historyRanges">
@@ -547,16 +571,16 @@ const byId=id=>document.getElementById(id);
 
 // Presentation preview is deliberately in-memory only; no fetch, persistence or patient data.
 const trainingPreviewSamples={
- R01:[92,105,111,100,118,109,98],
- R02:[88,99,106,103,112,102,93]
+ R03:[81,86,89,83,94,87,84],
+ R04:[104,113,119,122,128,117,112]
 };
 function trainingPreviewSvg(slot,values){
- const w=640,h=235,l=43,r=16,t=15,b=186,lo=60,hi=140;
+ const w=640,h=235,l=43,r=16,t=15,b=186,lo=60,hi=160;
  const x=i=>l+i*(w-l-r)/6,y=v=>b-(v-lo)*(b-t)/(hi-lo);
- const color=slot==="R01"?"#92d6a8":"#88bafa";
+ const color=slot==="R03"?"#92d6a8":"#e8c078";
  const circles=values.map((v,i)=>'<circle cx="'+x(i).toFixed(1)+'" cy="'+y(v).toFixed(1)+'" r="5" fill="'+color+'" stroke="#102019" stroke-width="2"/>').join("");
  const line=values.map((v,i)=>x(i).toFixed(1)+","+y(v).toFixed(1)).join(" ");
- const grid=[60,80,100,120,140].map(v=>'<line x1="'+l+'" y1="'+y(v).toFixed(1)+'" x2="'+(w-r)+'" y2="'+y(v).toFixed(1)+'" stroke="#385244" stroke-dasharray="3 6"/>'+
+ const grid=[60,80,100,120,140,160].map(v=>'<line x1="'+l+'" y1="'+y(v).toFixed(1)+'" x2="'+(w-r)+'" y2="'+y(v).toFixed(1)+'" stroke="#385244" stroke-dasharray="3 6"/>'+
   '<text x="'+(l-7)+'" y="'+(y(v)+4).toFixed(1)+'" text-anchor="end" fill="#c0d1c5" font-size="13">'+v+'</text>').join("");
  const ticks=values.map((v,i)=>'<text x="'+x(i).toFixed(1)+'" y="215" text-anchor="middle" fill="#c0d1c5" font-size="13">วัน '+(i+1)+'</text>').join("");
  return '<svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="ชีพจรเฉลี่ยจำลอง R'+slot.slice(1)+' 7 วัน">'+
@@ -566,8 +590,8 @@ function trainingPreviewSvg(slot,values){
 function clearTrainingPreview(){
  byId("trainingPreview").hidden=true;
  byId("trainingPreviewToggle").setAttribute("aria-pressed","false");
- byId("trainingPreviewToggle").textContent="กราฟสาธิต R01 / R02";
- for(const id of ["trainingPreviewR01","trainingPreviewR02","trainingPreviewDays"])byId(id).textContent="";
+ byId("trainingPreviewToggle").textContent="ตัวอย่าง R03 / R04";
+ for(const id of ["trainingPreviewR03","trainingPreviewR04","trainingPreviewDays"])byId(id).textContent="";
 }
 function openTrainingPreview(){
  for(const [slot,values] of Object.entries(trainingPreviewSamples))
