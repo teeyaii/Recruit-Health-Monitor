@@ -316,6 +316,12 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 .grid .card[data-risk] .history-open{margin-top:auto;padding:8px;white-space:normal}
 .grid .card[data-risk] .safety{font-size:.78rem;line-height:1.45;margin:8px 0 0;overflow-wrap:anywhere}
 body.presentation .grid .card[data-risk]{min-height:0}
+/* Two primary phases above the full-width off-training action. */
+#trainingActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:min(420px,100%);gap:8px;align-content:center}
+#trainingActions button{min-width:0;padding:10px 12px;white-space:normal}
+#startNoTraining{grid-column:1 / -1}
+#startNoTraining[aria-pressed="true"]{background:#c0cbd1;border-color:#d4dee4;color:#17242b}
+@media(max-width:620px){#trainingActions{width:100%;order:3}}
 </style></head><body>
 <header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="trainingPreviewToggle" type="button" aria-pressed="false" hidden>ตัวอย่าง R03 / R04</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
@@ -341,6 +347,7 @@ body.presentation .grid .card[data-risk]{min-height:0}
  <div id="trainingActions" class="phase-actions">
   <button type="button" id="startTraining" aria-pressed="false">▶ กำลังทำการฝึก</button>
   <button type="button" id="startHourlyRest" aria-pressed="false">◷ พักประจำชั่วโมง</button>
+  <button type="button" id="startNoTraining" aria-pressed="false">ไม่มีการฝึก</button>
  </div>
  <p id="groupPhaseMessage" role="status"></p>
 </section>
@@ -477,7 +484,7 @@ body.presentation .grid .card[data-risk]{min-height:0}
  <p id="historyStatus" class="status-note" role="status">กำลังโหลดข้อมูล...</p>
  <div id="historyStats" class="history-stats"></div><div id="historyBreakdown" class="history-breakdown"></div>
  <div id="historyChart" class="history-graph"></div>
- <div id="historyLegend" class="history-legend"><span style="--mark:#71b28c">ช่วงฝึกที่บันทึก</span><span style="--mark:#689cc8">ช่วงพักที่บันทึก</span><span style="--mark:#c3e1cb">BPM จากเซนเซอร์</span></div>
+ <div id="historyLegend" class="history-legend"><span style="--mark:#71b28c">ช่วงฝึกที่บันทึก</span><span style="--mark:#689cc8">ช่วงพักที่บันทึก</span><span style="--mark:#9aa9b4">ไม่มีการฝึกที่บันทึก</span><span style="--mark:#c3e1cb">BPM จากเซนเซอร์</span></div>
  <p id="historyNote" class="history-note">ข้อมูลจากเซนเซอร์ที่บันทึกจริง • ช่องว่างหมายถึงไม่มีข้อมูล</p>
  </section>
 <script>
@@ -656,7 +663,7 @@ function renderHistory(data){
   p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240).sort((a,b)=>a[0]-b[0]);
  const source=sourceArchive?"ประวัติ 7 วัน":"ข้อมูลสด";
  byId("historyStatus").textContent="จุดข้อมูล "+points.length.toLocaleString("th-TH")+" • "+source+(data.compacted?" • กราฟย่อ":"");
- const hasPhases=Array.isArray(data.phases)&&data.phases.some(p=>Number.isSafeInteger(p.at)&&p.at<=end&&(p.phase==="training"||p.phase==="hourly_rest"));
+ const hasPhases=Array.isArray(data.phases)&&data.phases.some(p=>Number.isSafeInteger(p.at)&&p.at<=end&&(p.phase==="training"||p.phase==="hourly_rest"||p.phase==="no_training"));
  byId("historyLegend").hidden=!hasPhases;
  byId("historyNote").textContent="ข้อมูลที่วัดได้จริง • ช่องว่างคือช่วงไม่มีสัญญาณ • "+(hasPhases?"แถบฝึก/พักเป็นเวลาที่เจ้าหน้าที่บันทึกให้ทั้งกลุ่ม ไม่ใช่ข้อจำกัดรายบุคคล":"ไม่มีบันทึกช่วงฝึก/พักที่เรียกคืนได้ในช่วงนี้");
  if(!points.length){
@@ -668,7 +675,7 @@ function renderHistory(data){
  const avg=Math.round(values.reduce((a,b)=>a+b,0)/values.length);
  byId("historyStats").innerHTML=[["ต่ำสุด",lo],["ค่าเฉลี่ยของจุดที่แสดง",avg],["สูงสุด",hi]].map(([name,value])=>
   '<div class="history-stat"><span>'+name+'</span><b>'+value+'</b><small>BPM</small></div>').join("");
- byId("historyBreakdown").innerHTML=data.summary?[["training","ช่วงฝึก"],["hourly_rest","ช่วงพัก"]].map(([key,label])=>{
+ byId("historyBreakdown").innerHTML=data.summary?[["training","ช่วงฝึก"],["hourly_rest","ช่วงพัก"],["no_training","ไม่มีการฝึก"]].map(([key,label])=>{
   const row=data.summary[key];if(!row)return "";
   return '<div class="phase-summary"><b>'+label+'</b>'+
    (row.samples?'วัดได้ '+row.samples+' จุด • เฉลี่ย '+row.mean+' BPM • สูงสุด '+row.max+' BPM':
@@ -690,7 +697,7 @@ function renderHistory(data){
  if(hasPhases){
   let phase=null,begin=start;
   const transitions=(data.phases||[]).filter(p=>Number.isSafeInteger(p.at)&&
-   (p.phase==="training"||p.phase==="hourly_rest")).sort((a,b)=>a.at-b.at);
+   (p.phase==="training"||p.phase==="hourly_rest"||p.phase==="no_training")).sort((a,b)=>a.at-b.at);
   const bars=[];
   for(const event of transitions){
    if(event.at<=start){phase=event.phase;continue;}
@@ -700,7 +707,7 @@ function renderHistory(data){
   if(phase)bars.push([begin,end,phase]);
   for(const [from,to,kind] of bars)svg+='<rect x="'+f(x(from))+'" y="'+bandY+
    '" width="'+f(Math.max(0,x(to)-x(from)))+'" height="12" rx="2" fill="'+
-   (kind==="training"?"#7bd0a0":"#78a6d9")+'" data-phase="'+kind+'"><title>'+(kind==="training"?"ช่วงฝึก":"ช่วงพัก")+' • '+historyTime(from)+' – '+historyTime(to)+'</title></rect>';
+   (kind==="training"?"#7bd0a0":kind==="hourly_rest"?"#78a6d9":"#9aa9b4")+'" data-phase="'+kind+'"><title>'+(kind==="training"?"ช่วงฝึก":kind==="hourly_rest"?"ช่วงพัก":"ไม่มีการฝึก")+' • '+historyTime(from)+' – '+historyTime(to)+'</title></rect>';
  }
  const maxGap=historyHours===168?21*60000:historyHours===8?5*60000:20000;
  let group=[],previous=null,groups=[];
@@ -1005,7 +1012,7 @@ function paintGroupPhase(){
  const panel=byId("trainingPanel");panel.hidden=false;
  const phase=groupPhaseData?.phase||"not_started",now=Date.now();
  const changedAt=groupPhaseData?.changedAt;
- byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมง":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
+ byId("groupPhaseLabel").textContent=phase==="training"?"กำลังทำการฝึก":phase==="hourly_rest"?"พักประจำชั่วโมง":phase==="no_training"?"ไม่มีการฝึก":"ยังไม่ได้เริ่มบันทึกสถานะการฝึก";
  const elapsed=Number.isSafeInteger(changedAt)?Math.max(0,now-changedAt):null;
  if(byId("phaseClock"))byId("phaseClock").innerHTML=elapsed===null?'— <small>นาทีในช่วงปัจจุบัน</small>':
   prettyDuration(elapsed)+' <small>ในช่วงปัจจุบัน</small>';
@@ -1013,9 +1020,9 @@ function paintGroupPhase(){
   "เริ่ม "+new Date(changedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
   "":"ยังไม่ได้เริ่มจับเวลา";
  const intervals=(groupPhaseData?.transitions||[]).filter(e=>
-  (e.phase==="training"||e.phase==="hourly_rest")&&Number.isSafeInteger(e.at)&&e.at<=now)
+  (e.phase==="training"||e.phase==="hourly_rest"||e.phase==="no_training")&&Number.isSafeInteger(e.at)&&e.at<=now)
   .sort((a,b)=>a.at-b.at);
- const last={training:null,hourly_rest:null};
+ const last={training:null,hourly_rest:null,no_training:null};
  for(let i=0;i<intervals.length;i++){
   const item=intervals[i],until=intervals[i+1]?.at??now;
   if(until>=item.at)last[item.phase]={ms:until-item.at,active:i===intervals.length-1};
@@ -1027,7 +1034,7 @@ function paintGroupPhase(){
   if(byId(note))byId(note).textContent=!last[key]?"ยังไม่มีบันทึก":last[key].active?"กำลังนับเวลา":"ช่วงที่บันทึกล่าสุด";
   if(byId(container)?.dataset)byId(container).dataset.active=String(key===phase);
  }
- for(const [id,value] of [["startTraining","training"],["startHourlyRest","hourly_rest"]]){
+ for(const [id,value] of [["startTraining","training"],["startHourlyRest","hourly_rest"],["startNoTraining","no_training"]]){
   const button=byId(id);
   button.setAttribute("aria-pressed",String(value===phase));
   button.disabled=groupPhaseBusy||value===phase;
@@ -1048,11 +1055,11 @@ async function loadGroupPhase(){
   if(epoch!==viewEpoch)return;
   byId("trainingPanel").hidden=false;
   byId("groupPhaseMessage").textContent="ตรวจสถานะการฝึกไม่ได้ • ค่าที่เห็นอาจไม่ใช่สถานะปัจจุบัน";
-  for(const id of ["startTraining","startHourlyRest"])byId(id).disabled=true;
+  for(const id of ["startTraining","startHourlyRest","startNoTraining"])byId(id).disabled=true;
  }
 }
 async function changeGroupPhase(phase){
- if(groupPhaseBusy||!groupPhaseData||!["training","hourly_rest"].includes(phase))return;
+ if(groupPhaseBusy||!groupPhaseData||!["training","hourly_rest","no_training"].includes(phase))return;
  const epoch=viewEpoch;
  groupPhaseBusy=true;paintGroupPhase();
  byId("groupPhaseMessage").textContent="กำลังบันทึก...";
@@ -1079,6 +1086,7 @@ async function changeGroupPhase(phase){
 }
 byId("startTraining").onclick=()=>changeGroupPhase("training");
 byId("startHourlyRest").onclick=()=>changeGroupPhase("hourly_rest");
+byId("startNoTraining").onclick=()=>changeGroupPhase("no_training");
 async function syncRoster(){
  if(!rosterData)return;
  const epoch=viewEpoch;
