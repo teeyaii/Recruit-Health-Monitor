@@ -6,7 +6,7 @@ const html=await readFile(new URL('../dashboard/live.html',import.meta.url),'utf
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function view(){
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',innerHTML:'',hidden:false});return nodes.get(id);};
- const context={document:{getElementById:node},Date};vm.createContext(context);
+ const context={document:{getElementById:node},Date,refreshMedicPending:()=>{}};vm.createContext(context);
  vm.runInContext(script.slice(0,script.indexOf('byId("emergencyAlerts").onclick'))+'\nthis.render=(data,profiles,up=true)=>{rosterData={slots:profiles};transportUp=up;draw(data);};',context);
  return {node,context};
 }
@@ -78,4 +78,35 @@ test('compact alert retains urgent instruction, count, R-slot and acknowledgemen
  assert.match(alert.innerHTML,/disabled/);
  assert.equal(node('statPaused').textContent,2);
  assert.equal(node('statNoData').textContent,1);
+});
+
+test('compact cards keep risk separate from live, missing and disconnected telemetry',()=>{
+ const {node,context}=view();
+ for(const up of [true,false])for(const missing of [false,true]){
+  const profiles=[{id:'R01',code:'NORMAL',restriction:'none'},
+   {id:'R02',code:'WATCH',restriction:'watch'},
+   {id:'R03',code:'EMERGENCY',restriction:'watch',observation:'confusion_collapse_seizure'}];
+  const data={recruits:profiles.map(p=>({id:p.id,hr:missing?null:75,timestamp:missing?null:Date.now(),stale:missing}))};
+  context.render(data,profiles,up);
+  const cards=node('cards').innerHTML.match(/<article[\s\S]*?<\/article>/g);
+  assert.match(cards[0],new RegExp('data-risk="'+(up&&!missing?'normal':'unavailable')+'"'));
+  assert.match(cards[1],/data-risk="watch"/);
+  assert.match(cards[2],/data-risk="emergency"/);
+  assert.match(cards[2],/หยุดกิจกรรมและเรียกทีมแพทย์/);
+  for(const card of cards){
+   assert.doesNotMatch(card,/MONITORING NOT CONFIGURED|clinical approval|Gateway:|วินาทีที่แล้ว/);
+   const signal=!up?'DISCONNECTED':missing?'NO DATA':'LIVE';
+   assert.equal(card.split(signal).length-1,1,'one connectivity label');
+   assert.match(card,up&&!missing?/75 <small>BPM/:/— <small>BPM/);
+  }
+ }
+});
+
+test('WATCH stays primary alongside automatic pause and no BPM creates no emergency',()=>{
+ const {node,context}=view();
+ context.render({recruits:[{id:'R01',hr:null,stale:true,autoCheck:true}]},[{id:'R01',code:'A001',restriction:'watch'}]);
+ assert.match(node('cards').innerHTML,/data-risk="watch"/);
+ assert.match(node('cards').innerHTML,/status-chip">WATCH/);
+ assert.match(node('cards').innerHTML,/PAUSE \/ CHECK/);
+ assert.equal(node('emergencyAlerts').hidden,true);
 });

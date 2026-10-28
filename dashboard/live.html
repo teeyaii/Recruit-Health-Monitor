@@ -303,6 +303,19 @@ button:focus-visible{outline:3px solid #bad8a5;outline-offset:3px}
 #trainingPreviewReset{border-color:#967c58;background:#453827;color:#f9e0ae}
 #trainingPreviewToggle[aria-pressed="true"]{background:#384b30;border-color:#b8dba8}
 @media(max-width:720px){.preview-personnel,.preview-graphs{grid-template-columns:1fr}.preview-heading button{width:100%}.preview-series{padding:10px}}
+
+/* Compact personnel cards: risk edge is independent of signal status. */
+.grid .card[data-risk]{border-left:1px solid #3b5645;border-right:6px solid var(--personnel-risk);min-width:0;display:flex;flex-direction:column;padding:14px;--personnel-risk:#83958b}
+.grid .card[data-risk="normal"]{--personnel-risk:#38B87C}
+.grid .card[data-risk="watch"],.grid .card[data-risk="check"]{--personnel-risk:#F4B740}
+.grid .card[data-risk="emergency"]{--personnel-risk:#EF4444}
+.grid .card[data-risk] .status-chip{color:var(--personnel-risk);border-color:var(--personnel-risk);max-width:100%;overflow-wrap:anywhere}
+.grid .card[data-risk] .card-personnel-title{flex-basis:90px}
+.grid .card[data-risk] .bpm{font-size:clamp(2.5rem,4vw,3rem);line-height:1.1;margin:12px 0 5px}
+.grid .card[data-risk] .signal-line{margin:5px 0;padding-top:7px;flex-wrap:wrap}
+.grid .card[data-risk] .history-open{margin-top:auto;padding:8px;white-space:normal}
+.grid .card[data-risk] .safety{font-size:.78rem;line-height:1.45;margin:8px 0 0;overflow-wrap:anywhere}
+body.presentation .grid .card[data-risk]{min-height:0}
 </style></head><body>
 <header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="trainingPreviewToggle" type="button" aria-pressed="false" hidden>ตัวอย่าง R03 / R04</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
@@ -535,14 +548,15 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const emergencyFlag=registered&&severity==="emergency";
   const watchFlag=registered&&!emergencyFlag&&(profile?.restriction==="watch"||profile?.restriction==="no_training"||severity==="stop");
   if(registered){if(r.autoCheck)autoCases.push(r.id);if(!stale)fresh++;if(watchFlag)watchCount++;if(emergencyFlag){emergencyCount++;critical.push({id:r.id,acknowledged:!!profile.acknowledged});}}
-  const monitoringNote=r.monitoringStatus==="OPERATOR_CONFIGURED_UNVERIFIED"?"MONITORING NOT CONFIGURED (clinical approval) • มีเพียงเกณฑ์ทดลองที่ผู้ปฏิบัติงานตั้ง":"MONITORING NOT CONFIGURED • ยังไม่มีเกณฑ์แจ้งเตือนเฉพาะบุคคล";
-  const chip=!registered?"PENDING REGISTRATION":emergencyFlag?"EMERGENCY":r.autoCheck?"PAUSE / CHECK":watchFlag?"WATCH":r.paused?"PAUSED":"MONITOR";
+  // Risk is roster-owned; transport loss only changes signal availability.
+  const risk=emergencyFlag?"emergency":watchFlag?"watch":r.autoCheck?"check":!registered||stale||r.paused?"unavailable":"normal";
+  const chip=!registered?"PENDING REGISTRATION":emergencyFlag?"EMERGENCY":watchFlag?"WATCH":"MONITOR";
   const note=severity==="emergency"?"ฉุกเฉิน: หยุดกิจกรรมและเรียกทีมแพทย์/1669":severity==="stop"?"หยุดกิจกรรมและให้เจ้าหน้าที่ประเมิน":
     profile?.restriction==="no_training"?"งดกิจกรรมตามคำสั่งผู้รับผิดชอบ":profile?.restriction==="watch"?"เฝ้าระวังใกล้ชิดตามผู้รับผิดชอบ":"";
   const alertClass=emergencyFlag?"alert-emergency":r.autoCheck?"alert-auto-check":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
-  const signal=stale?"NO DATA":"LIVE";
-  const elapsed=!r.timestamp?"ไม่เคยรับข้อมูล":stale?"ข้อมูลขาด • ค่าล่าสุด "+Math.floor(age/1000)+" วินาทีที่แล้ว":"อัปเดต "+Math.floor(age/1000)+" วินาทีที่แล้ว";
-  return '<article class="card '+alertClass+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>'+(r.paused?"PAUSED":stale?state:"BPM")+'</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div><small class="status-note">'+elapsed+'</small>'+(registered?'<p class="status-note">'+escapeHtml(monitoringNote)+'</p>':'')+'<div><small>Gateway: '+escapeHtml(r.gateway||'—')+(synthetic?' • SIMULATED':'')+'</small></div>'+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  const signal=state==="DISCONNECTED"?"DISCONNECTED":stale?"NO DATA":"LIVE";
+  const activity=r.autoCheck?"PAUSE / CHECK":r.paused?"PAUSED":"";
+  return '<article class="card '+alertClass+'" data-risk="'+risk+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+(synthetic?' • SIMULATED':'')+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>BPM</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div>'+(activity?'<p class="card-activity safety">'+activity+'</p>':'')+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
