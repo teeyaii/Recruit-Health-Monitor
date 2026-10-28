@@ -656,8 +656,9 @@ function renderHistory(data){
   p[0]<=end&&Number.isInteger(p[1])&&p[1]>=25&&p[1]<=240).sort((a,b)=>a[0]-b[0]);
  const source=sourceArchive?"ประวัติ 7 วัน":"ข้อมูลสด";
  byId("historyStatus").textContent="จุดข้อมูล "+points.length.toLocaleString("th-TH")+" • "+source+(data.compacted?" • กราฟย่อ":"");
- byId("historyLegend").hidden=sourceArchive;
- byId("historyNote").textContent="ข้อมูลที่วัดได้จริง • ช่องว่างคือช่วงไม่มีสัญญาณ";
+ const hasPhases=Array.isArray(data.phases)&&data.phases.some(p=>Number.isSafeInteger(p.at)&&p.at<=end&&(p.phase==="training"||p.phase==="hourly_rest"));
+ byId("historyLegend").hidden=!hasPhases;
+ byId("historyNote").textContent="ข้อมูลที่วัดได้จริง • ช่องว่างคือช่วงไม่มีสัญญาณ • "+(hasPhases?"แถบฝึก/พักเป็นเวลาที่เจ้าหน้าที่บันทึกให้ทั้งกลุ่ม ไม่ใช่ข้อจำกัดรายบุคคล":"ไม่มีบันทึกช่วงฝึก/พักที่เรียกคืนได้ในช่วงนี้");
  if(!points.length){
   byId("historyStats").textContent="ยังไม่มีข้อมูล BPM ที่บันทึกไว้ในช่วงเวลานี้";
   byId("historyBreakdown").textContent="";
@@ -686,7 +687,7 @@ function renderHistory(data){
   svg+='<line x1="'+L+'" y1="'+py+'" x2="'+(W-R)+'" y2="'+py+'" stroke="#375342" stroke-dasharray="3 6"/>';
   svg+='<text x="'+(L-8)+'" y="'+(py+5)+'" fill="#b5cdbb" font-size="14" text-anchor="end">'+Math.round(value)+'</text>';
  }
- if(!sourceArchive){
+ if(hasPhases){
   let phase=null,begin=start;
   const transitions=(data.phases||[]).filter(p=>Number.isSafeInteger(p.at)&&
    (p.phase==="training"||p.phase==="hourly_rest")).sort((a,b)=>a.at-b.at);
@@ -699,7 +700,7 @@ function renderHistory(data){
   if(phase)bars.push([begin,end,phase]);
   for(const [from,to,kind] of bars)svg+='<rect x="'+f(x(from))+'" y="'+bandY+
    '" width="'+f(Math.max(0,x(to)-x(from)))+'" height="12" rx="2" fill="'+
-   (kind==="training"?"#7bd0a0":"#78a6d9")+'"/>';
+   (kind==="training"?"#7bd0a0":"#78a6d9")+'" data-phase="'+kind+'"><title>'+(kind==="training"?"ช่วงฝึก":"ช่วงพัก")+' • '+historyTime(from)+' – '+historyTime(to)+'</title></rect>';
  }
  const maxGap=historyHours===168?21*60000:historyHours===8?5*60000:20000;
  let group=[],previous=null,groups=[];

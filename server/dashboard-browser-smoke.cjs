@@ -59,6 +59,19 @@ await page.locator('#historyChart svg').waitFor();
 if(await page.locator('#historyChart polyline').count()!==2)throw Error('missing-data intervals incorrectly connected');
 if(await page.locator('#historyChart rect').count()!==2)throw Error('training/rest activity bars absent');
 if(!await page.locator('#historyStats').textContent().then(t=>t.includes('ต่ำสุด')&&t.includes('สูงสุด')))throw Error('min/max graph stats absent');
+// Archive charts retain the same recorded cohort phase bands as live history.
+for(const hours of [0.25,4,8,168]){
+ await page.evaluate(hours=>{historyHours=hours;const now=Date.now();renderHistory({
+  source:'actual accepted HR only',windowEnd:now,compacted:hours>=8,
+  points:[[now-75000,70],[now-70000,73],[now-10000,86]],
+  phases:[{at:now-95000,phase:'training'},{at:now-50000,phase:'hourly_rest'}]
+ });},hours);
+ if(!await page.locator('#historyLegend').isVisible())throw Error('archive phase legend hidden');
+ if(await page.locator('#historyChart rect[data-phase="training"]').count()!==1||await page.locator('#historyChart rect[data-phase="hourly_rest"]').count()!==1)throw Error('archive training/rest bands missing');
+}
+await page.evaluate(()=>{renderHistory({source:'actual accepted HR only',windowEnd:Date.now(),points:[[Date.now()-1000,80]],phases:[]});historyHours=4;});
+if(await page.locator('#historyChart rect[data-phase]').count())throw Error('invented phase without recorded events');
+if(!await page.locator('#historyNote').textContent().then(t=>t.includes('ไม่มีบันทึก')))throw Error('missing phase history not explained');
 await page.evaluate(()=>{const copy=last.recruits.map(r=>({...r}));copy[1].stale=true;copy[1].hr=null;draw({recruits:copy});});
 if(await page.locator('[data-history-slot="R02"]').count()!==0)throw Error('NO DATA recruit should not render a graph button');
 if(await page.locator('[data-history-slot="R01"]').count()!==1)throw Error('other LIVE recruit button disappeared');
