@@ -4,17 +4,23 @@ import {readFileSync} from "node:fs";
 
 const page=readFileSync(new URL("../dashboard/live.html",import.meta.url),"utf8");
 
-test("R01 and R02 seven-day preview is visibly simulated, hidden until requested",()=>{
+test("R03 and R04 seven-day preview is visibly simulated, hidden until requested",()=>{
  for(const id of ["trainingPreview","trainingPreviewToggle","trainingPreviewReset",
-   "trainingPreviewR01","trainingPreviewR02","trainingPreviewDays"]){
+   "trainingPreviewR03","trainingPreviewR04","trainingPreviewDays"]){
   assert.match(page,new RegExp('id="'+id+'"'));
  }
  assert.match(page,/id="trainingPreview"[^>]* hidden>/);
  assert.match(page,/DEMO DATA.*SIMULATED/);
  assert.match(page,/trainingPreviewSamples=\{/);
- assert.match(page,/R01:\[[^\]]+\]/);
- assert.match(page,/R02:\[[^\]]+\]/);
+ assert.match(page,/R03:\[[^\]]+\]/);
+ assert.match(page,/R04:\[[^\]]+\]/);
  assert.match(page,/day<=7/);
+ assert.match(page,/NORMAL · ตัวอย่าง/);
+ assert.match(page,/WATCH · ตัวอย่าง/);
+ assert.match(page,/BPM · SIMULATED/);
+ assert.match(page,/ไม่ใช่เหตุเตือนจริง/);
+ assert.match(page,/ไม่ได้สรุปว่าเสี่ยงจากค่า 132 BPM เพียงตัวเดียว/);
+ assert.match(page,/ไม่มีการเพิ่ม R03\/R04 ลงทะเบียนจริง/);
 });
 
 test("clearing preview never calls medical or LIVE write endpoints",()=>{

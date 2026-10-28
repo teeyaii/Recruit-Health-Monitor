@@ -62,9 +62,9 @@ The **กำลังทำการฝึก / พักประจำชั�
 
 For manual verification after the eventual **single** Render deployment: confirm R01 and R02 each show the button only when LIVE, R03 NO DATA never creates a chart, opening R01 does not load R02 graph, an interrupted connection removes the button and visible graph, gaps are blank, and changing wearer resets their history. Do not add real personal identifiers or claim 4 hours were physically tested without a recorded four-hour observation.
 
-## R01/R02 seven-day training-graph preview (browser-only)
+## R03/R04 normal/watch demonstration (browser-only)
 
-- Sign in to authenticated `/live`, then select **กราฟสาธิต R01 / R02** near the presentation toggle. Two side-by-side charts show **invented daily mean BPM** for R01 and R02; the banner clearly identifies **DEMO DATA / SIMULATED**. These are **not** historic sensor measurements and must never be described as such.
+- Sign in to authenticated `/live`, then select **ตัวอย่าง R03 / R04** near the presentation toggle. Two separate simulated status tiles (**R03 NORMAL**, **R04 WATCH**) and two charts show **invented daily mean BPM** for R03 and R04; the banner clearly identifies **DEMO DATA / SIMULATED**. These are **not** historic sensor measurements and must never be described as such.
 - Below the two charts are seven empty activity notes (day 1 through day 7). Enter the owner's proposed training schedule when available. These notes exist in the display's browser memory only; they are not recorded by the server and are cleared on page reload, logout, or **ล้างตัวอย่างและปิดกราฟ**.
-- The preview never calls ingestion APIs, alters actual HR, or feeds WATCH, EMERGENCY, medic review, history, group phase, or alerting logic. The normal per-recruit **ดูแนวโน้ม BPM ย้อนหลัง** button still uses real accepted readings only. A real seven-day plot requires existing actual encrypted archive data, not the preview.
-- During presentation, point to the yellow **SIMULATED** banner before showing the graphs; then switch to genuine R01/R02 LIVE signals. When finished, clear the preview rather than deleting real recruit records.
+- The preview never enrolls R03/R04, calls ingestion APIs, alters actual HR, or feeds WATCH, EMERGENCY, medic review, history, group phase, cohort counts or alerting logic. The normal per-recruit **ดูแนวโน้ม BPM ย้อนหลัง** button still uses real accepted readings only. A real seven-day plot requires existing actual encrypted archive data, not the preview.
+- During presentation, point to the yellow **SIMULATED** banner before showing the graphs; then distinguish these from genuine R01/R02 LIVE signals. When finished, clear the preview rather than deleting real recruit records.
