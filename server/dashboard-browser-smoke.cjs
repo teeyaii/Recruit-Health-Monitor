@@ -53,7 +53,18 @@ if(await page.locator('#statWatch').textContent()!=='1')throw Error('simulated w
 
 await page.setViewportSize({width:390,height:844});
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('training preview overflows iPhone');
+for(const width of [390,1024,1440]){
+ await page.setViewportSize({width,height:900});
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('schedule demo overflow');
+ await page.screenshot({path:'ui-artifacts/scheduled-demo-'+width+'.png',fullPage:true});
+}
+if(await page.locator('#previewDayR04').textContent().then(t=>t.includes('14:20 WATCH'))!==true)throw Error('watch scenario missing');
+await page.locator('#previewDaySelect').selectOption('6');
+if(!await page.locator('#previewSchedule').textContent().then(t=>t.includes('สมมติฐาน')))throw Error('Sunday assumption not visible');
+if(await page.locator('#previewDayR03 rect[data-preview-phase="training"]').count())throw Error('invented Sunday training');
 await page.evaluate(()=>clearTrainingPreview());
+if(await page.locator('#previewDayR04').innerHTML()!=='')throw Error('daily demo not cleared');
+
 if(await page.locator('#trainingPreview').isVisible())throw Error('training preview reset failed');
 // Per-recruit graph must only be created on demand for registered LIVE slots.
 if(await page.locator('.history-open').count()!==2)throw Error('LIVE wearers should have exactly two graph buttons');
