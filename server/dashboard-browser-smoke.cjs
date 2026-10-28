@@ -32,9 +32,13 @@ await page.evaluate(()=>{const rows=last.recruits.map(r=>({...r}));rows[0].autoC
 
 // Browser-only presentation preview: separate from real sensor and alert state.
 await page.evaluate(()=>openTrainingPreview());
-if(await page.locator('#trainingPreviewR01 svg').count()!==1)throw Error('R01 demo graph missing');
-if(await page.locator('#trainingPreviewR02 svg').count()!==1)throw Error('R02 demo graph missing');
+if(await page.locator('#trainingPreviewR03 svg').count()!==1)throw Error('R03 demo graph missing');
+if(await page.locator('#trainingPreviewR04 svg').count()!==1)throw Error('R04 demo graph missing');
 if(await page.locator('#trainingPreviewDays input').count()!==7)throw Error('seven training activity fields missing');
+if(!await page.locator('#trainingPreviewPeople').textContent().then(t=>t.includes('NORMAL')&&t.includes('WATCH')))throw Error('demo scenario labels missing');
+if(await page.locator('#statTotal').textContent()!=='2')throw Error('simulated slots affected enrolled count');
+if(await page.locator('#statWatch').textContent()!=='1')throw Error('simulated watch affected actual watch count');
+
 await page.setViewportSize({width:390,height:844});
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('training preview overflows iPhone');
 await page.evaluate(()=>clearTrainingPreview());
