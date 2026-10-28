@@ -71,7 +71,28 @@ test("trainer and medic share protected group buttons; gateway forbidden; stale 
   assert.equal(r.data.ephemeral,true,"Render Free RAM-only limitation visible");
   r=await req("/api/roster/audit",{cookie:t.cookie});
   assert.equal(r.data.events.filter(e=>e.id==="GROUP").length,2);
+  r=await req("/api/training",{method:"PUT",cookie:t.cookie,json:{phase:"no_training",version:2}});
+  assert.equal(r.status,200);assert.equal(r.data.phase,"no_training");
+  r=await req("/api/training",{cookie:m.cookie});
+  assert.equal(r.data.transitions.at(-1).phase,"no_training");
   const one=await req("/api/snapshot",{cookie:m.cookie});
   assert.equal(one.data.recruits.length,15,"group action does not change sensor slots");
  }finally{child.kill();}
+});
+
+test('explicit no-training phase survives reload and terminates training/rest summaries',async()=>{
+ const {trainingSummary}=await import('./training-summary.js');
+ const store=new RosterStore();
+ store.setGroupPhase({phase:'training',version:0},'trainer');
+ store.setGroupPhase({phase:'no_training',version:1},'trainer');
+ assert.equal(store.setGroupPhase({phase:'no_training',version:2},'trainer').version,2);
+ const restored=new RosterStore();restored.loadData(store.exportData());
+ assert.equal(restored.getGroupPhase().phase,'no_training');
+ assert.equal(restored.getTrainingTimeline(0).at(-1).phase,'no_training');
+ const result=trainingSummary([[10,90],[20,80],[30,70],[40,75]],
+  [{at:5,phase:'training'},{at:15,phase:'no_training'},{at:35,phase:'hourly_rest'}],0,50);
+ assert.equal(result.training.samples,1);
+ assert.equal(result.hourly_rest.samples,1);
+ assert.equal(result.no_training.samples,2);
+ assert.equal(result.unclassifiedSamples,0);
 });

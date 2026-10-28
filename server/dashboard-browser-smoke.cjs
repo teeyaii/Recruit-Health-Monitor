@@ -12,6 +12,18 @@ if(await page.locator('#startHourlyRest').getAttribute('aria-pressed')!=='true')
 await page.evaluate(()=>{groupPhaseData={phase:'training',version:2,changedAt:Date.now(),ephemeral:true};paintGroupPhase();});
 if(await page.locator('#groupPhaseLabel').textContent()!=='กำลังทำการฝึก')throw Error('requested active training label');
 if(!await page.locator('#startTraining').textContent().then(t=>t.includes('กำลังทำการฝึก')))throw Error('training action wording');
+// Off-training action spans the lower row; previous training clock stops.
+await page.evaluate(()=>{const now=Date.now();groupPhaseData={phase:'no_training',version:3,changedAt:now-60000,
+ transitions:[{phase:'training',at:now-180000},{phase:'no_training',at:now-60000}]};paintGroupPhase();});
+if(await page.locator('#groupPhaseLabel').textContent()!=='ไม่มีการฝึก')throw Error('off-training label');
+if(await page.locator('#trainingDuration').textContent()!=='2 นาที')throw Error('training timer continued through off-training');
+if(await page.locator('#startNoTraining').getAttribute('aria-pressed')!=='true')throw Error('off-training button inactive');
+for(const width of [390,1024,1440]){
+ await page.setViewportSize({width,height:900});
+ const a=await page.locator('#startTraining').boundingBox(),b=await page.locator('#startHourlyRest').boundingBox(),c=await page.locator('#startNoTraining').boundingBox();
+ if(Math.abs(a.y-b.y)>1||c.y<a.y+a.height||Math.abs(c.x-a.x)>1||Math.abs(c.width-(b.x+b.width-a.x))>1)throw Error('off-training action must span below training/rest');
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('phase actions overflow');
+}
 if(!await page.locator('#emergencyAlerts').isVisible())throw Error('visible active EMERGENCY required');
 if(await page.locator('#emergencyAlerts').getAttribute('role')!=='alert')throw Error('critical screenreader alert lost');
 if(!await page.locator('.emergency-title').textContent().then(t=>t.includes('หยุดกิจกรรม')&&t.includes('เจ้าหน้าที่แพทย์')))throw Error('urgent clinical direction lost');
@@ -64,10 +76,11 @@ for(const hours of [0.25,4,8,168]){
  await page.evaluate(hours=>{historyHours=hours;const now=Date.now();renderHistory({
   source:'actual accepted HR only',windowEnd:now,compacted:hours>=8,
   points:[[now-75000,70],[now-70000,73],[now-10000,86]],
-  phases:[{at:now-95000,phase:'training'},{at:now-50000,phase:'hourly_rest'}]
+  phases:[{at:now-95000,phase:'training'},{at:now-50000,phase:'hourly_rest'},{at:now-20000,phase:'no_training'}]
  });},hours);
  if(!await page.locator('#historyLegend').isVisible())throw Error('archive phase legend hidden');
  if(await page.locator('#historyChart rect[data-phase="training"]').count()!==1||await page.locator('#historyChart rect[data-phase="hourly_rest"]').count()!==1)throw Error('archive training/rest bands missing');
+ if(await page.locator('#historyChart rect[data-phase="no_training"]').count()!==1)throw Error('off-training archive band missing');
 }
 await page.evaluate(()=>{renderHistory({source:'actual accepted HR only',windowEnd:Date.now(),points:[[Date.now()-1000,80]],phases:[]});historyHours=4;});
 if(await page.locator('#historyChart rect[data-phase]').count())throw Error('invented phase without recorded events');

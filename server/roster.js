@@ -9,7 +9,7 @@ const slotSet=new Set(slotIDs);
 const observations=new Set(["none","dizzy_weak_nausea","confusion_collapse_seizure"]);
 const restrictions=new Set(["none","watch","no_training"]);
 const activities=new Set(["not_reported","training","resting","assessment"]); // Legacy per-person field is read-only in the current operator UI.
-const groupPhases=new Set(["not_started","training","hourly_rest"]);
+const groupPhases=new Set(["not_started","training","hourly_rest","no_training"]);
 // Preserve the recruit's chosen letter case. Compare case-insensitively only
 // when verifying slot identity and duplicate assignments.
 const shortCode=/^[A-Za-z0-9][A-Za-z0-9_-]{3,23}$/;
@@ -60,7 +60,7 @@ export class RosterStore {
  // A phase predating the four-hour window can seed the window's left edge.
  getTrainingTimeline(since,now=Date.now()){
   const events=this.data.audit.filter(e=>e.id==="GROUP"&&
-   (e.action==="phase_training"||e.action==="phase_hourly_rest")&&
+   (e.action==="phase_training"||e.action==="phase_hourly_rest"||e.action==="phase_no_training")&&
    Number.isSafeInteger(e.at)&&e.at<=now).sort((a,b)=>a.at-b.at);
   const before=events.filter(e=>e.at<since).at(-1);
   const current=this.getGroupPhase();
@@ -76,7 +76,7 @@ export class RosterStore {
  setGroupPhase(input,actor){
   const old=this.getGroupPhase();
   if(!Number.isSafeInteger(input?.version)||input.version!==old.version)problem(409,"stale group phase; refresh before changing");
-  if(!groupPhases.has(input?.phase)||input.phase==="not_started")problem(422,"select training or hourly_rest");
+  if(!groupPhases.has(input?.phase)||input.phase==="not_started")problem(422,"select training, hourly_rest or no_training");
   if(old.phase===input.phase)return old;
   const saved=this.data.groupPhase,history=this.data.audit.slice();
   const now=Date.now();
