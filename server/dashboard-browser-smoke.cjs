@@ -25,7 +25,7 @@ if(!await page.locator('#rosterBox').textContent().then(t=>t.includes('รหั
 // TEST ONLY: monitoring state and automatic pause must survive stale HR.
 await page.evaluate(()=>{const rows=last.recruits.map(r=>({...r}));rows[0].autoCheck=true;rows[0].monitoringStatus='MONITORING_NOT_CONFIGURED';draw({recruits:rows});});
 if(!await page.locator('#autoPauseAlerts').isVisible())throw Error('automatic pause missing');
-if(!await page.locator('#cards').textContent().then(t=>t.includes('MONITORING NOT CONFIGURED')))throw Error('unconfigured monitoring hidden');
+if(await page.locator('#cards').textContent().then(t=>/MONITORING NOT CONFIGURED|clinical approval/.test(t)))throw Error('configuration copy leaked onto cards');
 await page.locator('#enableAlertSound').click();
 if(await page.locator('#enableAlertSound').getAttribute('aria-pressed')!=='true')throw Error('foreground audio activation failed');
 await page.evaluate(()=>{const rows=last.recruits.map(r=>({...r}));rows[0].autoCheck=false;draw({recruits:rows});});
@@ -86,12 +86,29 @@ await page.setViewportSize({width:390,height:844});
 if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('medic panel overflows iPhone viewport');
 await page.screenshot({path:'ui-artifacts/steve-medic-review-390.png',fullPage:true});
 await page.evaluate(()=>{byId('medicPanel').open=false;byId('medicPanel').hidden=true;byId('rosterBox').hidden=true;operatorRole=null;});
-for(const width of [390,1440]){await page.setViewportSize({width,height:900});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('horizontal overflow '+width);
+for(const width of [390,1024,1440]){await page.setViewportSize({width,height:900});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('horizontal overflow '+width);
 const dims=await page.evaluate(()=>{const a=document.getElementById('emergencyAlerts').getBoundingClientRect();const b=document.getElementById('trainingPanel').getBoundingClientRect();return {emergencyWidth:a.width,trainingWidth:b.width,emergencyHeight:a.height,trainingHeight:b.height};});
 if(dims.emergencyWidth>760.5)throw Error('alert wider than compact limit '+width);
 if(width===1440&&dims.emergencyWidth>=dims.trainingWidth*.8)throw Error('alert competes with group training banner');
 if(width===390&&dims.emergencyHeight>=dims.trainingHeight)throw Error('mobile alert not shorter than group banner');
 if(dims.emergencyWidth>width-20)throw Error('alert overflows viewport');
 await page.screenshot({path:'ui-artifacts/steve-'+width+'.png',fullPage:true});}
+// Risk rails remain visible at mobile, tablet and commander widths, including loss of data.
+await page.evaluate(()=>{operatorRole='medic';transportUp=false;rosterData={slots:[
+ {id:'R01',code:'A001',restriction:'none'},
+ {id:'R02',code:'A002',restriction:'watch'},
+ {id:'R03',code:'A003',observation:'confusion_collapse_seizure'}]};
+ draw({recruits:rosterData.slots.map(p=>({id:p.id,hr:null,stale:true,timestamp:null}))});});
+for(const width of [390,1024,1440]){
+ await page.setViewportSize({width,height:900});
+ const rails=await page.locator('#cards .card').evaluateAll(cards=>cards.map(c=>({
+  color:getComputedStyle(c).borderRightColor,width:getComputedStyle(c).borderRightWidth,
+  overflow:c.scrollWidth>c.clientWidth,text:c.textContent})));
+ if(rails.map(r=>r.color).join('|')!=='rgb(131, 149, 139)|rgb(244, 183, 64)|rgb(239, 68, 68)')throw Error('incorrect disconnected risk rails');
+ if(rails.some(r=>r.width!=='6px'||r.overflow))throw Error('card rail width or overflow');
+ if(!rails[2].text.includes('EMERGENCY')||!rails[2].text.includes('DISCONNECTED'))throw Error('emergency lost on disconnect');
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('disconnected layout overflow');
+ await page.screenshot({path:'ui-artifacts/personnel-disconnected-'+width+'.png',fullPage:true});
+}
 await page.locator('#presentationToggle').click();if(!await page.locator('body').evaluate(el=>el.classList.contains('presentation')))throw Error('presentation failed');if(await page.locator('#trainingActions').isVisible())throw Error('presentation shows buttons');if(!await page.locator('#trainingPanel').isVisible())throw Error('presentation must retain group status');await page.setViewportSize({width:390,height:844});if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('presentation overflow');await page.route('**/api/login',r=>r.abort());await page.evaluate(async()=>{document.getElementById('token').value='test-only';await document.getElementById('login').onsubmit({preventDefault(){}});});if(await page.locator('#token').inputValue()!=='')throw Error('credential retained after network failure');
 await page.route('**/api/logout',r=>r.abort());await page.evaluate(()=>document.getElementById('logout').onclick());if(await page.locator('#cards').innerHTML()!=='')throw Error('offline logout retained readings');if(await page.locator('#emergencyAlerts').isVisible())throw Error('offline logout retained alert');if(!await page.locator('#summary').textContent().then(t=>t.includes('session')))throw Error('offline revocation not explained');if(errors.length)throw Error(errors.join('\n'));console.log('PASS: 390px/1440px render, presentation toggle, no horizontal overflow, no script errors');await browser.close();})().catch(e=>{console.error(e);process.exit(1)});

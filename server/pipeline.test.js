@@ -58,7 +58,8 @@ test("15 slots / 5 authenticated gateways → HTTP ingest → SSE → live dashb
   // enrolled/synthetic cards instead of asserting against the temporary loading placeholder.
   await until(()=>el("cards").innerHTML.includes("NO DATA"));
   assert.ok(lastEvent.recruits.every(r=>r.source==="SIMULATED"),"empty synthetic slots retain mode labels");
-  assert.match(el("cards").innerHTML,/G05/,"provisioned ownership visible before first measurement");
+  assert.ok(lastEvent.recruits.some(r=>r.gateway==="G05"),"provisioned ownership retained in telemetry before first measurement");
+  assert.doesNotMatch(el("cards").innerHTML,/Gateway:/,"technical routing omitted from commander cards");
   const packet=(g,ts=Date.now())=>Object.entries(mapping[g]).map(([id,device_id])=>({id,device_id,hr:70+Number(id.slice(1)),timestamp:ts}));
   async function ingest(g,readings,source="SIMULATED"){
    const r=await fetch(base+"/api/ingest",{method:"POST",headers:{Authorization:"Bearer "+tokens[g],"Content-Type":"application/json"},
