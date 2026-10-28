@@ -273,9 +273,11 @@ const server=http.createServer(async(req,res)=>{
   if(!code){send(res,409,{error:"recruit not registered"});return;}
   try{
    const compact=url.searchParams.get("compact")==="1";
-   const points=await archive.get(slot,code,hours,Date.now(),compact);
+   const now=Date.now(),start=now-hours*3600000;
+   const points=await archive.get(slot,code,hours,now,compact);
    if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
-   send(res,200,{slot,windowStart:Date.now()-hours*3600000,windowEnd:Date.now(),windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,compacted:compact&&(hours===8||hours===168),source:"actual accepted HR only"});
+   const phases=roster.getTrainingTimeline(start,now);
+   send(res,200,{slot,windowStart:start,windowEnd:now,phases,phaseScope:"cohort",windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,compacted:compact&&(hours===8||hours===168),source:"actual accepted HR only"});
   }catch{send(res,503,{error:"encrypted archive unavailable"});}
   return;
  }

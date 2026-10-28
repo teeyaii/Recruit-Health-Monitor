@@ -15,6 +15,7 @@ test("API encrypts private profiles, restores after restart, and restricts acces
  // Only this child process replaces fetch. Production has no mock/storage bypass.
  await writeFile(hook,`import {readFile,writeFile} from 'node:fs/promises';
  globalThis.fetch=async(url,options)=>{
+  if(url.startsWith('https://unit-pilot.supabase.co/rest/v1/steve_hr_archive'))return {ok:true,status:200,json:async()=>[]};
   if(!url.startsWith('https://unit-pilot.supabase.co/rest/v1/steve_secure_state'))throw Error('unexpected target');
   if(options.method==='GET'){
    let rows=[];try{rows=[JSON.parse(await readFile(process.env.TEST_SNAPSHOT,'utf8'))];}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -32,7 +33,7 @@ test("API encrypts private profiles, restores after restart, and restricts acces
   STEVE_SLOT_MAP_JSON:JSON.stringify({G01:{R01:"test-device"}}),
   STEVE_SUPABASE_URL:"https://unit-pilot.supabase.co",
   STEVE_SUPABASE_SERVICE_ROLE_KEY:"sb_secret_test_only_"+"s".repeat(32),
-  STEVE_DATA_ENCRYPTION_KEY:randomBytes(32).toString("base64"),TEST_SNAPSHOT:file};
+  STEVE_DATA_ENCRYPTION_KEY:randomBytes(32).toString("base64"),TEST_SNAPSHOT:file,STEVE_ARCHIVE_ENABLED:"1"};
  let child;
  async function start(){
   child=spawn(process.execPath,["--import",pathToFileURL(hook).href,"index.js"],{cwd:new URL(".",import.meta.url),env,stdio:"ignore"});
@@ -53,6 +54,10 @@ test("API encrypts private profiles, restores after restart, and restricts acces
   let status=await (await req('/api/storage/status',{cookie})).json();
   assert.equal(status.state,'read-confirmed');assert.equal(status.lastWriteAt,null);
   assert.equal((await req('/api/roster/R01',{method:'PUT',cookie,json:{version:0,code:'test01',restriction:'none',observation:'none'}})).status,200);
+  for(const [version,phase] of [[0,'training'],[1,'hourly_rest']]){
+   assert.equal((await req('/api/training',{method:'PUT',cookie,json:{version,phase}})).status,200);
+   await delay(5);
+  }
   const notes='synthetic private test note';
   assert.equal((await req('/api/private-profile/R01',{method:'PUT',cookie,json:{version:0,weightKg:72,heightCm:180,conditions:notes,confirmed:true}})).status,200);
   status=await (await req('/api/storage/status',{cookie})).json();assert.equal(status.state,'write-confirmed');
@@ -66,6 +71,15 @@ test("API encrypts private profiles, restores after restart, and restricts acces
   await stop();await start();cookie=await login(medic);
   const profile=await (await req('/api/private-profile/R01',{cookie})).json();
   assert.equal(profile.profile.conditions,notes);assert.equal(profile.profile.bmi,22.2);
+  for(const hours of [0.25,4,8,168]){
+   const response=await req('/api/archive/R01?hours='+hours+'&compact=1',{cookie});
+   assert.equal(response.status,200);
+   const archive=await response.json();
+   assert.deepEqual(archive.phases.map(p=>p.phase),['training','hourly_rest'],'archive restores actual operator phase history after restart');
+   assert.equal(archive.phaseScope,'cohort');
+   assert.deepEqual(archive.points,[],'phase history does not fabricate BPM');
+  }
+  assert.equal((await req('/api/archive/R01',{cookie:await login(viewer)})).status,403);
   status=await (await req('/api/storage/status',{cookie})).json();
   assert.equal(status.state,'read-confirmed');assert.equal(status.lastWriteAt,null,'previous-process write is not claimed as a new write');
  }finally{await stop();await rm(dir,{recursive:true,force:true});}
