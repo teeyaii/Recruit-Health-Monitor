@@ -103,8 +103,9 @@ for(const width of [390,1024,1440]){
  await page.setViewportSize({width,height:900});
  const rails=await page.locator('#cards .card').evaluateAll(cards=>cards.map(c=>({
   color:getComputedStyle(c).borderLeftColor,width:getComputedStyle(c).borderLeftWidth,
-  overflow:c.scrollWidth>c.clientWidth,text:c.textContent})));
+  background:getComputedStyle(c).backgroundImage,overflow:c.scrollWidth>c.clientWidth,text:c.textContent})));
  if(rails.map(r=>r.color).join('|')!=='rgb(131, 149, 139)|rgb(244, 183, 64)|rgb(239, 68, 68)')throw Error('incorrect disconnected risk rails');
+ if(!rails[2].background.includes('rgb(59, 39, 40)')||rails.slice(0,2).some(r=>r.background===rails[2].background))throw Error('emergency tint missing or applied to non-emergency');
  if(rails.some(r=>r.width!=='6px'||r.overflow))throw Error('card rail width or overflow');
  if(!rails[2].text.includes('EMERGENCY')||!rails[2].text.includes('DISCONNECTED'))throw Error('emergency lost on disconnect');
  if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('disconnected layout overflow');
