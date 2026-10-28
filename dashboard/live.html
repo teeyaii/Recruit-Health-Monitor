@@ -322,6 +322,12 @@ body.presentation .grid .card[data-risk]{min-height:0}
 #startNoTraining{grid-column:1 / -1}
 #startNoTraining[aria-pressed="true"]{background:#c0cbd1;border-color:#d4dee4;color:#17242b}
 @media(max-width:620px){#trainingActions{width:100%;order:3}}
+.preview-series svg{display:block;width:100%;height:auto}
+.preview-series.risk{border:1px solid #a78339;border-left:6px solid #F4B740;background:linear-gradient(140deg,#352d1d,#1c2118)}
+.preview-schedule{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px;margin:14px 0}
+.preview-schedule div{padding:9px 12px;background:#17271e;border:1px solid #405343;border-radius:8px;font-size:.8rem;overflow-wrap:anywhere}
+.preview-schedule b{display:block;color:#d9e9d9}
+#previewDaySelect{width:100%;max-width:360px}
 </style></head><body>
 <header><h1>STEVE <span style="color:#b6ddb1">1.0</span> <span class="command-wordmark">/ COMMAND CENTER</span></h1><strong id="connection">ยังไม่เชื่อมต่อ</strong></header>
 <div class="command-bar"><div><div class="command-eyebrow">LIVE MONITORING</div><small>ภาพรวมสุขภาพทหารใหม่</small></div><div class="command-alert-controls"><button id="enableAlertSound" type="button" aria-pressed="false">เปิดเสียงเตือน</button><button id="trainingPreviewToggle" type="button" aria-pressed="false" hidden>ตัวอย่าง R03 / R04</button><button id="presentationToggle" type="button" aria-pressed="false">โหมดนำเสนอ</button></div></div>
@@ -467,6 +473,13 @@ body.presentation .grid .card[data-risk]{min-height:0}
    <div id="trainingPreviewR04" role="img" aria-label="กราฟชีพจรเฉลี่ยจำลอง 7 วันของ R04"></div>
    <small>สถานะเฝ้าระวังจำลองเท่านั้น • ไม่ใช่ผลประเมินทางการแพทย์</small></article>
  </div>
+ <h3>ดูชีพจรจำลองตามเวลาปฏิบัติประจำวัน</h3>
+ <label>เลือกวันสาธิต<select id="previewDaySelect"><option value="0">จันทร์</option><option value="1">อังคาร</option><option value="2">พุธ</option><option value="3">พฤหัสบดี</option><option value="4">ศุกร์</option><option value="5">เสาร์</option><option value="6">อาทิตย์ • สมมติฐาน</option></select></label>
+ <p class="preview-warning">ตารางอ้างอิงภาพ: จันทร์–ศุกร์ และเสาร์ถึง 12:00 เท่านั้น • เสาร์หลังเที่ยง/อาทิตย์เป็นสมมติฐานไม่มีการฝึก • ช่วงพัก 10 นาทีท้ายชั่วโมงเป็นตัวอย่าง ไม่ได้ระบุในภาพ</p>
+ <div class="history-legend"><span style="--mark:#71b28c">ฝึก/กิจกรรม</span><span style="--mark:#689cc8">พักสมมติ</span><span style="--mark:#9aa9b4">ไม่มีการฝึก</span><span style="--mark:#F4B740">R04 เฝ้าระวังจำลอง</span></div>
+ <div class="preview-graphs"><article class="preview-series"><strong>R03 · NORMAL · SIMULATED</strong><div id="previewDayR03"></div></article><article class="preview-series risk"><strong>R04 · WATCH · SIMULATED</strong><div id="previewDayR04"></div></article></div>
+ <p id="previewScenario" class="preview-warning"></p>
+ <div id="previewSchedule" class="preview-schedule"></div>
  <h3 style="margin:20px 0 5px">กิจกรรมการฝึกประกอบตัวอย่าง</h3>
  <p class="status-note">กรอกหัวข้อกิจกรรมรายวันเพื่อประกอบการนำเสนอเท่านั้น ไม่มีการส่งข้อมูลขึ้นเซิร์ฟเวอร์</p>
  <div id="trainingPreviewDays" class="preview-activity-grid"></div>
@@ -591,10 +604,66 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
 const byId=id=>document.getElementById(id);
 
 // Presentation preview is deliberately in-memory only; no fetch, persistence or patient data.
-const trainingPreviewSamples={
- R03:[81,86,89,83,94,87,84],
- R04:[104,113,119,122,128,117,112]
-};
+const previewWeekdays=["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์","อาทิตย์"];
+// Times transcribed from supplied poster. 05:00–06:30 is retained despite its parenthetical “1 hour”.
+const previewWeekSchedule=[
+ ["05:00","ตื่นนอน"],["05:00–06:30","พัฒนาสมรรถภาพร่างกาย (เวลาตามภาพ)"],
+ ["07:00","รับประทานอาหาร"],["07:30","ตรวจสีปัสสาวะและวัดอุณหภูมิร่างกาย"],
+ ["08:00","เคารพธงชาติ"],["08:00–12:00","การฝึกประจำวัน"],["12:00","รับประทานอาหาร"],
+ ["12:30","ตรวจสีปัสสาวะและวัดอุณหภูมิร่างกาย"],["13:00–16:00","การฝึกประจำวัน"],
+ ["16:00–18:00","นันทนาการ/ต่อสู้ป้องกันตัว/เวลาผู้บังคับบัญชา"],
+ ["18:00","เคารพธงชาติ/รับประทานอาหาร"],["19:00–20:00","สอนอบรม"],
+ ["20:30","สวดมนต์"],["21:00","ตรวจสีปัสสาวะและวัดอุณหภูมิร่างกาย"],["21:30","นอน"]];
+const previewSaturdaySchedule=[...previewWeekSchedule.slice(0,2),
+ ["ตั้งแต่สัปดาห์ที่ 3","เริ่มทดสอบสมรรถภาพตามภาพ • ไม่ใช้ในตัวอย่างสัปดาห์แรก"],
+ ["07:00","รับประทานอาหาร"],["08:00–12:00","ปรนนิบัติบำรุงอาวุธ/คลัง/อาคารที่พัก/เวลาผู้บังคับบัญชา"],
+ ["12:00 เป็นต้นไป","ไม่มีการฝึก • สมมติฐานสาธิต ภาพไม่มีข้อมูล"]];
+function previewPhase(day,minute){
+ if(day===6||day===5&&minute>=720)return "no_training";
+ const exercise=minute>=300&&minute<390;
+ const main=minute>=480&&minute<720||day<5&&minute>=780&&minute<1080;
+ const briefing=day<5&&minute>=1140&&minute<1200;
+ if(main&&minute%60>=50)return "hourly_rest"; // Explicit demonstration assumption.
+ return exercise||main||briefing?"training":"no_training";
+}
+function previewDayPoints(slot,day){
+ const points=[];let current=slot==="R04"?68:62;
+ for(let minute=0;minute<1440;minute+=5){
+  const phase=previewPhase(day,minute),sleep=minute<300||minute>=1290;
+  let target=sleep?60:phase==="hourly_rest"?82:phase==="no_training"?76:
+   minute<390?125:minute>=1140?83:day===5?98:minute>=960?112:118;
+  target+=day===6?0:day*0.7;
+  if(slot==="R04")target+=sleep?5:phase==="training"?17:9;
+  // Planned narrative: Wednesday 14:20 stop/check, followed by recovery. Not an inferred diagnosis.
+  if(slot==="R04"&&day===2&&minute>=860&&minute<920)target=minute<875?145:95;
+  current+=(target-current)*(slot==="R04"?.24:.4);
+  points.push([minute,Math.round(current+2*Math.sin(minute*.09+day)+Math.sin(minute*.031))]);
+ }
+ return points;
+}
+const trainingPreviewSamples={R03:[],R04:[]};
+for(const slot of ["R03","R04"])for(let day=0;day<7;day++){
+ const points=previewDayPoints(slot,day);trainingPreviewSamples[slot].push(Math.round(points.reduce((sum,p)=>sum+p[1],0)/points.length));
+}
+function previewDailySvg(slot,day){
+ const points=previewDayPoints(slot,day),x=t=>42+t/1440*580,y=v=>190-(v-40)/140*165;
+ let svg='<svg viewBox="0 0 640 245" role="img" aria-label="'+slot+' ชีพจรจำลอง '+previewWeekdays[day]+'"><title>SIMULATED • ไม่ใช่ข้อมูลสุขภาพจริง</title>';
+ for(const bpm of [40,80,120,160,180])svg+='<line x1="42" x2="622" y1="'+y(bpm)+'" y2="'+y(bpm)+'" stroke="#405343"/><text x="35" y="'+(y(bpm)+4)+'" text-anchor="end" fill="#bcd0c2" font-size="12">'+bpm+'</text>';
+ for(let from=0;from<1440;){let to=from+5,phase=previewPhase(day,from);while(to<1440&&previewPhase(day,to)===phase)to+=5;
+  svg+='<rect data-preview-phase="'+phase+'" x="'+x(from)+'" y="202" width="'+(x(to)-x(from))+'" height="10" fill="'+({training:'#71b28c',hourly_rest:'#689cc8',no_training:'#9aa9b4'})[phase]+'"/>';from=to;}
+ if(slot==="R04"&&day===2)svg+='<rect x="'+x(860)+'" y="20" width="'+(x(920)-x(860))+'" height="173" fill="#F4B740" opacity=".18"/><text x="'+(x(860)-5)+'" y="15" fill="#F4B740" text-anchor="end" font-size="12">14:20 WATCH · DEMO</text>';
+ svg+='<polyline fill="none" stroke="'+(slot==="R04"?'#F4B740':'#92d6a8')+'" stroke-width="2.4" points="'+points.map(p=>x(p[0]).toFixed(1)+','+y(p[1]).toFixed(1)).join(' ')+'"/>';
+ for(const hour of [0,6,12,18,24])svg+='<text x="'+x(hour*60)+'" y="234" fill="#bfd0c4" font-size="12" text-anchor="'+(hour===0?'start':hour===24?'end':'middle')+'">'+String(hour).padStart(2,'0')+':00</text>';
+ return svg+'</svg>';
+}
+function renderPreviewDay(){
+ const day=Number(byId("previewDaySelect").value);if(!Number.isInteger(day)||day<0||day>6)return;
+ for(const slot of ["R03","R04"])byId("previewDay"+slot).innerHTML=previewDailySvg(slot,day);
+ const schedule=day<5?previewWeekSchedule:day===5?previewSaturdaySchedule:[["ทั้งวัน","ไม่มีการฝึก • สมมติฐานสาธิต ไม่ปรากฏวันอาทิตย์ในภาพ"]];
+ byId("previewSchedule").innerHTML=schedule.map(([time,activity])=>'<div><b>'+time+'</b>'+activity+'</div>').join('');
+ byId("previewScenario").textContent=day===2?"R04 • เหตุการณ์สมมติ 14:20: ครูฝึกพบอาการผิดปกติ ให้หยุดกิจกรรมและเฝ้าระวัง จากนั้นชีพจรค่อยลด • ไม่ส่งการแจ้งเตือนจริง":
+ "R04 เป็นกลุ่มเฝ้าระวังตามบทสาธิต แสดงชีพจรสูงกว่าและฟื้นตัวช้ากว่า R03 • ไม่ใช่การจัดกลุ่มเสี่ยงจาก BPM หรือข้อมูลวัดจริง";
+}
 function trainingPreviewSvg(slot,values){
  const w=640,h=235,l=43,r=16,t=15,b=186,lo=60,hi=160;
  const x=i=>l+i*(w-l-r)/6,y=v=>b-(v-lo)*(b-t)/(hi-lo);
@@ -612,9 +681,10 @@ function clearTrainingPreview(){
  byId("trainingPreview").hidden=true;
  byId("trainingPreviewToggle").setAttribute("aria-pressed","false");
  byId("trainingPreviewToggle").textContent="ตัวอย่าง R03 / R04";
- for(const id of ["trainingPreviewR03","trainingPreviewR04","trainingPreviewDays"])byId(id).textContent="";
+ for(const id of ["trainingPreviewR03","trainingPreviewR04","trainingPreviewDays","previewDayR03","previewDayR04","previewSchedule","previewScenario"])byId(id).textContent="";
 }
 function openTrainingPreview(){
+ byId("previewDaySelect").value="2";renderPreviewDay();
  for(const [slot,values] of Object.entries(trainingPreviewSamples))
   byId("trainingPreview"+slot).innerHTML=trainingPreviewSvg(slot,values);
  const days=byId("trainingPreviewDays");
@@ -623,7 +693,7 @@ function openTrainingPreview(){
   const label=document.createElement("label"),caption=document.createElement("span"),input=document.createElement("input");
   label.className="preview-activity";
   caption.textContent="วันที่ "+day;
-  input.type="text";input.maxLength=80;input.placeholder="ระบุกิจกรรม (ตัวอย่าง)";
+  input.type="text";input.maxLength=160;input.value=previewWeekdays[day-1]+(day<=5?" • เช้าสมรรถภาพ / ฝึก 08–12 และ 13–16 / กิจกรรม 16–18 / อบรม 19–20":day===6?" • เช้าสมรรถภาพ / ปบ.08–12 / หลังเที่ยงสมมติไม่มีการฝึก":" • สมมติฐานไม่มีการฝึก (ภาพไม่มีตาราง)");input.placeholder="ระบุกิจกรรม (ตัวอย่าง)";
   input.setAttribute("aria-label","กิจกรรมสาธิตวันที่ "+day);
   label.append(caption,input);days.append(label);
  }
@@ -637,6 +707,7 @@ byId("trainingPreviewToggle").onclick=()=>{
  else clearTrainingPreview();
 };
 byId("trainingPreviewReset").onclick=clearTrainingPreview;
+byId("previewDaySelect").onchange=renderPreviewDay;
 
 let historyCode=null;
 function archiveAllowed(){return operatorRole==="trainer"||operatorRole==="medic";}
