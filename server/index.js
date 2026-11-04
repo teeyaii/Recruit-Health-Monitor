@@ -20,6 +20,8 @@ const TTL_MS=15000;
 const DEMO_ENABLED=process.env.STEVE_DEMO_MODE==="1" && process.env.NODE_ENV!=="production";
 const MAX_AGE_MS=15000;
 const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && process.env.NODE_ENV!=="production");
+// Test-only ephemeral commander link issuance permits HTTP authorization tests without live Supabase.
+const COMMANDER_PERSISTENCE=process.env.NODE_ENV==="test"&&process.env.STEVE_TEST_EPHEMERAL_COMMANDER==="1";
 const recruits=new Map();
 const pulseHistory=new PulseHistory();
 const durable=new DurableState();
@@ -218,7 +220,7 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==="/api/commander/share"&&req.method==="POST"){
    if(!isViewer){send(res,403,{error:"operator session required"});return;}
    if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
-   if(!durable.enabled){send(res,503,{error:"encrypted persistence required for revocable private links"});return;}
+   if(!durable.enabled&&!COMMANDER_PERSISTENCE){send(res,503,{error:"encrypted persistence required for revocable private links"});return;}
    if(commanderLinkBusy){send(res,409,{error:"commander link update in progress"});return;}
    commanderLinkBusy=true;const prior=commander.export();
    try{const issued=commander.issue();await persistState();
@@ -229,7 +231,7 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==="/api/commander/revoke"&&req.method==="POST"){
    if(!isViewer){send(res,403,{error:"operator session required"});return;}
    if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
-   if(!durable.enabled){send(res,503,{error:"encrypted persistence required"});return;}
+   if(!durable.enabled&&!COMMANDER_PERSISTENCE){send(res,503,{error:"encrypted persistence required"});return;}
    if(commanderLinkBusy){send(res,409,{error:"commander link update in progress"});return;}
    commanderLinkBusy=true;const prior=commander.export();
    try{commander.revoke();await persistState();send(res,200,{ok:true});return;}
