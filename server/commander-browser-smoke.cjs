@@ -39,7 +39,7 @@ const fs=require("fs"),assert=require("node:assert/strict");
   assert.equal(await page.locator("#watch").innerText(),"1");
   assert.equal(await page.locator("#fresh").innerText(),"2");
   assert.equal(await page.locator("#missing").innerText(),"3");
-  assert.ok((await page.locator("#cards").innerText()).includes("DISCONNECTED"));
+  assert.ok((await page.locator("#cards").innerText()).includes("ขาดการเชื่อมต่อ"));
   assert.equal(await page.locator("#cards .bpm").allInnerTexts().then(x=>x.includes("— BPM")),true);
   const bodyText=await page.locator("body").innerText();
   assert.ok(!/A001-PRIVATE|โรคประจำตัว:|รับทราบเหตุ|บันทึกข้อมูลทหารใหม่/.test(bodyText));
