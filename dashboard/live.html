@@ -362,14 +362,14 @@ body.presentation .grid .card[data-risk]{min-height:0}
 
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
 <div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
-<section id="commanderShareBox" class="operator-box" hidden aria-label="ลิงก์จอผู้บังคับบัญชา" style="margin:14px 0">
- <h2>จอผู้บังคับบัญชา • เปิดดูอย่างเดียว</h2>
+<section id="commanderShareBox" class="operator-box" hidden aria-label="ลิงก์สรุปการเฝ้าระวัง" style="margin:14px 0">
+ <h2>สรุปการเฝ้าระวัง • เปิดดูอย่างเดียว</h2>
  <p class="status-note">สร้างลิงก์ส่วนตัวอายุ 7 วันสำหรับผู้มีสิทธิ์ดูข้อมูล • ไม่ต้องพิมพ์รหัส • ไม่แสดงชื่อ รหัสประจำตัว โรค หรือยา • ห้ามแชร์ลิงก์สาธารณะ</p>
  <div class="operator-actions"><button type="button" id="commanderShare">สร้างลิงก์ส่วนตัวใหม่</button><button type="button" id="commanderRevoke" class="secondary">ยกเลิกลิงก์เดิม</button></div>
  <div id="commanderLinkBox" hidden><label>ลิงก์ส่วนตัว • คัดลอกและส่งให้ผู้มีสิทธิ์<input id="commanderLink" readonly autocomplete="off" spellcheck="false"></label>
  <div class="operator-actions"><button type="button" id="commanderCopy">คัดลอกลิงก์</button><button type="button" id="commanderNativeShare" class="secondary">แชร์ผ่าน iPhone</button></div>
  <p class="status-note">สแกน QR ด้วย iPhone/iPad ของผู้มีสิทธิ์ดู • QR นี้เท่ากับถือสิทธิ์เข้าดู ห้ามถ่ายลงกลุ่มสาธารณะ</p>
- <div id="commanderQr" aria-label="QR ลิงก์จอผู้บังคับบัญชา" style="width:224px;height:224px;background:white;padding:10px;border-radius:12px;margin:10px 0"></div>
+ <div id="commanderQr" aria-label="QR ลิงก์สรุปการเฝ้าระวัง" style="width:224px;height:224px;background:white;padding:10px;border-radius:12px;margin:10px 0"></div>
  </div>
  <p id="commanderShareStatus" class="status-note" role="status">ยังไม่ได้ตรวจสิทธิ์</p>
 </section>
@@ -1258,7 +1258,7 @@ byId("commanderNativeShare").onclick=async()=>{
  const url=byId("commanderLink").value;
  if(!url)return;
  if(!navigator.share){byId("commanderShareStatus").textContent="เครื่องนี้ไม่รองรับเมนูแชร์ • กดคัดลอกลิงก์แทน";return;}
- try{await navigator.share({title:"STEVE • จอผู้บังคับบัญชา (ส่วนตัว)",url});}
+ try{await navigator.share({title:"STEVE • สรุปการเฝ้าระวัง (ส่วนตัว)",url});}
  catch{byId("commanderShareStatus").textContent="ยังไม่ได้แชร์ลิงก์";}
 };
 function disconnect(){byId("commanderShareBox").hidden=true;byId("commanderLinkBox").hidden=true;byId("commanderLink").value="";byId("commanderQr").textContent="";clearTrainingPreview();byId("trainingPreviewToggle").hidden=true;viewEpoch++;last=null;transportUp=false;if(events){events.close();events=null;}conn.textContent='ไม่ได้เชื่อมต่อ';document.getElementById('login').hidden=false;document.getElementById('controls').hidden=true;document.getElementById('wbgtForm').hidden=true;document.getElementById('demo').hidden=true;byId("rosterBox").hidden=true;byId("privatePanel").open=false;clearPrivate();closeHistory();rosterData=null;groupPhaseData=null;groupPhaseBusy=false;operatorRole=null;

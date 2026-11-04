@@ -22,13 +22,14 @@ test("Commander private read-only link has strict isolation, redacted data, rota
   env:{...process.env,PORT:String(port),NODE_ENV:"test",COOKIE_SECURE:"1",
    STEVE_TEST_EPHEMERAL_COMMANDER:"1",STEVE_DEMO_MODE:"",STEVE_SYNTHETIC_MODE:"",
    STEVE_VIEWER_TOKEN:viewer,STEVE_GATEWAY_TOKEN_G01:gateway,
-   STEVE_SLOT_MAP_JSON:JSON.stringify({G01:{R01:"test-opaque-band-one"}}),
+   STEVE_SLOT_MAP_JSON:JSON.stringify({G01:{R01:"test-opaque-band-one",R02:"test-opaque-band-two"}}),
    STEVE_SUPABASE_URL:"",STEVE_SUPABASE_SERVICE_ROLE_KEY:"",STEVE_DATA_ENCRYPTION_KEY:""},
   stdio:"pipe"});
  try{
   await wait();
   let r=await request("/commander");
-  assert.equal(r.status,200);assert.match(r.text,/จอผู้บังคับบัญชา/);
+  assert.equal(r.status,200);assert.match(r.text,/สรุปการเฝ้าระวัง/);
+  assert.ok(!r.text.includes("จอผู้บังคับบัญชา"));
   assert.match(r.headers.get("referrer-policy"),/no-referrer/);
   assert.equal((await request("/api/commander/snapshot")).status,401);
   assert.equal((await request("/api/commander/share",{method:"POST"})).status,403);
@@ -60,7 +61,13 @@ test("Commander private read-only link has strict isolation, redacted data, rota
   assert.equal(r.json.people.find(p=>p.id==="R01").risk,"WATCH");
   assert.equal(r.json.people.find(p=>p.id==="R01").hr,78);
   assert.equal(r.json.people.find(p=>p.id==="R01").registered,true);
-  assert.ok(!JSON.stringify(r.json).includes("A001-PRIVATE-WEARER"));
+  assert.equal(r.json.people.find(p=>p.id==="R01").displayCode,"A001-PRIVATE-WEARER",
+   "authorized private view shows the assigned display identifier for each watch");
+  assert.equal(r.json.people.find(p=>p.id==="R02").displayCode,null,
+   "provisioned but unregistered Band must still appear without invented wearer identity");
+  assert.equal(r.json.people.find(p=>p.id==="R02").hr,null);
+  assert.deepEqual(r.json.people.map(p=>p.id).slice(0,2),["R01","R02"]);
+  assert.equal(r.json.people.find(p=>p.id==="R02").registered,false);
   assert.ok(!JSON.stringify(r.json).includes("test-opaque-band-one"));
   assert.ok(!JSON.stringify(r.json).includes("medications"));
   assert.ok(!JSON.stringify(r.json).includes("conditions"));
