@@ -77,7 +77,9 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 <h2>เชื่อมต่อสายรัด</h2>
 <p class="muted">เปิด Share HR บน Band แล้วเลือกเรือนที่ต้องการเชื่อมต่อ</p>
 <div class="quick"><button id="quickR01" disabled>เชื่อม R01 · 47FD</button><button id="quickR02" disabled>เชื่อม R02 · A746</button></div>
-<details class="advanced"><summary>ตั้งค่าเพิ่มเติม / แก้ปัญหา</summary><label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
+<div class="quick" id="extraBandControls" aria-label="เพิ่มนาฬิกาเรือนที่ 3 ถึง 5"></div>
+<p class="muted" id="extraBandHelp">สำหรับเรือนที่ 3–5 ต้องได้รับสิทธิ์ R03–R05 จากเซิร์ฟเวอร์ก่อน</p>
+<details class="advanced" id="advancedPair"><summary>ตั้งค่าเพิ่มเติม / แก้ปัญหา</summary><label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
 <label for="expected">รหัสท้ายชื่อ Band จากเรือนจริง (4 ตัว)<input id="expected" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="กรอกรหัสของเรือนที่จะผูกกับช่องนี้"></label>
 <label for="scanMode">โหมดสแกน<select id="scanMode"><option value="standard">A. Standard Heart Rate Scan</option><option value="broad">B. Broad BLE Scan — สแกนทั้งหมดเพื่อแก้ปัญหา</option><option value="known">C. เชื่อมอุปกรณ์ที่เคยอนุญาต (ถ้ารองรับ)</option></select></label>
 
@@ -87,12 +89,8 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 </details><div id="slots" aria-live="polite"></div>
 <section id="reservedSlots" aria-labelledby="reservedTitle">
 <h2 id="reservedTitle">ช่องอุปกรณ์เพิ่มเติม</h2>
-<p class="muted">R03–R05 • ยังไม่เชื่อมต่อ</p>
-<div class="reserved-slots">
-<article class="card"><h3>สายรัดตัวที่ 3 · ช่องสำรอง</h3><p class="waiting">รอเชื่อมต่อ</p><p>NO DATA</p><small>ยังไม่มีอุปกรณ์</small></article>
-<article class="card"><h3>สายรัดตัวที่ 4 · ช่องสำรอง</h3><p class="waiting">รอเชื่อมต่อ</p><p>NO DATA</p><small>ยังไม่มีอุปกรณ์</small></article>
-<article class="card"><h3>สายรัดตัวที่ 5 · ช่องสำรอง</h3><p class="waiting">รอเชื่อมต่อ</p><p>NO DATA</p><small>ยังไม่มีอุปกรณ์</small></article>
-</div>
+<p class="muted" id="reservedHint">ช่องที่ยังไม่ได้เชื่อมต่อจริง</p>
+<div class="reserved-slots" id="reservedSlotCards"></div>
 </section>
 </section>
 <p id="gatewaySessionNote" class="muted">Gateway G01–G03 ใช้งานได้สูงสุด 10 ชั่วโมง, G04–G05 สูงสุด 2 ชั่วโมง • ข้อมูลเกิน 15 วินาทีเป็น NO DATA</p>
@@ -146,8 +144,40 @@ function paintGatewayOverview(){
  $("gatewayUpload").textContent=!auth?"ยังไม่เชื่อมต่อ":
   acknowledged?"รับแล้ว "+acknowledged+" เรือน":fresh.length?"กำลังส่งข้อมูล":"รอ BPM จริง";
 }
+function paintOptionalBands(){
+ const permitted=provision.filter(p=>["R03","R04","R05"].includes(p.id));
+ const extras=$("extraBandControls");extras.replaceChildren();
+ for(const item of permitted){
+  const slot=item.id,button=element("button","secondary",sessions.has(slot)?slot+" • ดูสถานะ":"เพิ่ม "+slot);
+  button.type="button";button.disabled=connecting||chooserPending||document.hidden||!auth||live.has(slot);
+  button.addEventListener("click",()=>{
+   $("advancedPair").open=true;$("slot").value=slot;
+   $("expected").value=bindings.get(slot)?.expected||"";
+   $("scanMode").value="standard";
+   $("simpleStatus").textContent=slot+" • กรอกรหัสท้ายชื่อ Band (4 ตัว) แล้วกด เชื่อมต่อ Band 10";
+   $("expected").focus?.();
+  });
+  extras.append(button);
+ }
+ $("extraBandHelp").textContent=!auth?"เข้าใช้งาน G01 ก่อนเพิ่มเรือนที่ 3–5":
+  permitted.length?"เพิ่มทีละเรือน: เลือก R03/R04 → ใส่รหัสท้าย Band จริง → เชื่อมต่อ Band 10 (แต่ละเรือนต้อง Share HR)":
+  "R03–R05 ยังไม่ได้รับสิทธิ์จากเซิร์ฟเวอร์ • ตรวจ STEVE_SLOT_MAP_JSON ของ G01 ใน Render ก่อน";
+ const cards=$("reservedSlotCards");cards.replaceChildren();
+ const pending=["R03","R04","R05"].filter(slot=>!sessions.has(slot));
+ $("reservedSlots").hidden=pending.length===0;
+ $("reservedHint").textContent="R03–R05 • แสดงเฉพาะช่องที่ยังไม่ได้เริ่มเชื่อมต่อ";
+ for(const slot of pending){
+  const authorized=permitted.some(item=>item.id===slot);
+  const tile=element("article","card");
+  tile.append(element("h3","",slot+" • ช่องเพิ่มเติม"),
+   element("p","waiting",authorized?"พร้อมจับคู่":"รออนุญาตช่อง"),
+   element("p","","NO DATA"),
+   element("small","",authorized?"ยังไม่มี BPM จริง":"ยังไม่อยู่ในสิทธิ์ G01"));
+  cards.append(tile);
+ }
+}
 function controls(){
- paintGatewayOverview();
+ paintGatewayOverview();paintOptionalBands();
  for(const slot of ["R01","R02"])$("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||live.has(slot)||connecting||chooserPending||document.hidden;
  $("connect").disabled=!auth||!provision.length||connecting||chooserPending||document.hidden;
  $("load").disabled=loginPending||connecting||live.size>0;
