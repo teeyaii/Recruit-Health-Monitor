@@ -394,6 +394,7 @@ body.presentation .grid .card[data-risk]{min-height:0}
  </div>
  <div class="operator-actions">
   <button id="rosterSave" type="button">บันทึกข้อมูลทหารใหม่</button>
+  <button id="resolveLegacyObservation" type="button" class="secondary" hidden>สิ้นสุดสถานะเหตุเดิม หลังเจ้าหน้าที่ประเมินแล้ว</button>
   
  </div>
  <p id="rosterStatus" role="status"></p>
@@ -864,6 +865,7 @@ function fillRoster(){
  const p=selectedRecord();if(!p)return;
  byId("rosterCode").value=p.code||"";
  byId("rosterRestriction").value=p.restriction;
+ byId("resolveLegacyObservation").hidden=!p.code||!p.observation||p.observation==="none";
  if(byId("privatePanel").open)loadPrivateProfile();
  if(byId("medicPanel").open)loadMedicReview();
  byId("rosterStatus").textContent=(p.paused?"ช่องนี้ถูกพักไว้ • ตรวจผู้สวมแล้วกดบันทึกเพื่อเปิดรับ BPM อีกครั้ง":"พร้อมแก้ไข")
@@ -925,7 +927,26 @@ async function rosterAction(action){
 }
 byId("rosterSlot").onchange=fillRoster;
 byId("rosterSave").onclick=()=>rosterAction("save");
-// Manual incident entry removed.
+// Only clean up an existing historic manually set symptom after actual clinical review.
+// This is not an incident form and never closes automatic MEDIC cases.
+byId("resolveLegacyObservation").onclick=async()=>{
+ const p=selectedRecord();
+ if(!p?.code||!p.observation||p.observation==="none")return;
+ if(typeof window.confirm==="function"&&!window.confirm(
+  "ยืนยันว่าเจ้าหน้าที่ประเมินผู้สวม "+p.id+" แล้ว และอนุญาตให้สิ้นสุดสถานะเหตุเดิม? ไม่เกี่ยวกับการแจ้งเตือนอัตโนมัติ"
+ ))return;
+ const button=byId("resolveLegacyObservation");button.disabled=true;
+ try{
+  const r=await fetch("/api/roster/"+p.id,{method:"PUT",credentials:"same-origin",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({version:p.version,code:p.code,restriction:p.restriction,observation:"none"})});
+  if(!r.ok){const d=await r.json();throw Error(d.error||"HTTP "+r.status);}
+  await loadRoster(true);await snapshot();
+  byId("rosterStatus").textContent="สิ้นสุดสถานะเหตุเดิมหลังประเมินแล้ว • "+p.id+
+   " • เคสประเมินอัตโนมัติแยกต่างหาก";
+ }catch(e){byId("rosterStatus").textContent="สิ้นสุดสถานะเหตุเดิมไม่สำเร็จ • "+e.message;}
+ finally{button.disabled=false;}
+};
 let privateSlot=null,privateVersion=0,privateBusy=false;
 function updatePrivateBmi(){
  const w=Number(byId("privateWeight").value),h=Number(byId("privateHeight").value);
