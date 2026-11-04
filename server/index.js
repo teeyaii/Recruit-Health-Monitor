@@ -53,6 +53,7 @@ const SESSION_MS=8*60*60*1000;
 const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
 const webGateway=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/gateway.html");
 const commanderPage=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/commander.html");
+const qrGenerator=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/qrcode.min.js");
 const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/index.html");
 function viewer(req){
  const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -184,6 +185,11 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==="/gateway"&&req.method==="GET"){
   res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});
   res.end(await readFile(webGateway));return;
+ }
+ if(url.pathname==="/assets/qrcode.min.js"&&req.method==="GET"){
+  res.writeHead(200,{"Content-Type":"text/javascript; charset=utf-8","Cache-Control":"public, max-age=86400",
+   "X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"});
+  res.end(await readFile(qrGenerator));return;
  }
  if(url.pathname==="/commander"&&req.method==="GET"){
   res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store",
