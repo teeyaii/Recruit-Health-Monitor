@@ -441,6 +441,7 @@ body.presentation .grid .card[data-risk]{min-height:0}
   <div id="medicChart" class="medic-mini-chart" role="img" aria-label="กราฟ BPM จริงที่มีการบันทึก"></div>
   <p id="medicClinicalContext" class="status-note">ข้อมูลสุขภาพเฉพาะเจ้าหน้าที่</p>
   <p class="medic-caution">ข้อมูลจากสายรัดเป็นข้อมูลประกอบการตรวจ ไม่ใช่คำวินิจฉัย • ตรวจคุณภาพสัญญาณก่อนประเมิน</p>
+  <p id="medicRecoveryShadow" class="status-note">งานวิจัยช่วงพัก • ยังไม่มีข้อมูล</p>
   <div class="operator-actions"><button type="button" id="medicClose" class="secondary">ปิดรายการหลังประเมินแล้ว</button></div>
   <p id="medicMessage" role="status"></p>
  </details>
@@ -1047,6 +1048,7 @@ function clearMedicReview(){
  for(const id of ["medicReviewState","medicSignalQuality","medicLatestBpm","medicObservedMean","medicBaselineValue","medicBaselineDelta"])
   byId(id).textContent="—";
  byId("medicChart").textContent="";byId("medicClinicalContext").textContent="";
+ byId("medicRecoveryShadow").textContent="งานวิจัยช่วงพัก • ยังไม่มีข้อมูล";
  byId("medicMessage").textContent="";
  byId("medicClose").disabled=true;
 }
@@ -1073,7 +1075,28 @@ async function loadMedicReview(){
    " • WBGT "+(context.wbgtC??"—")+"°C • ยา: "+(context.medications||"ไม่มีข้อมูล")+
    " • ข้อควรระวัง: "+(context.conditions||"ไม่มีข้อมูล");
   renderMedicChart(data.points);
-
+  // Phase 2 is shadow-only: descriptive observations cannot change alert state.
+  const research=data.recoveryShadow;
+  const researchLabels={
+   not_applicable:"แสดงเมื่อมีการเปลี่ยนสถานะจากฝึกเป็นพักประจำชั่วโมง",
+   collecting:"กำลังรวบรวมข้อมูล 4 นาทีแรกของช่วงพัก",
+   insufficient:"ข้อมูลช่วงพักไม่เพียงพอสำหรับเปรียบเทียบ",
+   check_signal:"ข้อมูลขาดช่วงหรือเปลี่ยนฉับพลัน • ตรวจคุณภาพสัญญาณ",
+   window_expired:"ช่วงพักที่บันทึกไว้เกินหน้าต่างวิจัย"
+  };
+  let researchText=researchLabels[research?.status]||"ยังไม่มีข้อมูลเพียงพอ";
+  if(research?.status==="observed"&&Number.isFinite(research.changeBpm)){
+   const direction=research.changeBpm<0?"ต่ำลง":research.changeBpm>0?"สูงขึ้น":"ใกล้เคียงเดิม";
+   researchText="ค่ากึ่งกลาง BPM นาที 0–2: "+research.firstMedianBpm+
+    " • นาที 2–4: "+research.lateMedianBpm+" • "+direction+
+    " ("+Math.abs(research.changeBpm)+" BPM)"+
+    (Number.isFinite(research.baselineDifferenceBpm)?
+     " • เทียบ Baseline ที่ยืนยัน: "+(research.baselineDifferenceBpm>=0?"+":"")+
+     research.baselineDifferenceBpm+" BPM":" • ไม่มี Baseline ที่ยืนยัน");
+  }
+  byId("medicRecoveryShadow").textContent=
+   "Phase 2 / Shadow Research • "+researchText+
+   " • อิงสถานะฝึก/พักของกลุ่ม ไม่ยืนยันกิจกรรมจริงของบุคคล • ไม่สร้างคำเตือนหรือวินิจฉัย";
   byId("medicClose").disabled=review.status!=="pending";
   byId("medicMessage").textContent=signal.quality==="check_signal"?"ตรวจการสวมและสัญญาณก่อนใช้ประกอบการประเมิน":
    "ผลคัดกรองประกอบการตัดสินใจของเจ้าหน้าที่ • ไม่ใช่การวินิจฉัย";
