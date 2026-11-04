@@ -5,6 +5,8 @@ on:
     paths:
       - 'server/**'
       - 'dashboard/live.html'
+      - 'dashboard/commander.html'
+      - 'dashboard/qrcode.min.js'
       - 'dashboard/gateway.html'
       - 'dashboard/index.html'
       - 'README.md'
@@ -16,6 +18,8 @@ on:
     paths:
       - 'server/**'
       - 'dashboard/live.html'
+      - 'dashboard/commander.html'
+      - 'dashboard/qrcode.min.js'
       - 'dashboard/gateway.html'
       - 'dashboard/index.html'
       - 'README.md'
@@ -100,6 +104,7 @@ jobs:
         run: |
           node server/dashboard-browser-smoke.cjs
           node server/gateway-browser-smoke.cjs
+          node server/commander-browser-smoke.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

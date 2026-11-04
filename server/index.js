@@ -1,5 +1,6 @@
 import http from "node:http";
 import { GatewaySessions, gatewayBrowserRequest } from './gateway-session.js';
+import { CommanderAccess } from "./commander-access.js";
 import { randomUUID, randomBytes } from "node:crypto";
 import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway, provisionedDevicesForGateway } from "./contract.js";
 import { RosterStore } from "./roster.js";
@@ -19,6 +20,8 @@ const TTL_MS=15000;
 const DEMO_ENABLED=process.env.STEVE_DEMO_MODE==="1" && process.env.NODE_ENV!=="production";
 const MAX_AGE_MS=15000;
 const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && process.env.NODE_ENV!=="production");
+// Test-only ephemeral commander link issuance permits HTTP authorization tests without live Supabase.
+const COMMANDER_PERSISTENCE=process.env.NODE_ENV==="test"&&process.env.STEVE_TEST_EPHEMERAL_COMMANDER==="1";
 const recruits=new Map();
 const pulseHistory=new PulseHistory();
 const durable=new DurableState();
@@ -26,9 +29,11 @@ const archive=new RollingArchive(durable);
 const privateProfiles=new PrivateProfiles();
 const medicReviews=new MedicReviews();
 const autoHR=new AutoHRMonitor();
+const commander=new CommanderAccess();
+let commanderLinkBusy=false;
 let writeQueue=Promise.resolve(),historyDirty=false;
 function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
- profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions};}
+ profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions,commanderLink:commander.export()};}
 function persistState(){
  if(!durable.enabled)return Promise.resolve();
  writeQueue=writeQueue.catch(()=>{}).then(()=>durable.save(stateSnapshot()));
@@ -47,6 +52,8 @@ const lastByGateway=new Map();
 const SESSION_MS=8*60*60*1000;
 const liveDashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/live.html");
 const webGateway=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/gateway.html");
+const commanderPage=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/commander.html");
+const qrGenerator=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/qrcode.min.js");
 const dashboard=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../dashboard/index.html");
 function viewer(req){
  const cookie=req.headers.cookie?.match(/(?:^|;\s*)rhm_session=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -84,6 +91,23 @@ function snapshot(){const now=Date.now();
   return {id,autoCheck,monitoringStatus,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
    stale:state!=="CONNECTED",state,paused,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
+function commanderSnapshot(){
+ const now=Date.now(),all=snapshot();
+ const people=all.filter(r=>!!roster.get(r.id).code||r.hr!==null).map(r=>{
+  const record=roster.get(r.id),risk=record.observation==="confusion_collapse_seizure"?"EMERGENCY":
+   record.restriction==="watch"||record.restriction==="no_training"||record.observation==="dizzy_weak_nausea"?"WATCH":
+   r.autoCheck?"PAUSE_CHECK":"MONITOR";
+  // No wearer code/name, diagnoses, medicines, medical notes, physical IDs or credentials.
+  return {id:r.id,hr:r.hr,timestamp:r.timestamp,state:r.state,source:r.source,
+   risk,autoCheck:r.autoCheck,registered:!!record.code};
+ });
+ const phase=roster.getGroupPhase();
+ return {serverTime:now,source:SYNTHETIC?"SIMULATED":"GATEWAY",
+  training:{phase:phase.phase,changedAt:phase.changedAt},
+  medicPending:medicReviews.countPending(roster),
+  gateways:Array.from({length:5},(_,i)=>{const id="G0"+(i+1),last=lastByGateway.get(id)||0;
+   return {id,online:!!last&&now-last<=TTL_MS};}),people};
+}
 function publish(){const msg="data: "+JSON.stringify({type:"snapshot",recruits:snapshot()})+"\n\n";for(const [c,req] of clients){if(!viewer(req)){clients.delete(c);c.end();continue;}try{c.write(msg)}catch{clients.delete(c)}}}
 // Deliberately synthetic only. Demo cannot run when NODE_ENV=production.
 function demoTick(){
@@ -162,8 +186,69 @@ const server=http.createServer(async(req,res)=>{
   res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});
   res.end(await readFile(webGateway));return;
  }
+ if(url.pathname==="/assets/qrcode.min.js"&&req.method==="GET"){
+  res.writeHead(200,{"Content-Type":"text/javascript; charset=utf-8","Cache-Control":"public, max-age=86400",
+   "X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"});
+  res.end(await readFile(qrGenerator));return;
+ }
+ if(url.pathname==="/commander"&&req.method==="GET"){
+  res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store",
+   "Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff",
+   "Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});
+  res.end(await readFile(commanderPage));return;
+ }
  if(url.pathname==="/live"&&req.method==="GET"){
   res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(liveDashboard));return;
+ }
+ // Viewer links never authorize normal operator or Gateway APIs.
+ if(url.pathname.startsWith("/api/commander/")){
+  const commandCookie=req.headers.cookie?.match(/(?:^|;\s*)steve_command=([a-f0-9]{64})(?:;|$)/)?.[1];
+  const commandCookieHeader=value=>"steve_command="+value+"; HttpOnly; SameSite=Strict; Path=/api/commander/; Max-Age="+
+   (value?28800:0)+(process.env.COOKIE_SECURE==="1"?"; Secure":"");
+  if(url.pathname==="/api/commander/auth"&&req.method==="POST"){
+   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
+   try{
+    const body=await readBody(req,256),accepted=commander.authenticate(body?.token);
+    if(!accepted){send(res,401,{error:"invalid or expired viewing link"});return;}
+    res.setHeader("Set-Cookie",commandCookieHeader(accepted.key));
+    send(res,200,{ok:true,expiresAt:accepted.expiresAt});return;
+   }catch(e){send(res,e.status||400,{error:"invalid request"});return;}
+  }
+  if(url.pathname==="/api/commander/logout"&&req.method==="POST"){
+   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
+   commander.close(commandCookie);res.setHeader("Set-Cookie",commandCookieHeader(""));
+   send(res,200,{ok:true});return;
+  }
+  if(url.pathname==="/api/commander/status"&&req.method==="GET"){
+   if(!isViewer){send(res,403,{error:"operator session required"});return;}
+   send(res,200,commander.status());return;
+  }
+  if(url.pathname==="/api/commander/share"&&req.method==="POST"){
+   if(!isViewer){send(res,403,{error:"operator session required"});return;}
+   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
+   if(!durable.enabled&&!COMMANDER_PERSISTENCE){send(res,503,{error:"encrypted persistence required for revocable private links"});return;}
+   if(commanderLinkBusy){send(res,409,{error:"commander link update in progress"});return;}
+   commanderLinkBusy=true;const prior=commander.export();
+   try{const issued=commander.issue();await persistState();
+    send(res,200,{token:issued.token,expiresAt:issued.expiresAt});return;}
+   catch{commander.load(prior);send(res,503,{error:"link not saved; existing link unchanged"});return;}
+   finally{commanderLinkBusy=false;}
+  }
+  if(url.pathname==="/api/commander/revoke"&&req.method==="POST"){
+   if(!isViewer){send(res,403,{error:"operator session required"});return;}
+   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
+   if(!durable.enabled&&!COMMANDER_PERSISTENCE){send(res,503,{error:"encrypted persistence required"});return;}
+   if(commanderLinkBusy){send(res,409,{error:"commander link update in progress"});return;}
+   commanderLinkBusy=true;const prior=commander.export();
+   try{commander.revoke();await persistState();send(res,200,{ok:true});return;}
+   catch{commander.load(prior);send(res,503,{error:"revoke not saved"});return;}
+   finally{commanderLinkBusy=false;}
+  }
+  if(url.pathname==="/api/commander/snapshot"&&req.method==="GET"){
+   if(!commander.authorized(commandCookie)){send(res,401,{error:"view link expired or revoked"});return;}
+   send(res,200,commanderSnapshot());return;
+  }
+  send(res,404,{error:"not found"});return;
  }
  if(!isViewer&&!isGateway){send(res,401,{error:"unauthorized"});return;}
  if(req.method==="GET"&&url.pathname==="/"){res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store","Content-Security-Policy":"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"});res.end(await readFile(dashboard));return;}
@@ -447,6 +532,7 @@ async function boot(){
    roster.loadData(state.roster);privateProfiles.load(state.profiles);pulseHistory.load(state.history);
    if(state.medicReviews)medicReviews.load(state.medicReviews);
    if(state.conditions&&typeof state.conditions==="object")conditions=state.conditions;
+   if(state.commanderLink)commander.load(state.commanderLink);
   }
  }
  server.listen(PORT,"0.0.0.0",()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));

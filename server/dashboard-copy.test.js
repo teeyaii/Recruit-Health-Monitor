@@ -27,7 +27,10 @@ test("Dashboard uses concise commander copy and keeps real emergency indicators"
    "statLive","statNoData","statWatch","statPaused","rosterBox","historyPanel"]){
   assert.ok(dashboard.includes('id="'+id+'"'),id);
  }
- assert.ok(dashboard.includes("data-ack-slot"));
+ assert.ok(!dashboard.includes("data-ack-slot"));
+ assert.ok(dashboard.includes('id="commanderShareBox"'));
+ assert.ok(!dashboard.includes('id="rosterObservation"'));
+ assert.ok(!dashboard.includes('id="medicNote"'));
  assert.ok(dashboard.includes("ยังเป็น EMERGENCY"));
  assert.ok(dashboard.includes("NO DATA"));
 });
