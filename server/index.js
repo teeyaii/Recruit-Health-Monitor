@@ -93,13 +93,15 @@ function snapshot(){const now=Date.now();
  });}
 function commanderSnapshot(){
  const now=Date.now(),all=snapshot();
- const people=all.filter(r=>!!roster.get(r.id).code||r.hr!==null).map(r=>{
+ const people=all.filter(r=>!!roster.get(r.id).code||r.timestamp!==null).map(r=>{
   const record=roster.get(r.id),risk=record.observation==="confusion_collapse_seizure"?"EMERGENCY":
    record.restriction==="watch"||record.restriction==="no_training"||record.observation==="dizzy_weak_nausea"?"WATCH":
    r.autoCheck?"PAUSE_CHECK":"MONITOR";
-  // No wearer code/name, diagnoses, medicines, medical notes, physical IDs or credentials.
-  return {id:r.id,hr:r.hr,timestamp:r.timestamp,state:r.state,source:r.source,
-   risk,autoCheck:r.autoCheck,registered:!!record.code};
+  // A private read-only link may display the operator-registered wearer code
+  // so the owner can identify R01–R15; never send clinical profiles, diagnoses,
+  // medicines, medical notes, physical BLE identifiers or credentials.
+  return {id:r.id,displayCode:record.code??null,hr:r.hr,timestamp:r.timestamp,
+   state:r.state,source:r.source,risk,autoCheck:r.autoCheck,registered:!!record.code};
  });
  const phase=roster.getGroupPhase();
  return {serverTime:now,source:SYNTHETIC?"SIMULATED":"GATEWAY",
