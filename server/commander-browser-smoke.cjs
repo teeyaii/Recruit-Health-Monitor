@@ -11,6 +11,7 @@ const fs=require("fs"),assert=require("node:assert/strict");
   let state={serverTime:Date.now(),training:{phase:"training",changedAt:Date.now()},
    medicPending:1,gateways:[{id:"G01",online:true},{id:"G02",online:false}],
    people:[
+    {id:"R10",displayCode:"Z010-LAST",registered:true,hr:null,timestamp:null,state:"DISCONNECTED",risk:"MONITOR",autoCheck:false},
     {id:"R04",displayCode:"B018-PEERAWIT",registered:true,hr:null,timestamp:null,state:"NO DATA",risk:"MONITOR",autoCheck:false},
     {id:"R03",displayCode:"A001-MAYTASIT",registered:true,hr:82,timestamp:Date.now(),state:"CONNECTED",risk:"MONITOR",autoCheck:false},
     {id:"R02",displayCode:"C015-KANCHAT",registered:true,hr:null,timestamp:null,state:"DISCONNECTED",risk:"EMERGENCY",autoCheck:false},
@@ -26,18 +27,18 @@ const fs=require("fs"),assert=require("node:assert/strict");
   await page.route("**/api/commander/logout",r=>r.fulfill({contentType:"application/json",body:'{"ok":true}'}));
   await page.goto(url);await page.waitForFunction(()=>!document.getElementById("dashboard").hidden);
   assert.equal(authCount,1);assert.equal(await page.evaluate(()=>location.hash),"","link secret must leave address bar");
-  assert.equal(await page.locator("#cards .person").count(),4);
-  assert.deepEqual(await page.locator("#cards .slot").allTextContents(),["R01","R02","R03","R04"],
+  assert.equal(await page.locator("#cards .person").count(),5);
+  assert.deepEqual(await page.locator("#cards .slot").allTextContents(),["R01","R02","R03","R04","R10"],
    "all wearable slots appear by R-code, not risk order");
   assert.deepEqual(await page.locator("#cards .person-name").allTextContents(),
-   ["R001-TEST","C015-KANCHAT","A001-MAYTASIT","B018-PEERAWIT"]);
-  assert.equal(await page.locator("#enrolled").innerText(),"4");
-  assert.equal(await page.locator("#itemCount").innerText(),"(4)");
+   ["R001-TEST","C015-KANCHAT","A001-MAYTASIT","B018-PEERAWIT","Z010-LAST"]);
+  assert.equal(await page.locator("#enrolled").innerText(),"5");
+  assert.equal(await page.locator("#itemCount").innerText(),"(5)");
   assert.ok(!(await page.locator("body").innerText()).includes("จอผู้บังคับบัญชา"));
   assert.equal(await page.locator("#emergency").innerText(),"1");
   assert.equal(await page.locator("#watch").innerText(),"1");
   assert.equal(await page.locator("#fresh").innerText(),"2");
-  assert.equal(await page.locator("#missing").innerText(),"2");
+  assert.equal(await page.locator("#missing").innerText(),"3");
   assert.ok((await page.locator("#cards").innerText()).includes("DISCONNECTED"));
   assert.equal(await page.locator("#cards .bpm").allInnerTexts().then(x=>x.includes("— BPM")),true);
   const bodyText=await page.locator("body").innerText();
@@ -52,7 +53,7 @@ const fs=require("fs"),assert=require("node:assert/strict");
   state={...state,serverTime:Date.now(),people:state.people.map(p=>({...p,hr:null,timestamp:Date.now()-20000,state:"STALE"}))};
   await page.locator("#refresh").click();
   await page.waitForFunction(()=>document.getElementById("fresh").textContent==="0");
-  assert.equal(await page.locator("#missing").innerText(),"4");
+  assert.equal(await page.locator("#missing").innerText(),"5");
   assert.ok(!(await page.locator("#cards").innerText()).includes("76 BPM"),"stale BPM must not remain live");
   access=false;await page.locator("#refresh").click();
   await page.waitForFunction(()=>document.getElementById("dashboard").hidden);
