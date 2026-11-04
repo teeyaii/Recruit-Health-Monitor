@@ -15,7 +15,7 @@ class Element {
  remove(){}
  click(){return this.listeners.click?.();}
 }
-function harness(){
+function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}]){
  const nodes=new Map(), intervals=[], timers=new Map();let timerId=0;let clock=100000;
  const document={hidden:false,listeners:{},getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement(){return new Element();},addEventListener(n,f){this.listeners[n]=f;}};
  const window={isSecureContext:true,addEventListener(){}};
@@ -24,7 +24,7 @@ function harness(){
  class Clock extends Date {static now(){return clock;}}
  const context={document,window,navigator:{bluetooth},Date:Clock,Map,Set,AbortController,setInterval(f){intervals.push(f);},setTimeout(f,ms){timers.set(++timerId,{f,at:clock+ms});return timerId;},clearTimeout(id){timers.delete(id);},fetch:async(url,options)=>{
   fetches.push({url,options});
-  if(url==='/api/gateway/provision')return {ok:true,json:async()=>({gateway:'G01',slots:[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}]})};
+  if(url==='/api/gateway/provision')return {ok:true,json:async()=>({gateway:'G01',slots:provisionedSlots})};
   return typeof uploadResponse==='function'?uploadResponse():uploadResponse;
  }};
  vm.createContext(context);
@@ -270,4 +270,37 @@ test('opt-in lock screen without fresh data stays NO DATA; dim fallback restores
  h.hide();await flush();
  assert.equal(h.api.live.size,0,'normal foreground-only safeguard restored by fallback');
  assert.equal(band.gatt.connected,false);
+});
+
+test('G01 can provision R03 and R04 on one Bluefy page and keep four physical sessions separate',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},
+  {id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}]);
+ await h.login();
+ assert.equal(h.get('extraBandControls').children.length,2,'only authorized additional slots have controls');
+ assert.equal(h.get('reservedSlotCards').children.length,3,'unpaired R03–R05 begin as NO DATA');
+ const list=[['R01','AB12',69],['R02','CD34',81],['R03','EF12',93],['R04','CD56',103]];
+ for(const [slot,suffix] of list)await h.connect(device('physical-'+slot,suffix),slot,suffix);
+ assert.equal(h.api.live.size,4,'G01 does not enforce a two-device cap in JavaScript');
+ assert.equal(h.get('reservedSlotCards').children.length,1,'paired R03/R04 are not falsely listed as vacant');
+ for(const [slot,suffix,bpm] of list)h.api.live.get(slot).device.emit([6,bpm]);
+ await flush();
+ const samples=h.fetches.filter(x=>x.url==='/api/ingest')
+  .map(x=>JSON.parse(x.options.body)).filter(x=>Number.isInteger(x.readings[0].hr));
+ assert.equal(samples.length,4);
+ for(const [slot,suffix,bpm] of list){
+  assert.equal(h.api.live.get(slot).bpm,bpm);
+  assert.ok(samples.some(x=>x.gateway==='G01'&&x.readings[0].id===slot&&x.readings[0].hr===bpm));
+ }
+ assert.equal(new Set(samples.map(x=>x.readings[0].device_id)).size,4);
+ await h.api.stopped(h.api.live.get('R03'));
+ h.api.live.get('R04').device.emit([6,104]);await flush();
+ assert.equal(h.api.live.get('R04').bpm,104,'disconnecting R03 does not disrupt R04');
+});
+test('unprovisioned R03/R04 cannot open BLE chooser or pretend to be connected',async()=>{
+ const h=harness();await h.login();
+ assert.equal(h.get('extraBandControls').children.length,0);
+ assert.match(h.get('extraBandHelp').textContent,/STEVE_SLOT_MAP_JSON/);
+ await h.api.connectBand('R03','EF12','standard');
+ assert.equal(h.calls.length,0);
+ assert.equal(h.api.live.size,0);
 });
