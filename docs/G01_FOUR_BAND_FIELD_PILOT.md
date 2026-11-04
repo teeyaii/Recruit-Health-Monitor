@@ -34,3 +34,16 @@
 
 ## Success criteria
 Four distinct physical Band 10 devices, one iPhone/Bluefy page, G01 authorized R01–R04 slots, four independent fresh BPM streams and server acknowledgments, >=10 min continuous foreground observation with no identity cross-over or false LIVE; record 60-min stability separately. Hardware tests must be reported by the operator.
+
+## Optional no-overwrite Render provisioning (4 November 2026)
+For existing working LIVE configurations where the integration **cannot read the current secret-bearing `STEVE_SLOT_MAP_JSON`**, do **not** replace the base JSON with guessed R01/R02 mappings. Instead, the backend accepts one optional additional variable:
+
+```json
+{"G01":{"R03":"trial_g01_r03_20261104","R04":"trial_g01_r04_20261104"}}
+```
+
+Set this as `STEVE_SLOT_MAP_EXTRA_JSON` on the **same** existing Render service. These strings are server-internal, unique, anonymous device aliases; they are neither Bluetooth MAC addresses nor four-character physical suffixes. Existing gateway cookies and bearer secrets remain untouched. The server validates every original and extra mapping together, fails startup on duplicate R-slot or device aliases, forbids extra-only gateways and refuses extra mapping without an original base mapping. Do not override or remove the base `STEVE_SLOT_MAP_JSON`. Never replace all Render environment variables.
+
+The expected authorized G01 slots after redeploy are R01, R02, R03, R04. The Bluefy UI receives the aliases through authenticated provisioning. First check R01/R02 independently and ensure the backend reports fresh Server ACK for R03/R04 before attempting prolonged use. If an environment update creates an unhealthy deploy, revert only the new optional `STEVE_SLOT_MAP_EXTRA_JSON` key; the original base configuration must remain unchanged.
+
+No change to real profiles, roster, historical measurements or clinical alerting is implied. A Render Free restart may temporarily interrupt real BLE telemetry or volatile state.

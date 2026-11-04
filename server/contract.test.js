@@ -24,10 +24,20 @@ test("strict gateway isolation, mapping, viewer permissions, manual WBGT and sta
   cwd:new URL(".",import.meta.url),
   env:{...process.env,PORT:String(port),RECRUIT_MONITOR_TOKEN:"",
    STEVE_VIEWER_TOKEN:viewerSecret,STEVE_GATEWAY_TOKENS_JSON:JSON.stringify(gatewayTokens),
-   STEVE_SLOT_MAP_JSON:JSON.stringify(slotMap),NODE_ENV:"test"},stdio:"pipe"
+   STEVE_SLOT_MAP_JSON:JSON.stringify(slotMap),
+   STEVE_SLOT_MAP_EXTRA_JSON:JSON.stringify({G01:{R04:"pilot-additive-04",R05:"pilot-additive-05"}}),
+   NODE_ENV:"test"},stdio:"pipe"
  });
  try {
   await waitForReady();
+  let extra=await fetch(base+"/api/gateway/provision",{headers:{Authorization:"Bearer "+gatewayTokens.G01}});
+  assert.equal(extra.status,200);
+  let provision=await extra.json();
+  assert.deepEqual(provision.slots.map(x=>x.id),["R01","R02","R04","R05"],"additive map must preserve every existing G01 slot");
+  extra=await fetch(base+"/api/gateway/provision",{headers:{Authorization:"Bearer "+gatewayTokens.G02}});
+  assert.equal(extra.status,200);
+  provision=await extra.json();
+  assert.deepEqual(provision.slots.map(x=>x.id),["R03"],"other gateway remains isolated");
   let r=await post("/api/ingest",{gateway:"G01",readings:[]},headers("G02"));
   assert.equal(r.status,403,"gateway G02 cannot impersonate G01");
   r=await post("/api/ingest",{gateway:"G01",readings:[]},{Authorization:"Bearer "+viewerSecret});
@@ -37,6 +47,9 @@ test("strict gateway isolation, mapping, viewer permissions, manual WBGT and sta
    {id:"R02",device_id:"synthetic-device-02",hr:75,timestamp:Date.now()}
   ]},headers("G01"));
   assert.equal(r.status,200);assert.equal((await r.json()).accepted,1,"reject wrong device assignment");
+  r=await post("/api/ingest",{gateway:"G01",readings:[
+   {id:"R04",device_id:"pilot-additive-04",hr:74,timestamp:Date.now()}]},headers("G01"));
+  assert.equal((await r.json()).accepted,1,"newly authorized R04 accepts real fresh G01 measurement");
   r=await post("/api/ingest",{gateway:"G02",readings:[
    {id:"R01",device_id:"synthetic-device-01",hr:90,timestamp:Date.now()},
    {id:"R03",device_id:"synthetic-device-03",hr:91,timestamp:Date.now()}
@@ -79,4 +92,23 @@ test("reject conflicting device assignments at startup",async()=>{
    RECRUIT_MONITOR_TOKEN:"",NODE_ENV:"test"},stdio:"ignore"});
  const exit=await new Promise(resolve=>proc.once("exit",code=>resolve(code)));
  assert.notEqual(exit,0);
+});
+
+test("additive map rejects duplicate existing slot, duplicate device, unknown gateway and missing base",async()=>{
+ const bad=[
+  {base:slotMap,extra:{G01:{R01:"collision-slot"}}},
+  {base:slotMap,extra:{G01:{R04:"synthetic-device-01"}}},
+  {base:slotMap,extra:{G03:{R04:"extra-device-04"}}},
+  {base:null,extra:{G01:{R04:"extra-device-04"}}}
+ ];
+ for(const [i,caseData] of bad.entries()){
+  const env={...process.env,PORT:String(port+10+i),RECRUIT_MONITOR_TOKEN:"",
+   STEVE_VIEWER_TOKEN:viewerSecret,STEVE_GATEWAY_TOKENS_JSON:JSON.stringify(gatewayTokens),
+   NODE_ENV:"test",STEVE_SLOT_MAP_EXTRA_JSON:JSON.stringify(caseData.extra)};
+  if(caseData.base!==null)env.STEVE_SLOT_MAP_JSON=JSON.stringify(caseData.base);
+  else delete env.STEVE_SLOT_MAP_JSON;
+  const proc=spawn(process.execPath,["index.js"],{cwd:new URL(".",import.meta.url),env,stdio:"ignore"});
+  const exit=await new Promise(resolve=>proc.once("exit",code=>resolve(code)));
+  assert.notEqual(exit,0,"invalid additive case "+i+" must fail at startup");
+ }
 });
