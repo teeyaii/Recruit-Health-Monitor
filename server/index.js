@@ -93,7 +93,7 @@ function snapshot(){const now=Date.now();
  });}
 function commanderSnapshot(){
  const now=Date.now(),all=snapshot();
- const people=all.filter(r=>!!roster.get(r.id).code||r.timestamp!==null).map(r=>{
+ const people=all.filter(r=>!!roster.get(r.id).code||r.timestamp!==null||r.gateway!==null).map(r=>{
   const record=roster.get(r.id),risk=record.observation==="confusion_collapse_seizure"?"EMERGENCY":
    record.restriction==="watch"||record.restriction==="no_training"||record.observation==="dizzy_weak_nausea"?"WATCH":
    r.autoCheck?"PAUSE_CHECK":"MONITOR";
