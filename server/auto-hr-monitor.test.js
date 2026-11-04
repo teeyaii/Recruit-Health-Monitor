@@ -123,3 +123,32 @@ test("TEST ONLY: failed private write rollback cannot erase another wearer or ne
  assert.equal(p.rollback("R01",second,undefined),false);
  assert.equal(p.get("R01","TEST003").version,1);
 });
+
+test("TEST ONLY: four independent streams retain exact measured trigger evidence",()=>{
+ const m=new AutoHRMonitor(),t=1793100000000,events=[];
+ for(let i=0;i<6;i++)for(let n=1;n<=4;n++){
+  const r=m.ingest(`R0${n}`,`TEST00${n}`,n===2?80:160,t+i*7000,n===3?null:150,{training:true,real:n!==4});
+  if(r.trigger)events.push(r);
+ }
+ assert.equal(events.length,1);
+ assert.deepEqual(events[0].evidence,{rule:"sustained_personal_limit",firstAt:t,lastAt:t+35000,sampleCount:6,latestBpm:160});
+});
+
+test("TEST ONLY: evidence survives escalation and reload without leaking arbitrary fields",async()=>{
+ const {explainAutoReview}=await import('./medic-review.js');
+ const r=new MedicReviews(),t=1793100000000;
+ const e={rule:'sustained_personal_limit',firstAt:t,lastAt:t+35000,sampleCount:6,latestBpm:160,conditions:'PRIVATE'};
+ r.update('R01','TEST001',{version:0,action:'request',reason:'other',note:'PRIVATE'},'trainer',t);
+ r.autoRequest('R01','TEST001','high_sustained',t+35000,e);
+ const restored=new MedicReviews();restored.load(r.export());
+ const explanation=explainAutoReview(restored.get('R01','TEST001'));
+ assert.match(explanation.summary,/160 BPM.*6 ค่า.*35 วินาที/);
+ assert.equal(JSON.stringify(explanation).includes('PRIVATE'),false);
+ r.autoRequest('R01','TEST001','high_sustained',t+42000,{...e,lastAt:t+42000});
+ assert.equal(r.get('R01','TEST001').autoEvidence.lastAt,t+35000,'one unresolved event keeps original evidence');
+ assert.throws(()=>r.autoRequest('R02','TEST002','high_sustained',t,{...e,sampleCount:1}),{status:422});
+ const old=new MedicReviews();old.autoRequest('R02','TEST002','high_sustained',t);
+ assert.equal(explainAutoReview(old.get('R02','TEST002')).evidence,null);
+ old.update('R02','TEST002',{version:1,action:'close'},'medic',t+1);
+ assert.equal(explainAutoReview(old.get('R02','TEST002')),null);
+});

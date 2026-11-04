@@ -10,6 +10,27 @@ const err=(status,message)=>Object.assign(new Error(message),{status});
 const blank=(slot,code)=>({slot,code,status:"none",reason:null,note:"",version:0,
  requestedAt:null,closedAt:null,openedBy:null,closedBy:null});
 const noteValid=s=>typeof s==="string"&&s.length<=240&&!/[<>\u0000-\u001f]/.test(s);
+// Persist only measured trigger evidence, never an inferred diagnosis or confidence.
+export function validAutoEvidence(e){
+ return !!e&&e.rule==="sustained_personal_limit"&&
+  Number.isSafeInteger(e.firstAt)&&e.firstAt>=0&&Number.isSafeInteger(e.lastAt)&&
+  e.lastAt-e.firstAt>=30000&&e.lastAt-e.firstAt<=60000&&
+  Number.isSafeInteger(e.sampleCount)&&e.sampleCount>=5&&
+  Number.isInteger(e.latestBpm)&&e.latestBpm>=25&&e.latestBpm<=240;
+}
+function copyEvidence(e){
+ if(!validAutoEvidence(e))throw err(422,"Invalid automatic evidence");
+ return {rule:e.rule,firstAt:e.firstAt,lastAt:e.lastAt,sampleCount:e.sampleCount,latestBpm:e.latestBpm};
+}
+export function explainAutoReview(review){
+ if(review?.status!=="pending"||!(review.openedBy==="system"||review.autoPauseRequired))return null;
+ const e=validAutoEvidence(review.autoEvidence)?copyEvidence(review.autoEvidence):null;
+ return {reason:"ตรวจพบชีพจรสูงต่อเนื่องเกินเกณฑ์รายบุคคลที่ได้รับการยืนยัน",
+  evidence:e,summary:e?`ขณะแจ้งเตือน ${e.latestBpm} BPM • ${e.sampleCount} ค่า ใน ${(e.lastAt-e.firstAt)/1000} วินาที`:
+   "ไม่มีรายละเอียดค่าขณะแจ้งเตือนของเคสเดิม",
+  limitation:"การคัดกรองคุณภาพสัญญาณไม่ใช่การตรวจความผิดปกติที่ผ่านการรับรองทางคลินิก",
+  action:"พักกิจกรรม ตรวจยืนยันชีพจรและให้เจ้าหน้าที่ประเมินอาการ"};
+}
 export class MedicReviews{
  constructor(){this.records={};}
  export(){return structuredClone(this.records);}
@@ -19,6 +40,7 @@ export class MedicReviews{
    if(!validSlots.has(slot)||p?.slot!==slot||typeof p.code!=="string"||
     !["pending","closed"].includes(p.status)||!REVIEW_REASONS.has(p.reason)||
     (p.autoPauseRequired!==undefined&&typeof p.autoPauseRequired!=="boolean")||
+    (p.autoEvidence!==undefined&&!validAutoEvidence(p.autoEvidence))||
     !noteValid(p.note)||!Number.isSafeInteger(p.version)||p.version<1||
     !Number.isSafeInteger(p.requestedAt)||p.requestedAt<0||
     (p.closedAt!==null&&(!Number.isSafeInteger(p.closedAt)||p.closedAt<p.requestedAt))||
@@ -46,17 +68,18 @@ export class MedicReviews{
    return !!code&&!!p&&p.status==="pending"&&p.code.toUpperCase()===code.toUpperCase();
   }).length;
  }
- autoRequest(slot,code,reason,now=Date.now()){
+ autoRequest(slot,code,reason,now=Date.now(),evidence=null){
+  const measured=evidence===null?{}:{autoEvidence:copyEvidence(evidence)};
   if(!REVIEW_REASONS.has(reason))throw err(422,"Invalid automatic review reason");
   const prev=this.get(slot,code);
   if(prev.status==="pending"){
    if(prev.openedBy==="system"||prev.autoPauseRequired)return {created:false,review:prev};
    // Escalate the existing ticket without duplicating it or overwriting notes.
-   const next={...prev,autoPauseRequired:true,version:prev.version+1};
+   const next={...prev,...measured,autoPauseRequired:true,version:prev.version+1};
    this.records[slot]=next;
    return {created:false,escalated:true,review:structuredClone(next)};
   }
-  const next={slot,code,status:"pending",reason,note:"",version:prev.version+1,
+  const next={slot,code,...measured,status:"pending",reason,note:"",version:prev.version+1,
    requestedAt:now,closedAt:null,openedBy:"system",closedBy:null};
   this.records[slot]=next;
   return {created:true,review:structuredClone(next)};

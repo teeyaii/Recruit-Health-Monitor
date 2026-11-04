@@ -34,6 +34,7 @@ export class AutoHRMonitor {
   if(!sustained||old.latched)return {trigger:false,reason:old.latched?"already_alerted":"confirming",limitBpm:limit};
   old.latched=true;
   return {trigger:true,reason:"sustained_personal_limit",at,limitBpm:limit,latestBpm:bpm,
+   evidence:{rule:"sustained_personal_limit",firstAt:old.samples[0].at,lastAt:at,sampleCount:old.samples.length,latestBpm:bpm},
    advice:"พักกิจกรรมและตรวจผู้สวมทันที • ยืนยันชีพจร/อาการและตรวจสายรัดก่อนประเมิน"};
  }
 }

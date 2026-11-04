@@ -157,7 +157,17 @@ function draw(data){
   const signal=document.createElement("div");signal.className="signal"+(live?"":" offline");
   signal.textContent=live?"LIVE • "+Math.max(0,Math.floor((now-p.timestamp)/1000))+" วิ":
    p.state==="DISCONNECTED"?"ขาดการเชื่อมต่อ":"NO DATA";
-  reading.append(bpm,signal);card.append(head,name,reading);cards.append(card);
+  reading.append(bpm,signal);card.append(head,name,reading);
+  if(p.autoCheck){
+   const detail=document.createElement("details"),label=document.createElement("summary"),text=document.createElement("small");
+   label.textContent="ควรพักและตรวจ";
+   const a=p.autoAlert,e=a?.evidence;
+   text.textContent=[a?.reason||"ตรวจพบชีพจรสูงต่อเนื่อง",a?.summary||"ไม่มีรายละเอียดค่าขณะแจ้งเตือนของเคสเดิม",
+    e?"เวลาค่าที่ใช้แจ้งเตือน "+new Date(e.lastAt).toLocaleString("th-TH"):"",
+    a?.action||"พักกิจกรรม ตรวจยืนยันชีพจรและให้เจ้าหน้าที่ประเมินอาการ",a?.limitation||""].filter(Boolean).join(" • ");
+   detail.append(label,text);card.append(detail);
+  }
+  cards.append(card);
  }
  if(!items.length){const empty=document.createElement("p");empty.className="safety";
   empty.textContent="ยังไม่มีผู้ลงทะเบียนหรือสัญญาณจาก Band";cards.append(empty);}
