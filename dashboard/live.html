@@ -362,6 +362,14 @@ body.presentation .grid .card[data-risk]{min-height:0}
 
 <form id="login"><input id="token" type="password" autocomplete="off" placeholder="รหัสเข้าถึง Dashboard" required><button>เข้าสู่ระบบ</button></form>
 <div id="controls" hidden><button id="logout">ออกจากระบบ</button><button id="refresh">โหลดข้อมูลล่าสุด</button></div>
+<section id="commanderShareBox" class="operator-box" hidden aria-label="ลิงก์จอผู้บังคับบัญชา" style="margin:14px 0">
+ <h2>จอผู้บังคับบัญชา • เปิดดูอย่างเดียว</h2>
+ <p class="status-note">สร้างลิงก์ส่วนตัวอายุ 7 วันสำหรับผู้มีสิทธิ์ดูข้อมูล • ไม่ต้องพิมพ์รหัส • ไม่แสดงชื่อ รหัสประจำตัว โรค หรือยา • ห้ามแชร์ลิงก์สาธารณะ</p>
+ <div class="operator-actions"><button type="button" id="commanderShare">สร้างลิงก์ส่วนตัวใหม่</button><button type="button" id="commanderRevoke" class="secondary">ยกเลิกลิงก์เดิม</button></div>
+ <div id="commanderLinkBox" hidden><label>ลิงก์ส่วนตัว • คัดลอกและส่งให้ผู้มีสิทธิ์<input id="commanderLink" readonly autocomplete="off" spellcheck="false"></label>
+ <div class="operator-actions"><button type="button" id="commanderCopy">คัดลอกลิงก์</button><button type="button" id="commanderNativeShare" class="secondary">แชร์ผ่าน iPhone</button></div></div>
+ <p id="commanderShareStatus" class="status-note" role="status">ยังไม่ได้ตรวจสิทธิ์</p>
+</section>
 <div id="demo" class="notice" hidden>
  <strong>DEMO / SIMULATED DATA ONLY — ไม่ใช่ชีพจรของทหารจริง</strong>
  <p id="demoState">พร้อมทดสอบระบบ</p>
@@ -379,11 +387,11 @@ body.presentation .grid .card[data-risk]{min-height:0}
   <label>ช่องผู้ฝึก<select id="rosterSlot"><option value="R01">R01</option><option value="R02">R02</option><option value="R03">R03</option><option value="R04">R04</option><option value="R05">R05</option><option value="R06">R06</option><option value="R07">R07</option><option value="R08">R08</option><option value="R09">R09</option><option value="R10">R10</option><option value="R11">R11</option><option value="R12">R12</option><option value="R13">R13</option><option value="R14">R14</option><option value="R15">R15</option></select></label>
   <label>รหัสประจำตัว (หน่วยกำหนด)<input id="rosterCode" placeholder="a001" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" maxlength="24"></label>
   <label>ข้อจำกัดการฝึกจากผู้รับผิดชอบ<select id="rosterRestriction"><option value="none">ยังไม่ระบุ</option><option value="watch">ให้ติดตามเป็นพิเศษ</option><option value="no_training">งดกิจกรรมจนกว่าจะประเมิน</option></select></label>
-   <label>อาการที่มีผู้สังเกตและบันทึก<select id="rosterObservation"><option value="none">ยังไม่มีการแจ้งเหตุ</option><option value="dizzy_weak_nausea">เวียนศีรษะ / อ่อนแรง / คลื่นไส้ — หยุดประเมิน</option><option value="confusion_collapse_seizure">สับสน / หมดสติ / ชัก — ฉุกเฉิน</option></select></label>
+   
  </div>
  <div class="operator-actions">
   <button id="rosterSave" type="button">บันทึกข้อมูลทหารใหม่</button>
-  <button id="rosterAcknowledge" type="button">รับทราบเหตุ</button>
+  
  </div>
  <p id="rosterStatus" role="status"></p>
  
@@ -415,7 +423,7 @@ body.presentation .grid .card[data-risk]{min-height:0}
   <p id="privateStatus" role="status">เลือกผู้สวมที่ลงทะเบียนแล้ว</p>
  </details>
  <details id="medicPanel" class="medic-review-panel" hidden>
-  <summary><span>MEDIC REVIEW</span> <small>ติดตาม / ขอประเมิน</small></summary>
+  <summary><span>MEDIC REVIEW</span> <small>ผลคัดกรองและการประเมิน</small></summary>
   <div class="medic-review-top">
    <div><small>สถานะรายการ</small><strong id="medicReviewState">ยังไม่มีรายการ</strong></div>
    <div><small>คุณภาพสัญญาณ</small><strong id="medicSignalQuality">รอตรวจ</strong></div>
@@ -429,18 +437,7 @@ body.presentation .grid .card[data-risk]{min-height:0}
   <div id="medicChart" class="medic-mini-chart" role="img" aria-label="กราฟ BPM จริงที่มีการบันทึก"></div>
   <p id="medicClinicalContext" class="status-note">ข้อมูลสุขภาพเฉพาะเจ้าหน้าที่</p>
   <p class="medic-caution">ข้อมูลจากสายรัดเป็นข้อมูลประกอบการตรวจ ไม่ใช่คำวินิจฉัย • ตรวจคุณภาพสัญญาณก่อนประเมิน</p>
-  <label>เหตุผลที่ขอประเมิน<select id="medicReason">
-   <option value="high_sustained">ชีพจรสูงต่อเนื่องเมื่อเทียบกับข้อมูลรายบุคคล</option>
-   <option value="rest_recovery">รูปแบบชีพจรหลังฝึก/ขณะพัก</option>
-   <option value="sudden_change">ชีพจรเปลี่ยนฉับพลัน / ตรวจสัญญาณ</option>
-   <option value="medical_context">ข้อมูลสุขภาพ / ข้อจำกัดทางการแพทย์</option>
-   <option value="heat_exposure">อากาศร้อน / WBGT</option>
-   <option value="signal_missing">สัญญาณขาดหาย</option>
-   <option value="other">เหตุอื่นที่ต้องการเจ้าหน้าที่ประเมิน</option>
-  </select></label>
-  <label>บันทึกของเจ้าหน้าที่<textarea id="medicNote" maxlength="240" placeholder="ข้อสังเกตสั้น ๆ ไม่ต้องใส่ชื่อจริง"></textarea></label>
-  <div class="operator-actions"><button type="button" id="medicRequest">ส่งเข้าคิวประเมิน</button>
-   <button type="button" id="medicClose" class="secondary">ปิดรายการหลังประเมิน</button></div>
+  <div class="operator-actions"><button type="button" id="medicClose" class="secondary">ปิดรายการหลังประเมินแล้ว</button></div>
   <p id="medicMessage" role="status"></p>
  </details>
  <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
