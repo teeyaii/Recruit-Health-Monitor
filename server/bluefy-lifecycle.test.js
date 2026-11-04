@@ -237,3 +237,37 @@ test('server-revoked cookie clears live sessions instead of presenting unauthori
  const h=harness();await h.login();const a=device();await h.connect(a);h.reply({ok:false,status:401});a.emit();await drain();
  assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('connect').disabled,true);
 });
+
+test('opt-in lock screen trial keeps existing BLE handle while hidden, records only fresh hidden acknowledgements',async()=>{
+ const h=harness();await h.login();const band=device();await h.connect(band);
+ band.emit([6,65]);await flush();
+ h.get('lockTrial').click();
+ h.hide();await flush();
+ assert.equal(h.api.live.has('R01'),true,'experimental hidden path must not stop BLE by JS');
+ assert.equal(band.gatt.connected,true);
+ assert.equal(h.api.live.get('R01').bpm,null,'entering trial must clear prior value');
+ h.tick(1500);await flush(); // Allow the existing per-Band 1-second upload throttle to elapse.
+ band.emit([6,71]);await flush();
+ assert.equal(h.api.live.get('R01').bpm,71,'only a new BLE event can restore value');
+ const fresh=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body).readings[0]);
+ assert.equal(fresh.at(-1).hr,71,'new hidden sample uses actual measurement timestamp');
+ h.document.hidden=false;h.document.listeners.visibilitychange();await flush();
+ assert.match(h.get('lockTrialStatus').textContent,/BPM ระหว่างซ่อน 1 ครั้ง/);
+ assert.match(h.get('lockTrialStatus').textContent,/Server ACK ระหว่างซ่อน 1 ครั้ง/);
+});
+test('opt-in lock screen without fresh data stays NO DATA; dim fallback restores normal background stop',async()=>{
+ const h=harness();await h.login();const band=device();await h.connect(band);
+ band.emit();await flush();h.get('lockTrial').click();h.hide();await flush();
+ h.tick(16000);await flush();
+ assert.equal(h.api.live.get('R01').bpm,null);
+ h.document.hidden=false;h.document.listeners.visibilitychange();await flush();
+ assert.match(h.get('lockTrialStatus').textContent,/BPM ระหว่างซ่อน 0 ครั้ง/);
+ assert.match(h.get('lockTrialStatus').textContent,/Server ACK ระหว่างซ่อน 0 ครั้ง/);
+ let dimRequested=false;
+ h.context.navigator.bluetooth.setScreenDimEnabled=async enabled=>{dimRequested=enabled;};
+ await h.get('dimScreen').click();
+ assert.equal(dimRequested,true);
+ h.hide();await flush();
+ assert.equal(h.api.live.size,0,'normal foreground-only safeguard restored by fallback');
+ assert.equal(band.gatt.connected,false);
+});

@@ -83,7 +83,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 
 
 <button id="connect" disabled>เชื่อมต่อ Band 10</button>
-</details><button id="resetBle" class="secondary">เชื่อมใหม่ (Soft Reset)</button><p id="simpleStatus" role="status">เปิด Share HR บนสายรัด แล้วเลือกทีละเรือน</p><details class="advanced"><summary>รายละเอียดการเชื่อมต่อ</summary><p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
+</details><details class="advanced" id="screenExperiment"><summary>ทดลองล็อกจอ / โหมดหรี่แสง</summary><p class="muted">การทดลองเท่านั้น ไม่รับประกันว่า Bluefy/iOS จะรับข้อมูลต่อเมื่อล็อกจอ ห้ามใช้แทนการเฝ้าระวังโดยคน</p><button type="button" id="lockTrial" class="secondary">เปิดโหมดทดลองล็อกหน้าจอ</button><button type="button" id="dimScreen" class="secondary">กลับสู่โหมดหรี่หน้าจอ</button><p id="lockTrialStatus" role="status">เชื่อม R01/R02 ให้ LIVE ก่อนทดลอง แล้วตรวจจาก Dashboard อีกเครื่อง</p></details><button id="resetBle" class="secondary">เชื่อมใหม่ (Soft Reset)</button><p id="simpleStatus" role="status">เปิด Share HR บนสายรัด แล้วเลือกทีละเรือน</p><details class="advanced"><summary>รายละเอียดการเชื่อมต่อ</summary><p id="bleStatus" class="status" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
 </details><div id="slots" aria-live="polite"></div>
 <section id="reservedSlots" aria-labelledby="reservedTitle">
 <h2 id="reservedTitle">ช่องอุปกรณ์เพิ่มเติม</h2>
@@ -103,6 +103,30 @@ const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
 let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null;
 let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
+let lockTrialEnabled=false,lockStartedAt=0,hiddenNotifications=0,hiddenAcks=0;
+function lockMessage(message){$("lockTrialStatus").textContent=message;}
+function beginLockProbe(){
+ if(lockStartedAt)return;
+ lockStartedAt=Date.now();hiddenNotifications=0;hiddenAcks=0;
+ for(const s of live.values()){
+  if(s.closed)continue;
+  s.bpm=null;s.ack="NO DATA • ทดสอบล็อกจอ";s.state="LOCK TEST / NO DATA";paint(s);
+  // An explicit disconnect prevents a stale value from masquerading as live.
+  if(s.ownsDevice)upload(s,null,Date.now(),true).catch(()=>{});
+ }
+ lockMessage("กำลังทดลอง • ตรวจข้อมูลสดบน Dashboard อีกเครื่อง");
+}
+function finishLockProbe(){
+ if(!lockStartedAt)return;
+ const seconds=Math.floor(Math.max(0,Date.now()-lockStartedAt)/1000);
+ lockStartedAt=0;
+ for(const s of Array.from(live.values())){
+  if(s.closed)continue;
+  if(!s.device?.gatt?.connected){stopped(s,"LOCK TEST • DISCONNECTED / NO DATA");recoveryRequested=true;continue;}
+  if(!s.lastAt||Date.now()-s.lastAt>15000){s.bpm=null;transition(s,"STALE");s.state="LOCK TEST • STALE / NO DATA";s.ack="รอ BPM ใหม่";paint(s);}
+ }
+ lockMessage("ซ่อนหน้า "+seconds+" วินาที • BPM ระหว่างซ่อน "+hiddenNotifications+" ครั้ง • Server ACK ระหว่างซ่อน "+hiddenAcks+" ครั้ง • ต้องดูความต่อเนื่องจาก Dashboard แยก");
+}
 const stages={capability:"1/9 ตรวจ Web Bluetooth",chooser:"2/9 เปิดหน้าต่างเลือกอุปกรณ์",selected:"3/9 ตรวจอุปกรณ์และช่อง",gatt:"4/9 เชื่อม GATT",service:"5/9 ค้นหา Heart Rate Service 180D",characteristic:"6/9 ค้นหา Characteristic 2A37",subscribe:"7/9 สมัครรับ Notifications",receiving:"8/9 รับข้อมูลหัวใจ",upload:"9/9 ส่ง HTTPS และรอ Server"};
 function status(message){$("bleStatus").textContent=message;}
 function serverStatus(message){$("serverStatus").textContent=message;}
@@ -169,7 +193,7 @@ function decodeHeartRate(data){
 async function upload(s,bpm,timestamp,disconnect=false){
  const credentials=auth;
  if(!credentials)return {ok:false,detail:"ไม่มีสิทธิ์ Gateway"};
- if(!disconnect && (document.hidden||s.closed||Date.now()-timestamp>14000))return {ok:false,detail:"ข้อมูลเก่า / NO DATA"};
+ if(!disconnect && ((document.hidden&&!lockTrialEnabled)||s.closed||Date.now()-timestamp>14000))return {ok:false,detail:"ข้อมูลเก่า / NO DATA"};
  const pair=provision.find(x=>x.id===s.slot);
  if(!pair || pair.device_id!==s.assignment)return {ok:false,detail:"ช่องไม่ตรงกับสิทธิ์ Gateway"};
  const item={id:s.slot,device_id:pair.device_id,timestamp};
@@ -314,10 +338,11 @@ async function connectBand(slot,expected,mode){
   s.characteristic=await bounded(s,service.getCharacteristic(HR_MEASUREMENT));
   validAttempt(s);step(s,"subscribe");
   s.onValue=event=>{
-   if(s.closed||document.hidden||!s.ready)return;
+   if(s.closed||(document.hidden&&!lockTrialEnabled)||!s.ready)return;
    let bpm=null;
    try{bpm=decodeHeartRate(event.target.value)}catch{}
-   const now=Date.now(),sequence=++s.sequence;
+   if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenNotifications++;
+    const now=Date.now(),sequence=++s.sequence;
    s.lastAt=now;s.bpm=bpm;transition(s,bpm===null?"RECOVERABLE":"LIVE");s.stage="receiving";
    s.state=bpm===null?"CONTACT LOST / NO DATA":stages.receiving+" • BLE "+bpm+" BPM";
    if(bpm===null)s.ack="NO DATA";
@@ -325,12 +350,12 @@ async function connectBand(slot,expected,mode){
    if(s.busy || now-s.sentAt<1000)return;
    s.sentAt=now;s.busy=true;s.ack="กำลังส่ง HTTPS";
    upload(s,bpm,now,bpm===null).then(result=>{
-    if(s.closed||document.hidden)return;
+    if(s.closed||(document.hidden&&!lockTrialEnabled))return;
     // A newer BLE notification cannot erase an HTTPS failure. Only successful
     // acknowledgements belong to one measurement and must pass the freshness guard.
     if(result.ok&&(s.sequence!==sequence||Date.now()-now>15000))return;
     s.ack=result.detail;
-    if(result.ok){s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";}
+    if(result.ok){s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenAcks++;}
     else{s.bpm=null;transition(s,"ERROR");s.state="SERVER REJECTED / OFFLINE";s.error=stages.upload+" • "+result.detail;$("simpleStatus").textContent="ส่งข้อมูลไม่สำเร็จ • ตรวจเครือข่ายหรือเข้าใช้งานใหม่";}
     paint(s);
    }).finally(()=>{s.busy=false;});
@@ -442,10 +467,26 @@ async function recoverKnown(){
   if(recoveryRequested&&!document.hidden&&auth)Promise.resolve().then(recoverKnown);
  }
 }
-document.addEventListener("visibilitychange",()=>{
- if(document.hidden)suspend();else {controls();Promise.resolve().then(recoverKnown);}
+$("lockTrial").addEventListener("click",()=>{
+ if(!auth){lockMessage("ต้องเข้าสู่ Gateway ก่อนทดลอง");return;}
+ lockTrialEnabled=!lockTrialEnabled;
+ $("lockTrial").textContent=lockTrialEnabled?"ยกเลิกทดลอง (กลับโหมดปกติ)":"เปิดโหมดทดลองล็อกหน้าจอ";
+ lockMessage(lockTrialEnabled?"เปิดแล้ว • กดล็อก 60 วินาที ดู Dashboard อีกเครื่อง • ไม่รับประกัน iOS จะทำงานต่อ":"ปิดโหมดทดลองแล้ว • เมื่อซ่อนหน้าเว็บจะตัด BLE ตามปกติ");
 });
-window.addEventListener("pagehide",suspend);
+$("dimScreen").addEventListener("click",async()=>{
+ lockTrialEnabled=false;lockStartedAt=0;$("lockTrial").textContent="เปิดโหมดทดลองล็อกหน้าจอ";
+ const bt=navigator.bluetooth;
+ if(typeof bt?.setScreenDimEnabled!=="function"){
+  lockMessage("กลับโหมดปกติแล้ว • Bluefy ไม่มี API หรี่จอในเครื่องนี้ ให้หรี่ความสว่างด้วยมือและเปิดหน้า Gateway ค้างไว้");return;
+ }
+ try{await bt.setScreenDimEnabled(true);lockMessage("ร้องขอหรี่จอผ่าน Bluefy แล้ว • ห้ามล็อกจอ • ตรวจว่าข้อมูล LIVE ต่อ");}
+ catch{lockMessage("กลับโหมดปกติแล้ว • หรี่แสงด้วยมือและเปิดหน้า Gateway ค้างไว้");}
+});
+document.addEventListener("visibilitychange",()=>{
+ if(document.hidden){if(lockTrialEnabled)beginLockProbe();else suspend();}
+ else{if(lockTrialEnabled)finishLockProbe();controls();Promise.resolve().then(recoverKnown);}
+});
+window.addEventListener("pagehide",()=>{if(lockTrialEnabled)beginLockProbe();else suspend();});
 setInterval(()=>{
  if(auth && Date.now()>=auth.expiresAt)expireSession();
  for(const s of live.values()){
