@@ -111,15 +111,17 @@ export class RosterStore {
   const p=this.get(id);validateVersion(input,p);
   const code=validateCode(input?.code);
   const reassigned=p.code!==null&&!sameCode(p.code,code);
-  // Changing the wearer in a single Save clears old observations and BPM at
-  // the API layer. Never allow a code edit to silently dismiss an emergency.
+  // Changing the wearer always pauses the slot until an explicit physical
+  // handover confirmation; ordinary Save must never resume an old paused slot.
+  // The API clears old observations, history and profile before the new wearer
+  // can provide measurements. An unresolved emergency cannot be discarded.
   if(reassigned&&p.observation==="confusion_collapse_seizure")
    problem(409,"active EMERGENCY: resolve and document the event before reassigning a wearer");
   if(slotIDs.some(other=>other!==id&&sameCode(this.data.slots[other].code,code)))
    problem(409,"anonymous code already active on another slot");
   if(!restrictions.has(input?.restriction)||!observations.has(input?.observation)||!activities.has(input?.activity??p.activity))problem(422,"invalid restriction, observation or activity");
   const observation=reassigned?"none":input.observation;
-  const next={...p,code,paused:false,
+  const next={...p,code,paused:reassigned?true:p.paused,
     restriction:reassigned?"none":input.restriction,observation,
     activity:reassigned?"not_reported":input.activity??p.activity,
     acknowledged:reassigned?false:observation===p.observation?p.acknowledged:false};
@@ -129,6 +131,8 @@ export class RosterStore {
   const p=this.get(id);validateVersion(input,p);
   const code=validateCode(input?.code);
   if(sameCode(code,p.code))problem(422,"replacement requires a different anonymous code");
+  if(p.observation==="confusion_collapse_seizure")
+   problem(409,"active EMERGENCY: resolve and document the event before reassigning a wearer");
   if(slotIDs.some(other=>other!==id&&sameCode(this.data.slots[other].code,code)))
    problem(409,"anonymous code already active on another slot");
   // PAUSED rejects all new BLE readings until a human verifies the physical reassignment.
