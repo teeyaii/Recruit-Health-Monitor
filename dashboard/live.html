@@ -577,7 +577,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
- panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' — '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังไม่รับทราบ')+' <button type="button" data-ack-slot="'+escapeHtml(x.id)+'" '+(x.acknowledged?'disabled':'')+'>รับทราบเหตุ</button></div>').join('')+'</div><small>รับทราบเหตุแล้วก็ยังเป็น EMERGENCY จนกว่าจะประเมินและแก้ไขเหตุโดยเจ้าหน้าที่</small>':'';
+ panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' • สถานะจากบันทึกเดิม • ให้เจ้าหน้าที่ประเมินทันที</div>').join('')+'</div><small>ไม่มีการกรอกเหตุการณ์ใหม่ในจอนี้ • การรับทราบทางการแพทย์ต้องทำตาม SOP ภาคสนาม</small>':'';
  const alertBox=byId("autoPauseAlerts");
  alertBox.hidden=autoCases.length===0;
  alertBox.innerHTML=autoCases.length?'<strong>พักกิจกรรมและตรวจผู้สวมทันที • '+autoCases.length+' นาย</strong>'+
@@ -849,13 +849,7 @@ byId("historyRanges").onclick=e=>{
  refreshHistory();
 };
 
-byId("emergencyAlerts").onclick=async e=>{
- const slot=e.target.closest("button[data-ack-slot]")?.dataset.ackSlot;
- if(!slot)return;
- if(!rosterData){alert("กรุณาเข้าสู่ระบบด้วยสิทธิ์ผู้ฝึกหรือแพทย์ก่อนรับทราบเหตุ");return;}
- const selector=byId("rosterSlot");selector.value=slot;fillRoster();
- try{await byId("rosterAcknowledge").click();}catch{byId("rosterStatus").textContent="รับทราบเหตุไม่สำเร็จ กรุณาตรวจสอบสิทธิ์";}
-};
+// Critical banner stays visible; no manual incident entry or acknowledgement is required.
 byId("presentationToggle").onclick=()=>{
  const on=document.body.classList.toggle("presentation");
  byId("presentationToggle").textContent=on?"ออกจากโหมดนำเสนอ":"เปิดโหมดนำเสนอ";
@@ -1054,21 +1048,19 @@ async function loadMedicReview(){
  }catch(e){if(epoch===viewEpoch)byId("medicMessage").textContent=e.message;}
 }
 byId("medicPanel").ontoggle=()=>{if(byId("medicPanel").open)loadMedicReview();else clearMedicReview();};
-for(const [id,action] of [["medicRequest","request"],["medicClose","close"]]){
- byId(id).onclick=async()=>{
-  const p=selectedRecord();if(medicBusy||!medicSlot||p?.id!==medicSlot||p?.code!==medicCode)return;
-  medicBusy=true;byId("medicRequest").disabled=true;byId("medicClose").disabled=true;
-  byId("medicMessage").textContent="กำลังบันทึก...";
-  try{
-   const body={version:medicVersion,action,reason:byId("medicReason").value,note:byId("medicNote").value};
-   const r=await fetch("/api/medic-reviews/"+p.id,{method:"PUT",credentials:"same-origin",
-    headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-   if(!r.ok){const d=await r.json();throw Error(d.error||"HTTP "+r.status);}
-   await Promise.all([loadMedicReview(),refreshMedicPending()]);
-  }catch(e){byId("medicMessage").textContent="บันทึกไม่สำเร็จ • "+e.message;await loadMedicReview();}
-  finally{medicBusy=false;}
- };
-}
+byId("medicClose").onclick=async()=>{
+ const p=selectedRecord();if(medicBusy||!medicSlot||p?.id!==medicSlot||p?.code!==medicCode)return;
+ medicBusy=true;byId("medicClose").disabled=true;
+ byId("medicMessage").textContent="กำลังบันทึกการปิดหลังเจ้าหน้าที่ประเมิน...";
+ try{
+  const r=await fetch("/api/medic-reviews/"+p.id,{method:"PUT",credentials:"same-origin",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({version:medicVersion,action:"close",note:""})});
+  if(!r.ok){const data=await r.json();throw Error(data.error||"HTTP "+r.status);}
+  await Promise.all([loadMedicReview(),refreshMedicPending()]);
+ }catch(e){byId("medicMessage").textContent="บันทึกไม่สำเร็จ • "+e.message;await loadMedicReview();}
+ finally{medicBusy=false;}
+};
 
 function prettyDuration(ms){
  const minutes=Math.max(0,Math.floor(ms/60000));
