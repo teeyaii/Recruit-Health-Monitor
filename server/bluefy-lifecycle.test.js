@@ -246,6 +246,7 @@ test('opt-in lock screen trial keeps existing BLE handle while hidden, records o
  assert.equal(h.api.live.has('R01'),true,'experimental hidden path must not stop BLE by JS');
  assert.equal(band.gatt.connected,true);
  assert.equal(h.api.live.get('R01').bpm,null,'entering trial must clear prior value');
+ h.tick(1500);await flush(); // Allow the existing per-Band 1-second upload throttle to elapse.
  band.emit([6,71]);await flush();
  assert.equal(h.api.live.get('R01').bpm,71,'only a new BLE event can restore value');
  const fresh=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body).readings[0]);
