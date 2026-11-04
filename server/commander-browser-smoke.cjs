@@ -51,6 +51,7 @@ const fs=require("fs"),assert=require("node:assert/strict");
    await page.screenshot({path:"ui-artifacts/steve-commander-"+width+".png",fullPage:true});
   }
   state={...state,serverTime:Date.now(),people:state.people.map(p=>({...p,hr:null,timestamp:Date.now()-20000,state:"STALE"}))};
+  await page.locator("#systemDetails summary").click();
   await page.locator("#refresh").click();
   await page.waitForFunction(()=>document.getElementById("fresh").textContent==="0");
   assert.equal(await page.locator("#missing").innerText(),"5");
