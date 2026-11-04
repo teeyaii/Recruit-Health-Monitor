@@ -1,0 +1,36 @@
+# STEVE 2.0 — four Xiaomi Smart Band 10 devices on one iPhone / Bluefy G01
+
+## Operational status (4 November 2026)
+- Owner has four physical Band 10 devices and reports they are paired/connected via iPhone Bluetooth.
+- **Bluetooth settings pairing is not evidence of four live Heart Rate notifications**. G01 must separately select and subscribe to each physical Band via Web Bluetooth.
+- The previous physically accepted baseline was two simultaneous Band 10 units on one iPhone / Bluefy 2.01: R01=47FD, R02=A746.
+- R03 and R04 are a **four-band physical pilot, not an achieved result** until device-specific fresh BPM and backend acknowledgement are confirmed. Do not claim 4/4 passed from mock tests.
+- A single G01 can be provisioned with R01–R04 in the backend; no software-imposed two-band cap exists. BLE concurrency limits and reliability are hardware/runtime dependent.
+- The R03/R04 historical presentation preview is **synthetic** and must never be confused with live data.
+
+## Before connecting physical R03/R04
+1. Ensure owner-authorized test setting; **do not use live safety monitoring of real recruits for the trial**. Use test volunteers, not personal health identifiers.
+2. In Render, securely inspect the current `STEVE_SLOT_MAP_JSON` in the private environment. **Keep the original R01/R02 device IDs exactly unchanged**, along with other existing mappings; append two new unique opaque IDs under `G01` for R03 and R04, e.g., `trial_g01_r03` and `trial_g01_r04`. These are server-side aliases, not MAC addresses, personnel IDs or physical suffixes.
+3. Do not paste keys, mappings with real identifiers or credentials into GitHub/chat. Any environment change may restart Render, briefly disconnect both working Bands, and reset RAM-only state. Back up transient configuration privately and perform only during an authorized test window.
+4. Deploy a reviewed green main commit manually after the desired slot map is configured; the Render service has `autoDeployTrigger: off`. Verify `/gateway` shows the new optional R03/R04 controls after logging in to G01. If they are absent, do **not** bypass authorization: verify the current server provisioning.
+5. If optional 7-day chart history is required, anonymous R03/R04 roster entries must be registered and real durable storage verified; unregistered devices may still ingest LIVE but are not saved in the archive. Do not overwrite earlier demo roster data casually: reassignment can remove existing history. No medical approval or automatic emergency detection is implied.
+
+## Pair and prove 4/4
+1. Keep Bluefy in the foreground, iPhone unlocked and charged. Disable the experimental lock-screen mode for the first 4-band concurrency test. Open the **Render-hosted** HTTPS `/gateway` page (not GitHub Pages SIMULATED demo).
+2. Ensure **Share Heart Rate** is enabled on **each** Band 10 and competing BLE clients are not holding the HR-sharing connection.
+3. Authenticate **G01** as Gateway. Connect **R01 (47FD)** and **R02 (A746)** as usual until both show fresh BPM plus `Server acknowledged`.
+4. Tap **เพิ่ม R03**, enter **four hexadecimal characters at the end of the physical third Band's advertised name** in the expanded form, then tap `เชื่อมต่อ Band 10`. Choose the matching watch in the native chooser; do not accidentally choose R01/R02. Wait for `LIVE • Server acknowledged` while the first two stay LIVE.
+5. Repeat for **R04** using the **different** fourth watch's suffix. Ensure G01 shows `LIVE BANDS 4 เรือน` and `SERVER ACK รับแล้ว 4 เรือน`. The server must show four distinct slots; each must have a fresh timestamp (<=15 seconds) and verified independent HR stream. A static Bluetooth connection indication is insufficient.
+6. Run 10 minutes and then, if stable, 60 minutes with screen on and Bluefy foreground. Record network failures, BLE drops, stale >15 s, reconnection, wrong binding attempts, phone/band model, battery, charging, and coexistence with other nearby radios.
+7. **Only after 4/4 foreground passes**, try the separate opt-in **ล็อกจอ** experiment for 60 seconds and observe STEVE Dashboard from another device. If fresh data stops, return to dim-screen fallback. If locked app suspends, that is a platform/runtime limit, not a device-count proof.
+
+## Troubleshooting and stop conditions
+- **R03/R04 not in menu:** backend did not provision them for G01. Do not modify secrets in source code or send real tokens in messages.
+- **Empty chooser:** iPhone Bluetooth Settings pairing is not enough. Confirm active Share HR and try A Standard Heart Rate Scan, then B Broad BLE Scan.
+- **Duplicate device or suffix:** do not swap assignment behind the same slot; use the correct physical watch and proper wearer mapping.
+- **SERVER REJECTED, accepted!=1:** verify authorized G01 slot and matching opaque device ID, timestamp freshness, and whether roster slot is paused.
+- **NO DATA >15s:** never reinterpret stale data as safe or healthy. If the test is being conducted near actual training, supervisors must rely on direct observation and established medical SOP independently.
+- **Do not unpair/reformat existing two Band 10 units as a first troubleshooting step.** No 4-band physical success has yet been claimed.
+
+## Success criteria
+Four distinct physical Band 10 devices, one iPhone/Bluefy page, G01 authorized R01–R04 slots, four independent fresh BPM streams and server acknowledgments, >=10 min continuous foreground observation with no identity cross-over or false LIVE; record 60-min stability separately. Hardware tests must be reported by the operator.
