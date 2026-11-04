@@ -28,7 +28,8 @@ test("Commander private read-only link has strict isolation, redacted data, rota
  try{
   await wait();
   let r=await request("/commander");
-  assert.equal(r.status,200);assert.match(r.text,/จอผู้บังคับบัญชา/);
+  assert.equal(r.status,200);assert.match(r.text,/สรุปการเฝ้าระวัง/);
+  assert.ok(!r.text.includes("จอผู้บังคับบัญชา"));
   assert.match(r.headers.get("referrer-policy"),/no-referrer/);
   assert.equal((await request("/api/commander/snapshot")).status,401);
   assert.equal((await request("/api/commander/share",{method:"POST"})).status,403);
@@ -60,7 +61,8 @@ test("Commander private read-only link has strict isolation, redacted data, rota
   assert.equal(r.json.people.find(p=>p.id==="R01").risk,"WATCH");
   assert.equal(r.json.people.find(p=>p.id==="R01").hr,78);
   assert.equal(r.json.people.find(p=>p.id==="R01").registered,true);
-  assert.ok(!JSON.stringify(r.json).includes("A001-PRIVATE-WEARER"));
+  assert.equal(r.json.people.find(p=>p.id==="R01").displayCode,"A001-PRIVATE-WEARER",
+   "authorized private view shows the assigned display identifier for each watch");
   assert.ok(!JSON.stringify(r.json).includes("test-opaque-band-one"));
   assert.ok(!JSON.stringify(r.json).includes("medications"));
   assert.ok(!JSON.stringify(r.json).includes("conditions"));
