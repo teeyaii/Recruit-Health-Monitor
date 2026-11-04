@@ -1,9 +1,9 @@
 # STEVE P0 — private commander read-only Dashboard (owner-approved, 4 Nov 2026)
 
 ## Objective
-Let the commander open a **private** link or scan a locally generated QR without entering any password. The commander sees only live R-slot/BPM, LIVE vs NO DATA, WATCH, EMERGENCY, automatic PAUSE/CHECK, group training state, a pending Medic count, and gateway connectivity.
+Let the commander open a **private** link or scan a locally generated QR without entering any password. The private monitoring view now shows all registered, provisioned, or previously observed Band slots in fixed numeric order **R01–R15**, including normal, WATCH, EMERGENCY, and NO DATA states. Each card may show the operator-assigned wearer display code, fresh BPM, and a separate connection status. Training status and summary counts stay compact; gateway diagnostics remain in a collapsed section.
 
-**No direct public patient telemetry.** The public `/commander` HTML has no health values until an operator-issued capability is exchanged for a scoped session. A private link is a bearer credential: anyone who obtains it may see anonymized slot telemetry until expiry or revocation. Do not share it publicly or include it in screenshots.
+**No direct public patient telemetry.** The public `/commander` HTML has no health values until an operator-issued capability is exchanged for a scoped session. A private link is a bearer credential: anyone who obtains it may see wearable slot telemetry **and wearer display codes that may identify people** until expiry or revocation. Do not share it publicly or include it in screenshots.
 
 ## Operator workflow
 1. In the original STEVE `/live`, authenticate with an authorized trainer/medic or existing operator credential.
@@ -18,7 +18,7 @@ Let the commander open a **private** link or scan a locally generated QR without
 
 ## Security and persistence
 - New commander authority and operator authority are independent. `steve_command` cookie does not authenticate `/api/roster`, `/api/training`, `/api/context`, `/api/medic-reviews`, `/api/ingest`, `/api/private-profile`, or Gateway provisioning.
-- Private data never appears in read-only payloads: wearer names, custom roster codes, medications, medical conditions, BMI, personal history, and device IDs are excluded.
+- The private read-only payload **does include the registered wearer display code** so supervisors can locate the correct person. Treat that display code as potentially identifying and keep shared links private. The payload excludes medications, diagnoses, medical conditions, BMI, private history, underlying BLE device IDs and credentials. Never make this endpoint public.
 - Read-only link issuance and revocation **fail closed** (HTTP 503) unless encrypted Supabase persistent state is configured and writing succeeds. Production cannot enable test-only ephemeral issuance; `STEVE_TEST_EPHEMERAL_COMMANDER` is effective only when `NODE_ENV=test`.
 - The link secret itself is **not** persisted, so after refreshing the operator page it must be recovered from the copy that was shared; if lost, generate a new link.
 - Do not paste links with fragments into chat or repository issues. Never load third-party scripts on the commander page.
@@ -36,7 +36,7 @@ Let the commander open a **private** link or scan a locally generated QR without
 - CI: backend API authorization and revocation, SHA-only state unit tests, browser commander mobile rendering, offline QR creation, Docker production smoke.
 - Verify the running Render service still has encrypted Supabase persistence; the operator creation endpoint returns 503 if it does not.
 - Deploy only the reviewed commit from main during an authorized test window; preserve existing env vars and BLE slot map unchanged. An update briefly restarts services, so do not deploy during real training/safety monitoring.
-- Authenticated operator creates a link and scans QR on a **different** device. Confirm four R slots show only anonymized IDs and fresh BPM when real Band notifications arrive.
-- Check private viewer cannot PUT/POST updates, retrieve health profiles or inspect roster codes.
+- Authenticated operator creates a link and scans QR on a **different** device. Confirm the provisioned R slots appear in fixed R01–R15 order, display codes match the authorized roster, and each card separately shows LIVE or NO DATA (no stale BPM).
+- Check private viewer cannot PUT/POST updates or retrieve health profiles/roster endpoints. Display codes are intentionally visible only through the private, authenticated minimal snapshot, not public routes.
 - Operator revokes the link; commander should lose access on next refresh. Regenerate and retest. No secrets should appear in screenshots or logs.
 - If the URL opens but share creation returns 503, do **not** turn off persistence gating or make metrics public. Verify the existing encrypted state configuration privately and retry.
