@@ -11,6 +11,7 @@ import { PrivateProfiles } from "./private-profiles.js";
 import { MedicReviews, describeSignal, explainAutoReview } from "./medic-review.js";
 import { AutoHRMonitor } from "./auto-hr-monitor.js";
 import { trainingSummary } from "./training-summary.js";
+import { describeRecoveryShadow } from "./recovery-shadow.js";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -300,11 +301,17 @@ const server=http.createServer(async(req,res)=>{
     // Comparison is descriptive only; rest phase must be recorded by a human.
     const baseline=profile.baselineConfirmed&&phase.phase==="hourly_rest"?
      profile.restingBaselineBpm:null;
-    const signal=describeSignal(pulseHistory.get(slot,Date.now()),Date.now(),baseline);
+    const now=Date.now(),recent=pulseHistory.get(slot,now);
+    const signal=describeSignal(recent,now,baseline);
+    // Phase 2: descriptive-only shadow calculation, never wired into alerting.
+    // Keep this behind the existing trainer/medic + durable-store auth gate.
+    const recoveryShadow=describeRecoveryShadow(recent,
+     roster.getTrainingTimeline(now-WINDOW_MS,now),now,
+     profile.baselineConfirmed?profile.restingBaselineBpm:null);
     const restVerified=phase.phase==="hourly_rest"&&Number.isSafeInteger(phase.changedAt)&&
      Date.now()-phase.changedAt>=3*60000;
     if(!restVerified)signal.deltaBpm=null;
-    send(res,200,{slot,review,signal,archiveUnavailable,phase:phase.phase,
+    send(res,200,{slot,review,signal,recoveryShadow,archiveUnavailable,phase:phase.phase,
      restPhaseRecorded:restVerified,baselineConfigured:profile.baselineConfirmed,
      context:{ageYears:profile.ageYears,bmi:profile.bmi,medications:profile.medications,
       conditions:profile.conditions,wbgtC:conditions.timestamp&&Date.now()-conditions.timestamp<=1800000?conditions.wbgtC:null},
