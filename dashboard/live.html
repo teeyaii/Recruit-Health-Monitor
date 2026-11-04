@@ -577,7 +577,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
- panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' • สถานะจากบันทึกเดิม • ให้เจ้าหน้าที่ประเมินทันที</div>').join('')+'</div><small>ไม่มีการกรอกเหตุการณ์ใหม่ในจอนี้ • การรับทราบทางการแพทย์ต้องทำตาม SOP ภาคสนาม</small>':'';
+ panel.innerHTML=critical.length?'<strong class="emergency-title">EMERGENCY ('+critical.length+') • หยุดกิจกรรมและแจ้งเจ้าหน้าที่แพทย์ทันที</strong><div class="emergency-items">'+critical.map(x=>'<div class="emergency-row">'+escapeHtml(x.id)+' • '+(x.acknowledged?'รับทราบแล้ว • ยังเป็น EMERGENCY':'ยังเป็น EMERGENCY • ต้องให้เจ้าหน้าที่ตรวจสอบ')+'</div>').join('')+'</div><small>ไม่มีการกรอกเหตุการณ์ใหม่ในจอนี้ • การรับทราบทางการแพทย์ต้องทำตาม SOP ภาคสนาม</small>':'';
  const alertBox=byId("autoPauseAlerts");
  alertBox.hidden=autoCases.length===0;
  alertBox.innerHTML=autoCases.length?'<strong>พักกิจกรรมและตรวจผู้สวมทันที • '+autoCases.length+' นาย</strong>'+
