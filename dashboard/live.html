@@ -866,7 +866,6 @@ function fillRoster(){
  const p=selectedRecord();if(!p)return;
  byId("rosterCode").value=p.code||"";
  byId("rosterRestriction").value=p.restriction;
- byId("rosterObservation").value=p.observation;
  if(byId("privatePanel").open)loadPrivateProfile();
  if(byId("medicPanel").open)loadMedicReview();
  byId("rosterStatus").textContent=(p.paused?"ช่องนี้ถูกพักไว้ • ตรวจผู้สวมแล้วกดบันทึกเพื่อเปิดรับ BPM อีกครั้ง":"พร้อมแก้ไข")
@@ -909,7 +908,7 @@ async function rosterAction(action){
  }
  const url="/api/roster/"+p.id+(action==="ack"?"/acknowledge":"");
  const payload=action==="save"?
-  {version:p.version,code,restriction:byId("rosterRestriction").value,observation:byId("rosterObservation").value}:
+  {version:p.version,code,restriction:byId("rosterRestriction").value,observation:p.observation}:
   {version:p.version};
  const button=byId(action==="save"?"rosterSave":"rosterAcknowledge");
  button.disabled=true;
@@ -928,7 +927,7 @@ async function rosterAction(action){
 }
 byId("rosterSlot").onchange=fillRoster;
 byId("rosterSave").onclick=()=>rosterAction("save");
-byId("rosterAcknowledge").onclick=()=>rosterAction("ack");
+// Manual incident entry removed.
 let privateSlot=null,privateVersion=0,privateBusy=false;
 function updatePrivateBmi(){
  const w=Number(byId("privateWeight").value),h=Number(byId("privateHeight").value);
@@ -1022,8 +1021,8 @@ function clearMedicReview(){
  for(const id of ["medicReviewState","medicSignalQuality","medicLatestBpm","medicObservedMean","medicBaselineValue","medicBaselineDelta"])
   byId(id).textContent="—";
  byId("medicChart").textContent="";byId("medicClinicalContext").textContent="";
- byId("medicNote").value="";byId("medicMessage").textContent="";
- byId("medicRequest").disabled=true;byId("medicClose").disabled=true;
+ byId("medicMessage").textContent="";
+ byId("medicClose").disabled=true;
 }
 async function loadMedicReview(){
  if(byId("medicPanel").hidden||!byId("medicPanel").open)return;
@@ -1048,11 +1047,10 @@ async function loadMedicReview(){
    " • WBGT "+(context.wbgtC??"—")+"°C • ยา: "+(context.medications||"ไม่มีข้อมูล")+
    " • ข้อควรระวัง: "+(context.conditions||"ไม่มีข้อมูล");
   renderMedicChart(data.points);
-  byId("medicNote").value=review.note||"";
-  byId("medicRequest").disabled=review.status==="pending";
+
   byId("medicClose").disabled=review.status!=="pending";
   byId("medicMessage").textContent=signal.quality==="check_signal"?"ตรวจการสวมและสัญญาณก่อนใช้ประกอบการประเมิน":
-   "คิวประเมินต้องได้รับการยืนยันโดยเจ้าหน้าที่ ไม่เกิดจากเกณฑ์ BPM อัตโนมัติ";
+   "ผลคัดกรองประกอบการตัดสินใจของเจ้าหน้าที่ • ไม่ใช่การวินิจฉัย";
  }catch(e){if(epoch===viewEpoch)byId("medicMessage").textContent=e.message;}
 }
 byId("medicPanel").ontoggle=()=>{if(byId("medicPanel").open)loadMedicReview();else clearMedicReview();};
