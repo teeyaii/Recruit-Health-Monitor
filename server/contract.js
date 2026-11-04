@@ -79,21 +79,37 @@ export function gatewayForBearer(req) {
 // Optional explicit provisioning contract. When present it is fail-closed:
 // unassigned R-slots, device-ID mismatches and cross-gateway handoffs are rejected.
 let assignments=null;
+// Optional additive provisioning for owner-approved trials on Render.
+// Render's env-variable update API cannot read the existing secret-bearing base map.
+// Therefore do not replace STEVE_SLOT_MAP_JSON just to add R-slots: validate an
+// extra map with the same strict uniqueness rules and retain every original mapping.
+if (env.STEVE_SLOT_MAP_EXTRA_JSON && !env.STEVE_SLOT_MAP_JSON)
+  throw Error("STEVE_SLOT_MAP_EXTRA_JSON requires existing STEVE_SLOT_MAP_JSON");
 if (env.STEVE_SLOT_MAP_JSON) {
-  const supplied=parseObject(env.STEVE_SLOT_MAP_JSON,"STEVE_SLOT_MAP_JSON");
-  const seenSlots=new Set(), seenDevices=new Set();
+  const sources=[["STEVE_SLOT_MAP_JSON",parseObject(env.STEVE_SLOT_MAP_JSON,"STEVE_SLOT_MAP_JSON")]];
+  if (env.STEVE_SLOT_MAP_EXTRA_JSON)
+    sources.push(["STEVE_SLOT_MAP_EXTRA_JSON",parseObject(env.STEVE_SLOT_MAP_EXTRA_JSON,"STEVE_SLOT_MAP_EXTRA_JSON")]);
+  const seenSlots=new Set(),seenDevices=new Set();
   assignments=new Map();
-  for (const [gateway, slots] of Object.entries(supplied)) {
-    if (!/^G0[1-5]$/.test(gateway) || !slots || Array.isArray(slots) || typeof slots!=="object")
-      throw Error("Invalid gateway in STEVE_SLOT_MAP_JSON");
-    if (strictMode && !gatewayTokens.has(gateway)) throw Error("Provisioned gateway has no credential: "+gateway);
-    const assigned=new Map();
-    for (const [slot, device] of Object.entries(slots)) {
-      if (!/^R(0[1-9]|1[0-5])$/.test(slot) || typeof device!=="string" || !/^[a-zA-Z0-9_-]{4,64}$/.test(device)
-          || seenSlots.has(slot) || seenDevices.has(device)) throw Error("Duplicate/invalid slot or device assignment");
-      seenSlots.add(slot); seenDevices.add(device); assigned.set(slot,device);
+  for (const [source,supplied] of sources) {
+    for (const [gateway,slots] of Object.entries(supplied)) {
+      if (!/^G0[1-5]$/.test(gateway) || !slots || Array.isArray(slots) || typeof slots!=="object")
+        throw Error("Invalid gateway in "+source);
+      if (strictMode && !gatewayTokens.has(gateway))
+        throw Error("Provisioned gateway has no credential: "+gateway);
+      // Extra assignments may extend existing gateways only, never silently
+      // introduce a new gateway. Duplicate slot/device bindings fail closed.
+      if (source==="STEVE_SLOT_MAP_EXTRA_JSON" && !assignments.has(gateway))
+        throw Error("Extra slot map cannot introduce gateway: "+gateway);
+      const assigned=assignments.get(gateway)??new Map();
+      for (const [slot,device] of Object.entries(slots)) {
+        if (!/^R(0[1-9]|1[0-5])$/.test(slot) || typeof device!=="string" || !/^[a-zA-Z0-9_-]{4,64}$/.test(device)
+            || seenSlots.has(slot) || seenDevices.has(device))
+          throw Error("Duplicate/invalid slot or device assignment");
+        seenSlots.add(slot);seenDevices.add(device);assigned.set(slot,device);
+      }
+      assignments.set(gateway,assigned);
     }
-    assignments.set(gateway,assigned);
   }
 }
 if (strictMode && !assignments) throw Error("Strict mode requires STEVE_SLOT_MAP_JSON");
