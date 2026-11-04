@@ -15,7 +15,7 @@ const fs=require("fs"),assert=require("node:assert/strict");
     {id:"R04",displayCode:"B018-PEERAWIT",registered:true,hr:null,timestamp:null,state:"NO DATA",risk:"MONITOR",autoCheck:false},
     {id:"R03",displayCode:"A001-MAYTASIT",registered:true,hr:82,timestamp:Date.now(),state:"CONNECTED",risk:"MONITOR",autoCheck:false},
     {id:"R02",displayCode:"C015-KANCHAT",registered:true,hr:null,timestamp:null,state:"DISCONNECTED",risk:"EMERGENCY",autoCheck:false},
-    {id:"R01",displayCode:"R001-TEST",registered:true,hr:76,timestamp:Date.now(),state:"CONNECTED",risk:"WATCH",autoCheck:false}
+    {id:"R01",displayCode:"R001-TEST",registered:true,hr:76,timestamp:Date.now(),state:"CONNECTED",risk:"WATCH",autoCheck:true,autoAlert:{reason:"ตรวจพบชีพจรสูงต่อเนื่อง",summary:"ขณะแจ้งเตือน 160 BPM • 6 ค่า ใน 35 วินาที",evidence:{lastAt:1793100035000},action:"พักกิจกรรม ตรวจยืนยันชีพจร"}}
    ]};
   await page.route("http://steve.test/commander",r=>r.fulfill({contentType:"text/html",body:fs.readFileSync("dashboard/commander.html","utf8")}));
   await page.route("**/api/commander/auth",async r=>{
@@ -41,6 +41,9 @@ const fs=require("fs"),assert=require("node:assert/strict");
   assert.equal(await page.locator("#missing").innerText(),"3");
   assert.ok((await page.locator("#cards").innerText()).includes("ขาดการเชื่อมต่อ"));
   assert.equal(await page.locator("#cards .bpm").allInnerTexts().then(x=>x.includes("— BPM")),true);
+  await page.locator("#cards details summary").click();
+  assert.match(await page.locator("#cards details").innerText(),/ขณะแจ้งเตือน 160 BPM/);
+  assert.match(await page.locator("#cards details").innerText(),/เวลาค่าที่ใช้แจ้งเตือน/);
   const bodyText=await page.locator("body").innerText();
   assert.ok(!/A001-PRIVATE|โรคประจำตัว:|รับทราบเหตุ|บันทึกข้อมูลทหารใหม่/.test(bodyText));
   assert.equal(await page.locator('input').count(),0,"commander UI must be free of input forms");

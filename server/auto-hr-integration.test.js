@@ -92,6 +92,29 @@ for(const failSave of [false,true])test(`TEST ONLY: automatic review survives re
   assert.equal((await req("/api/medic-reviews/R01",{cookie:viewer})).status,403);
   const detail=await (await req("/api/medic-reviews/R01",{cookie:medic})).json();
   assert.equal(detail.review.openedBy,"system");
+  assert.deepEqual(detail.review.autoEvidence,{rule:"sustained_personal_limit",firstAt:baseTime+7000,lastAt:baseTime+42000,sampleCount:6,latestBpm:160});
+  assert.equal(snap.recruits[0].autoAlert.evidence.lastAt,baseTime+42000);
+  const shareResponse=await req("/api/commander/share",{method:"POST",cookie:trainer});
+  assert.equal(shareResponse.status,200);
+  const share=await shareResponse.json();
+  const authResponse=await req("/api/commander/auth",{method:"POST",json:{token:share.token}});
+  assert.equal(authResponse.status,200);
+  const commanderCookie=authResponse.headers.get("set-cookie").split(";")[0];
+  const publicView=await (await req("/api/commander/snapshot",{cookie:commanderCookie})).json();
+  assert.equal(publicView.people[0].displayCode,"TEST001");
+  assert.deepEqual(publicView.people[0].autoAlert,snap.recruits[0].autoAlert);
+  assert.equal(publicView.people[0].risk,"PAUSE_CHECK");
+  assert.doesNotMatch(JSON.stringify(publicView),/reviewThresholdBpm|conditions|medications|limitBpm/);
+  assert.equal((await req("/api/medic-reviews/R01",{cookie:commanderCookie})).status,401);
+  for(const state of ["NO DATA","STALE","UNKNOWN",null]){
+   const invalid=await (await req("/api/ingest",{method:"POST",token:g,json:{gateway:"G01",readings:[{id:"R01",device_id:"device_001",hr:160,timestamp:baseTime+42500,state}]}})).json();
+   assert.equal(invalid.accepted,0);
+  }
+  await writeFile(clock,String(baseTime+50000));
+  await req("/api/ingest",{method:"POST",token:g,json:{gateway:"G01",readings:[{id:"R01",device_id:"device_001",timestamp:baseTime+50000,state:"DISCONNECTED"}]}});
+  const lost=await (await req("/api/snapshot",{cookie:viewer})).json();
+  assert.equal(lost.recruits[0].hr,null);assert.equal(lost.recruits[0].autoCheck,true);
+  assert.equal(lost.recruits[0].autoAlert.evidence.lastAt,baseTime+42000);
   await delay(600); // isolated 250ms retry timer; no more measurements
   await stop();await boot();
   const medicAgain=await login(m);
@@ -107,6 +130,10 @@ for(const failSave of [false,true])test(`TEST ONLY: automatic review survives re
   const currentMedic=await login(m);
   const reopened=await (await req("/api/medic-reviews/R01",{cookie:currentMedic})).json();
   assert.equal(reopened.review.status,"pending","case survives encrypted state reload");
+  assert.deepEqual(reopened.review.autoEvidence,detail.review.autoEvidence);
+  const afterRestart=await (await req("/api/snapshot",{cookie:currentMedic})).json();
+  assert.equal(afterRestart.recruits[0].hr,null);
+  assert.equal(afterRestart.recruits[0].autoCheck,true);
   for(const [i,route] of ["private-profile","medic-reviews"].entries()){
    // Hold a request body open while a different request replaces its wearer.
    let finish;
@@ -123,7 +150,7 @@ for(const failSave of [false,true])test(`TEST ONLY: automatic review survives re
    assert.equal(replaced.status,200);
    finish();assert.equal(await completed,409,"delayed "+route+" cannot apply to replaced wearer");
    const snapshot=await (await req("/api/snapshot",{cookie:currentMedic})).json();
-   assert.equal(snapshot.recruits[0].autoCheck,false);assert.equal(snapshot.recruits[0].hr,null);
+   assert.equal(snapshot.recruits[0].autoCheck,false);assert.equal(snapshot.recruits[0].autoAlert,null);assert.equal(snapshot.recruits[0].hr,null);
   }
 
  }finally{await stop();await rm(dir,{recursive:true,force:true});}

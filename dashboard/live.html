@@ -586,7 +586,14 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
  const alertBox=byId("autoPauseAlerts");
  alertBox.hidden=autoCases.length===0;
  alertBox.innerHTML=autoCases.length?'<strong>พักกิจกรรมและตรวจผู้สวมทันที • '+autoCases.length+' นาย</strong>'+
-  '<div>'+autoCases.map(id=>'<span class="auto-alert-slot">'+escapeHtml(id)+'</span>').join("")+'</div>'+
+  '<div>'+autoCases.map(id=>{
+   const r=shown.find(p=>p.id===id),p=rosterData.slots.find(p=>p.id===id),a=r?.autoAlert;
+   const evidence=a?.evidence;
+   return '<details><summary>'+escapeHtml(id)+' • '+escapeHtml(p?.code||"")+' — ควรพักและตรวจ</summary><small>'+escapeHtml(a?.reason||"ตรวจพบชีพจรสูงต่อเนื่อง")+'<br>'+escapeHtml(a?.summary||"ไม่มีรายละเอียดค่าขณะแจ้งเตือนของเคสเดิม")+
+    (evidence?'<br>เวลาค่าที่ใช้แจ้งเตือน '+escapeHtml(new Date(evidence.lastAt).toLocaleString("th-TH")):'')+
+    '<br>'+escapeHtml(a?.action||"พักกิจกรรม ตรวจยืนยันชีพจรและให้เจ้าหน้าที่ประเมินอาการ")+
+    '<br>'+escapeHtml(a?.limitation||"ข้อมูลชีพจรจากอุปกรณ์ไม่ใช่การวินิจฉัย")+'</small></details>';
+  }).join("")+'</div>'+
   '<small>ระบบพบ BPM สูงต่อเนื่องเกินเกณฑ์เฉพาะบุคคลที่ผู้ปฏิบัติงานตั้งไว้ (ยังไม่ยืนยันการรับรองทางคลินิก) • ตรวจอาการและยืนยันค่าจากอุปกรณ์ก่อนดำเนินการตาม SOP • ไม่ใช่การวินิจฉัย</small>':"";
  byId("autoAlertStat").hidden=autoCases.length===0;
  byId("statAutoCheck").textContent=String(autoCases.length);

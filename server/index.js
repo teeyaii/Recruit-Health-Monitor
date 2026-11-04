@@ -8,7 +8,7 @@ import { PulseHistory, WINDOW_MS } from "./pulse-history.js";
 import { DurableState } from "./durable-state.js";
 import { RollingArchive, HISTORY_HOURS } from "./rolling-archive.js";
 import { PrivateProfiles } from "./private-profiles.js";
-import { MedicReviews, describeSignal } from "./medic-review.js";
+import { MedicReviews, describeSignal, explainAutoReview } from "./medic-review.js";
 import { AutoHRMonitor } from "./auto-hr-monitor.js";
 import { trainingSummary } from "./training-summary.js";
 import { fileURLToPath } from "node:url";
@@ -88,7 +88,7 @@ function snapshot(){const now=Date.now();
   const autoCheck=!!(rev?.status==="pending"&&(rev?.openedBy==="system"||rev?.autoPauseRequired));
   const profile=code?privateProfiles.get(id,code):null;
   const monitoringStatus=profile?.reviewThresholdConfirmed&&profile?.reviewThresholdBpm!==null?"OPERATOR_CONFIGURED_UNVERIFIED":"MONITORING_NOT_CONFIGURED";
-  return {id,autoCheck,monitoringStatus,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
+  return {id,autoCheck,autoAlert:explainAutoReview(rev),monitoringStatus,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
    stale:state!=="CONNECTED",state,paused,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
 function commanderSnapshot(){
@@ -101,7 +101,7 @@ function commanderSnapshot(){
   // so the owner can identify R01–R15; never send clinical profiles, diagnoses,
   // medicines, medical notes, physical BLE identifiers or credentials.
   return {id:r.id,displayCode:record.code??null,hr:r.hr,timestamp:r.timestamp,
-   state:r.state,source:r.source,risk,autoCheck:r.autoCheck,registered:!!record.code};
+   state:r.state,source:r.source,risk,autoCheck:r.autoCheck,autoAlert:r.autoAlert,registered:!!record.code};
  });
  const phase=roster.getGroupPhase();
  return {serverTime:now,source:SYNTHETIC?"SIMULATED":"GATEWAY",
@@ -473,6 +473,9 @@ const server=http.createServer(async(req,res)=>{
   const seen=new Set();
   for(const item of body.readings){
    if(!item||typeof item.id!=="string"||!/^R(0[1-9]|1[0-5])$/.test(item.id)|| (item.state!=="DISCONNECTED" && (!Number.isInteger(item.hr)||item.hr<25||item.hr>240))||!Number.isSafeInteger(item.timestamp)||item.timestamp>now+1000||item.timestamp<now-MAX_AGE_MS)continue;
+   // An explicit non-live/unknown state must never be promoted to CONNECTED.
+   // Omitted state remains compatible with existing Gateway HR packets.
+   if(item.state!==undefined&&!["CONNECTED","DISCONNECTED"].includes(item.state))continue;
    if(!slotIsAuthorized(body.gateway,item)||!roster.canIngest(item.id))continue;
    if(item.timestamp<=(reassignmentCutoff.get(item.id)??0))continue;
    if(seen.has(item.id))continue;
@@ -495,7 +498,7 @@ const server=http.createServer(async(req,res)=>{
     const decision=autoHR.ingest(item.id,code,item.hr,item.timestamp,limit,
      {training:roster.getGroupPhase().phase==="training",real:!SYNTHETIC});
     if(decision.trigger){
-     const outcome=medicReviews.autoRequest(item.id,code,"high_sustained",now);
+     const outcome=medicReviews.autoRequest(item.id,code,"high_sustained",now,decision.evidence);
      if(outcome.created||outcome.escalated)autoCreated++;
     }
    }

@@ -110,3 +110,16 @@ test('WATCH stays primary alongside automatic pause and no BPM creates no emerge
  assert.match(node('cards').innerHTML,/PAUSE \/ CHECK/);
  assert.equal(node('emergencyAlerts').hidden,true);
 });
+
+test('automatic explanation labels historical evidence and escapes wearer/content on signal loss',()=>{
+ const {node,context}=view();
+ context.render({recruits:[{id:'R01',hr:null,stale:true,autoCheck:true,autoAlert:{
+  reason:'TEST <script>',summary:'ขณะแจ้งเตือน 160 BPM • 6 ค่า ใน 35 วินาที',
+  evidence:{lastAt:1793100035000},action:'พักกิจกรรม',limitation:'ตรวจสัญญาณ'}}]},
+  [{id:'R01',code:'A<001',restriction:'none'}]);
+ const alert=node('autoPauseAlerts').innerHTML;
+ assert.match(alert,/R01.*A&lt;001/);assert.match(alert,/ขณะแจ้งเตือน 160 BPM/);
+ assert.match(alert,/เวลาค่าที่ใช้แจ้งเตือน/);assert.doesNotMatch(alert,/<script>/);
+ assert.match(node('cards').innerHTML,/— <small>BPM/);
+ assert.equal(node('statLive').textContent,0);
+});
