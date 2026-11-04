@@ -87,11 +87,16 @@ for(const failSave of [false,true])test(`TEST ONLY: automatic review survives re
   assert.equal(snap.recruits[1].autoCheck,false);
   assert.equal(snap.recruits[1].hr,80);
   assert.equal(JSON.stringify(snap).includes("reviewThresholdBpm"),false);
+  assert.equal(JSON.stringify(snap).includes("recoveryShadow"),false,"shadow data must not appear in ordinary snapshots");
   const summary=await (await req("/api/medic-reviews/summary",{cookie:viewer})).json();
   assert.deepEqual(summary,{pending:1});
   assert.equal((await req("/api/medic-reviews/R01",{cookie:viewer})).status,403);
   const detail=await (await req("/api/medic-reviews/R01",{cookie:medic})).json();
   assert.equal(detail.review.openedBy,"system");
+  assert.equal(detail.recoveryShadow.mode,"shadow_research_only");
+  assert.equal(detail.recoveryShadow.status,"not_applicable","training alone must not be called recovery");
+  assert.equal(detail.recoveryShadow.clinicalAlert,false);
+  assert.equal((await req("/api/medic-reviews/R01",{cookie:viewer})).status,403,"viewer cannot read shadow research");
   assert.deepEqual(detail.review.autoEvidence,{rule:"sustained_personal_limit",firstAt:baseTime+7000,lastAt:baseTime+42000,sampleCount:6,latestBpm:160});
   assert.equal(snap.recruits[0].autoAlert.evidence.lastAt,baseTime+42000);
   const shareResponse=await req("/api/commander/share",{method:"POST",cookie:trainer});
