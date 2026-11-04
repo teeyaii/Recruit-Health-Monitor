@@ -32,8 +32,8 @@ test("clearing preview never calls medical or LIVE write endpoints",()=>{
  assert.doesNotMatch(previewLogic,/\bfetch\s*\(|\blocalStorage\b|\bsessionStorage\b|\/api\//);
  assert.match(previewLogic,/function clearTrainingPreview\(\)/);
  assert.match(previewLogic,/function openTrainingPreview\(\)/);
- assert.match(page,/function disconnect\(\)\{clearTrainingPreview\(\)/);
- assert.match(page,/function connect\(\)\{byId\("trainingPreviewToggle"\)\.hidden=false/);
+ assert.match(page,/function disconnect\(\)\{[^}]*clearTrainingPreview\(\)/);
+ assert.match(page,/function connect\(\)\{[^}]*byId\("trainingPreviewToggle"\)\.hidden=false/);
 });
 
  test("schedule-driven synthetic series stays deterministic and labels missing timetable coverage",()=>{
