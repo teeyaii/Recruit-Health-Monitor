@@ -75,7 +75,10 @@ const fs=require("fs"),assert=require("node:assert/strict");
   await qrPage.evaluate(()=>{const box=document.getElementById("commanderQr");
    new QRCode(box,{text:"https://steve.example/commander#view="+"A".repeat(43),
     width:204,height:204,correctLevel:QRCode.CorrectLevel.M});});
-  assert.ok(await qrPage.locator("#commanderQr img, #commanderQr canvas").count());
+  // QRCode draws asynchronously after constructor returns. Wait for the actual
+  // image/canvas rather than racing the first browser frame in hosted CI.
+  await qrPage.locator("#commanderQr img, #commanderQr canvas").first()
+   .waitFor({state:"attached",timeout:5000});
   assert.deepEqual(qrErrors,[]);
   console.log("PASS private commander rendering, read-only controls, stale handling, revoke and local QR");
  }finally{await browser.close();}
