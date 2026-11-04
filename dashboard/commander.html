@@ -1,0 +1,123 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="referrer" content="no-referrer"><title>STEVE | จอผู้บังคับบัญชา</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#ecf6ee;background:#0b1511}
+*{box-sizing:border-box}body{margin:0 auto;padding:clamp(15px,3vw,35px);max-width:1440px;min-height:100vh;background:radial-gradient(ellipse at 95% 0%,#1e3528 0%,#0b1511 47%)}
+header{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;margin-bottom:17px}
+h1{font-size:clamp(1.35rem,3.8vw,2rem);margin:.2em 0}h2{font-size:1.13rem;margin:19px 0 12px}
+.kicker{color:#bdd9be;letter-spacing:.13em;font-size:.72rem;font-weight:850}
+.sub{color:#abc0af;font-size:.82rem}.pill{background:#203528;color:#d8efdf;border:1px solid #476c4e;border-radius:60px;padding:9px 12px;font-size:.77rem}
+.banner{border:1px solid #506b54;background:#1a2a20;border-radius:12px;padding:13px 16px;color:#e3eee2;margin:14px 0;line-height:1.5}
+.banner.error{background:#392225;border-color:#ae5e63}.banner.good{background:#183c2b}
+.metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.metric{background:#172b21;border:1px solid #365643;border-radius:13px;padding:15px;min-height:100px}
+.metric small{color:#b1c5b5;display:block;line-height:1.35}.metric b{display:block;font-size:clamp(1.45rem,2.8vw,2rem);margin-top:7px;font-variant-numeric:tabular-nums}
+.metric.watch b{color:#ffd177}.metric.emergency b{color:#ff9394}.metric.lost b{color:#e0a29c}
+.phase{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-radius:13px;background:#14281d;border:1px solid #3c5e48;padding:15px 18px;margin-top:14px}
+.phase strong{font-size:1rem}.phase span{color:#adbfad;font-size:.82rem}
+#cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
+.person{background:#1a2a21;border:1px solid #405746;border-left:6px solid #7a9781;border-radius:14px;padding:17px;min-height:175px}
+.person.watch{border-left-color:#ffc15c;background:#302b1f}.person.emergency{border-left-color:#ff656b;background:#372226}
+.person.pause{border-left-color:#d09b67}.person.lost{border-left-color:#c98b8b}
+.person-top{display:flex;align-items:center;justify-content:space-between;gap:7px}
+.person-top b{font-size:1.1rem}.risk{font-size:.68rem;font-weight:850;letter-spacing:.02em;background:#314337;padding:6px 8px;border-radius:6px}
+.person.watch .risk{background:#5a4224;color:#ffe0ad}.person.emergency .risk{background:#5b272b;color:#ffbcbc}
+.person .bpm{font-size:clamp(2rem,4vw,2.55rem);font-weight:850;margin:15px 0 8px;font-variant-numeric:tabular-nums}
+.person .bpm small{font-size:.9rem;color:#b7cbb9;font-weight:600}.person .detail{color:#bed0bf;font-size:.79rem}
+.person .detail.alert{color:#ffb3b5}.muted{color:#adc0af;font-size:.78rem;line-height:1.55}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font:inherit;background:#c2dfb5;color:#13251c;border:0;border-radius:10px;min-height:43px;padding:10px 14px;font-weight:750;cursor:pointer}
+button.secondary{background:#294135;color:#d8e9df;border:1px solid #4e6c56}
+#access{max-width:520px;margin:14vh auto 0;text-align:center;padding:30px 20px;background:#19271e;border:1px solid #4d6351;border-radius:17px}
+#access p{line-height:1.7}#dashboard[hidden],#access[hidden]{display:none}
+footer{margin:30px 0;color:#a8b5a6;font-size:.75rem;line-height:1.6}
+@media(max-width:700px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric:last-child{grid-column:1/-1}#cards{grid-template-columns:repeat(2,minmax(0,1fr))} .person{min-height:153px;padding:12px}.person .bpm{font-size:1.8rem}}
+@media(max-width:360px){#cards{grid-template-columns:1fr}}
+</style></head><body>
+<header><div><div class="kicker">STEVE / COMMAND CENTER</div><h1>จอผู้บังคับบัญชา</h1><div class="sub">PRIVATE VIEW • อ่านข้อมูลอย่างเดียว • ไม่ใช่การวินิจฉัย</div></div><div class="pill" id="connection">รอเชื่อมต่อ</div></header>
+<section id="access"><h2>จอผู้บังคับบัญชาแบบส่วนตัว</h2><p id="accessMessage">กำลังตรวจสอบลิงก์และสิทธิ์เข้าชม...</p><p class="muted">เปิดจากลิงก์ส่วนตัวที่เจ้าหน้าที่สร้างใน STEVE เท่านั้น หากลิงก์หมดอายุหรือถูกยกเลิกให้ขอลิงก์ใหม่</p></section>
+<main id="dashboard" hidden>
+ <section class="metrics" aria-label="สรุปสถานะ"><div class="metric"><small>ลงทะเบียนแล้ว</small><b id="enrolled">—</b></div><div class="metric"><small>ชีพจรสด</small><b id="fresh">—</b></div><div class="metric lost"><small>NO DATA / ขาดสัญญาณ</small><b id="missing">—</b></div><div class="metric watch"><small>WATCH / ต้องติดตาม</small><b id="watch">—</b></div><div class="metric emergency"><small>EMERGENCY</small><b id="emergency">—</b></div></section>
+ <div class="phase"><div><span>สถานะกลุ่มฝึก</span><br><strong id="phase">รอข้อมูลการฝึก</strong></div><div><span>รอประเมิน MEDIC</span> <strong id="medic">—</strong></div></div>
+ <div id="notice" class="banner">ต้องมีข้อมูลชีพจรใหม่ไม่เกิน 15 วินาทีจึงจะแสดง LIVE • สัญญาณขาดไม่ได้หมายความว่าผู้สวมปลอดภัย</div>
+ <div class="phase"><span id="gatewayStatus">Gateway: รอข้อมูล</span><div class="actions"><button id="refresh" type="button" class="secondary">โหลดล่าสุด</button><button id="logout" type="button" class="secondary">ออกจากจอส่วนตัว</button></div></div>
+ <h2>สัญญาณชีพรายช่อง <span class="sub">เรียงตามความเร่งด่วน</span></h2>
+ <section id="cards" aria-label="ชีพจรผู้สวมรายช่อง"></section>
+ <footer>ข้อมูลแสดงเฉพาะรหัสช่อง R01–R15 ไม่แสดงชื่อ รหัสบุคคล โรคประจำตัว หรือข้อมูลยา • หากมีอาการผิดปกติให้หยุดฝึกและประเมินโดยเจ้าหน้าที่ตาม SOP ทันที ไม่ต้องรอระบบแจ้งเตือน</footer>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let last=null,ready=false,authBusy=false;
+function words(risk){return {EMERGENCY:"EMERGENCY",WATCH:"WATCH",PAUSE_CHECK:"พักและตรวจ",MONITOR:"MONITOR"}[risk]||"MONITOR";}
+function phaseName(phase){return {training:"กำลังทำการฝึก",hourly_rest:"พักประจำชั่วโมง",no_training:"ไม่มีการฝึก",not_started:"ยังไม่ได้เริ่ม"}[phase]||"ยังไม่มีข้อมูล";}
+function offline(msg){$("connection").textContent="NO DATA / ตรวจการเชื่อมต่อ";$("notice").className="banner error";$("notice").textContent=msg;}
+function draw(data){
+ if(!data||!Array.isArray(data.people))return;
+ last=data;const now=Date.now(),items=data.people;
+ const active=r=>r.state==="CONNECTED"&&Number.isInteger(r.hr)&&Number.isFinite(r.timestamp)&&
+  r.timestamp<=now+1000&&now-r.timestamp<=15000;
+ const enrolled=items.filter(r=>r.registered),live=enrolled.filter(active);
+ const flagged=items.filter(r=>r.risk==="EMERGENCY"||r.risk==="WATCH"||r.risk==="PAUSE_CHECK");
+ const counts={enrolled:enrolled.length,fresh:live.length,missing:enrolled.length-live.length,
+  watch:items.filter(r=>r.risk==="WATCH"||r.risk==="PAUSE_CHECK").length,
+  emergency:items.filter(r=>r.risk==="EMERGENCY").length};
+ for(const [key,value]of Object.entries(counts))$(key).textContent=String(value);
+ $("phase").textContent=phaseName(data.training?.phase);
+ $("medic").textContent=String(data.medicPending??0);
+ $("gatewayStatus").textContent="Gateway: "+(data.gateways||[]).map(g=>g.id+" "+(g.online?"ออนไลน์":"ออฟไลน์")).join(" • ");
+ $("notice").className=counts.emergency?"banner error":counts.watch?"banner":"banner good";
+ $("notice").textContent=counts.emergency?
+  "มีสถานะ EMERGENCY จากการเฝ้าระวังหรือข้อมูลเดิม • ตรวจสอบผู้สวมทันที ไม่ตีความว่าเป็นการวัด BPM สด":
+  counts.watch?"พบผู้สวมที่ต้องติดตาม / พักและตรวจ • ให้เจ้าหน้าที่ประเมินตาม SOP":
+  "ข้อมูลอัปเดตจากเซิร์ฟเวอร์ • สัญญาณ NO DATA ไม่ใช่ชีพจรปกติ";
+ const rank={EMERGENCY:0,PAUSE_CHECK:1,WATCH:2,MONITOR:3};
+ const sorted=[...items].sort((a,b)=>(rank[a.risk]??3)-(rank[b.risk]??3)||a.id.localeCompare(b.id));
+ const cards=$("cards");cards.replaceChildren();
+ for(const p of sorted){
+  const liveNow=active(p),card=document.createElement("article");
+  card.className="person "+(p.risk==="EMERGENCY"?"emergency":p.risk==="WATCH"?"watch":p.risk==="PAUSE_CHECK"?"pause":!liveNow?"lost":"");
+  const top=document.createElement("div");top.className="person-top";
+  const slot=document.createElement("b");slot.textContent=p.id;
+  const tag=document.createElement("span");tag.className="risk";tag.textContent=words(p.risk);top.append(slot,tag);
+  const bpm=document.createElement("div");bpm.className="bpm";
+  bpm.textContent=liveNow?String(p.hr):"—";const unit=document.createElement("small");unit.textContent=" BPM";bpm.append(unit);
+  const status=document.createElement("div");status.className="detail"+(liveNow?"":" alert");
+  status.textContent=liveNow?"LIVE • ล่าสุด "+Math.max(0,Math.round((now-p.timestamp)/1000))+" วินาที":
+   (p.state==="DISCONNECTED"?"DISCONNECTED":"NO DATA")+" • ไม่ได้รับชีพจรสด";
+  card.append(top,bpm,status);cards.append(card);
+ }
+ if(!sorted.length){const p=document.createElement("p");p.className="banner";p.textContent="ยังไม่มีผู้สวมที่ลงทะเบียนหรือข้อมูลสด";cards.append(p);}
+ $("connection").textContent="อัปเดต "+new Date(data.serverTime).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+async function refresh(){
+ if(!ready)return;
+ try{const r=await fetch("/api/commander/snapshot",{credentials:"same-origin",cache:"no-store"});
+  if(r.status===401){ready=false;$("dashboard").hidden=true;$("access").hidden=false;$("accessMessage").textContent="ลิงก์หมดอายุหรือถูกยกเลิกแล้ว • ขอจากเจ้าหน้าที่อีกครั้ง";return;}
+  if(!r.ok)throw Error("HTTP "+r.status);
+  draw(await r.json());
+ }catch{if(last)draw({...last,people:last.people.map(p=>({...p,hr:null,state:"NO DATA"}))});offline("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ • ห้ามใช้ค่าเก่าประเมินผู้สวม");}
+}
+async function enter(){
+ if(authBusy)return;authBusy=true;
+ const link=new URLSearchParams(location.hash.slice(1)),token=link.get("view");
+ // Secrets in a URL fragment are never sent in ordinary HTTP requests or Referer.
+ if(token)history.replaceState(null,"",location.pathname);
+ try{
+  if(token){const r=await fetch("/api/commander/auth",{method:"POST",credentials:"same-origin",
+   headers:{"Content-Type":"application/json"},body:JSON.stringify({token})});
+   if(!r.ok)throw Error("ลิงก์หมดอายุหรือถูกยกเลิกแล้ว");
+  }
+  const r=await fetch("/api/commander/snapshot",{credentials:"same-origin",cache:"no-store"});
+  if(!r.ok)throw Error("ไม่มีสิทธิ์เข้าชม • กรุณาเปิดลิงก์ส่วนตัวที่เจ้าหน้าที่แชร์");
+  ready=true;$("access").hidden=true;$("dashboard").hidden=false;draw(await r.json());
+ }catch(e){$("accessMessage").textContent=e.message;}
+ finally{authBusy=false;}
+}
+$("refresh").onclick=refresh;
+$("logout").onclick=async()=>{ready=false;last=null;$("dashboard").hidden=true;$("access").hidden=false;
+ $("accessMessage").textContent="ออกจากจอส่วนตัวแล้ว • เปิดลิงก์ส่วนตัวอีกครั้งเพื่อเข้าชม";
+ try{await fetch("/api/commander/logout",{method:"POST",credentials:"same-origin"});}catch{}};
+setInterval(()=>{if(ready)refresh();},5000);
+setInterval(()=>{if(ready&&last)draw(last);},1000);
+enter();
+</script></body></html>
