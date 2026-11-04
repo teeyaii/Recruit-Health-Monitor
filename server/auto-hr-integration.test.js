@@ -157,6 +157,44 @@ for(const failSave of [false,true])test(`TEST ONLY: automatic review survives re
    const snapshot=await (await req("/api/snapshot",{cookie:currentMedic})).json();
    assert.equal(snapshot.recruits[0].autoCheck,false);assert.equal(snapshot.recruits[0].autoAlert,null);assert.equal(snapshot.recruits[0].hr,null);
   }
+  // Phase 2: real accepted Gateway frames, recorded cohort rest and
+  // private medical-only observation; no new WATCH or MEDIC case.
+  const restStart=Number(await (await import("node:fs/promises")).readFile(clock,"utf8"))+1000;
+  await writeFile(clock,String(restStart));
+  r=await req("/api/training",{method:"PUT",cookie:currentMedic,json:{phase:"hourly_rest",version:1}});
+  assert.equal(r.status,200);
+  r=await req("/api/private-profile/R01",{method:"PUT",cookie:currentMedic,json:{
+   version:0,confirmed:true,weightKg:null,heightCm:null,conditions:"",
+   restingBaselineBpm:75,baselineConfirmed:true}});
+  assert.equal(r.status,200);
+  for(let i=0;i<35;i++){
+   const ts=restStart+i*7000;await writeFile(clock,String(ts));
+   const bpm=ts<restStart+120000?150:125;
+   const measure=await req("/api/ingest",{method:"POST",token:g,json:{gateway:"G01",
+    readings:[{id:"R01",device_id:"device_001",hr:bpm,timestamp:ts}]}});
+   assert.equal(measure.status,200);
+   assert.equal((await measure.json()).accepted,1);
+  }
+  await writeFile(clock,String(restStart+241000));
+  const result=await (await req("/api/medic-reviews/R01",{cookie:currentMedic})).json();
+  assert.equal(result.recoveryShadow.status,"observed");
+  assert.equal(result.recoveryShadow.firstMedianBpm,150);
+  assert.equal(result.recoveryShadow.lateMedianBpm,125);
+  assert.equal(result.recoveryShadow.changeBpm,-25);
+  assert.equal(result.recoveryShadow.baselineDifferenceBpm,50);
+  assert.equal(result.recoveryShadow.clinicalAlert,false);
+  assert.equal(result.review.status,"none","research must not create automatic medical cases");
+  const ordinary=await (await req("/api/snapshot",{cookie:viewer})).json();
+  assert.equal(JSON.stringify(ordinary).includes("recoveryShadow"),false);
+  const version=(await (await req("/api/roster",{cookie:currentMedic})).json())
+   .slots.find(p=>p.id==="R01").version;
+  r=await req("/api/roster/R01",{method:"PUT",cookie:currentMedic,json:{
+   version,code:"AFTER_SHADOW_SWAP",restriction:"none",observation:"none"}});
+  assert.equal(r.status,200,"single-save wearer reassignment remains unchanged");
+  const swapped=await (await req("/api/medic-reviews/R01",{cookie:currentMedic})).json();
+  assert.equal(swapped.recoveryShadow.status,"insufficient");
+  assert.equal(swapped.recoveryShadow.firstMedianBpm,null);
+  assert.equal(swapped.recoveryShadow.baselineDifferenceBpm,null);
 
  }finally{await stop();await rm(dir,{recursive:true,force:true});}
 });
