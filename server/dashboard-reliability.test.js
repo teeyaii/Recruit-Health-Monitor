@@ -8,7 +8,7 @@ const drain=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 function harness(){
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{hidden:false,value:'',textContent:'',innerHTML:'',setAttribute(k,v){this[k]=v;}});return nodes.get(id);};
  let reply=async()=>({ok:false,status:401});const timers=[];
- const context=vm.createContext({document:{getElementById:node},Date,fetch:(...args)=>reply(...args),setInterval:f=>timers.push(f)});
+ const context=vm.createContext({document:{getElementById:node},window:{confirm:()=>true},Date,fetch:(...args)=>reply(...args),setInterval:f=>timers.push(f)});
  vm.runInContext(script+'\nthis.api={snapshot,disconnect,draw,syncRoster,loadGroupPhase,changeGroupPhase,paintGroupPhase};',context);
  return {node,context,reply:f=>{reply=f;},timers};
 }
@@ -62,4 +62,22 @@ test('offline global-phase button must not claim it changed the group; logout cl
  await h.node('logout').onclick();
  assert.equal(h.node('trainingPanel').hidden,true);
  assert.match(h.node('summary').textContent,/session/);
+});
+
+test('assessed legacy incident can be cleared without manual forms and cannot silently rewrite other fields',async()=>{
+ const h=harness();await drain();
+ vm.runInContext(`rosterData={slots:[{id:'R03',code:'DEMO-R03',restriction:'watch',observation:'confusion_collapse_seizure',version:4}]};byId('rosterSlot').value='R03';fillRoster();`,h.context);
+ assert.equal(h.node('resolveLegacyObservation').hidden,false);
+ let sent;
+ h.reply(async(url,opts)=>{
+  assert.equal(url,'/api/roster/R03');assert.equal(opts.method,'PUT');
+  sent=JSON.parse(opts.body);
+  return {ok:false,json:async()=>({error:'test rejection'})};
+ });
+ await h.node('resolveLegacyObservation').onclick();
+ assert.deepEqual(sent,{version:4,code:'DEMO-R03',restriction:'watch',observation:'none'});
+ assert.equal(h.node('resolveLegacyObservation').disabled,false);
+ assert.match(h.node('rosterStatus').textContent,/ไม่สำเร็จ/);
+ vm.runInContext(`rosterData={slots:[{id:'R03',code:'DEMO-R03',restriction:'watch',observation:'none',version:5}]};fillRoster();`,h.context);
+ assert.equal(h.node('resolveLegacyObservation').hidden,true);
 });
