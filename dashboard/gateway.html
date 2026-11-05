@@ -56,6 +56,9 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 #simpleStatus,#serverStatus{padding:10px 12px;border-radius:9px;background:rgba(107,149,111,.12);border:1px solid rgba(143,181,151,.23)}
 @media(max-width:540px){.overview{grid-template-columns:repeat(2,minmax(0,1fr))}.overview .metric:last-child{grid-column:1/-1}.hero{align-items:center}.hero button{min-width:120px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}}
+.pair-guide{padding:12px 14px;margin:10px 0;border:1px solid #55715b;background:#1b3025;border-radius:12px}
+.pair-guide strong{display:block;font-size:.95rem;color:#e0f3df}
+.pair-guide p{margin:5px 0 0;color:#c1d7c7;font-size:.88rem;line-height:1.55}
 </style></head><body>
 <header class="hero">
  <div><div class="eyebrow">STEVE / SENSOR GATEWAY</div><h1>STEVE 1.0 <span style="color:#a8d0b5">Gateway</span></h1><p>Heart-rate telemetry • เชื่อมต่อผ่าน Bluefy บน iPhone</p></div>
@@ -75,9 +78,10 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 </section>
 <section class="card">
 <h2>เชื่อมต่อสายรัด</h2>
-<p class="muted">เปิด Share HR บนเรือนที่ต้องการก่อน กด R01–R04 ตามรหัสบนเรือนจริง แล้วเลือกชื่อ Band ที่ลงท้ายรหัสเดียวกันในหน้าต่าง Bluetooth • เรือนที่เชื่อมและยืนยันแล้วจะลองกลับเข้าต่อโดยไม่สแกนซ้ำในหน้านี้</p>
+<p class="muted">กดปุ่ม R01–R04 ตามรหัสเรือนจริง • หาก Bluefy ขึ้น UUID แทนชื่อ ให้ทำขั้นตอนตรวจเรือนด้านล่าง ไม่ต้องกรอกรหัสยาว</p>
 <div class="quick"><button id="quickR01" disabled>เชื่อม R01 · 47FD</button><button id="quickR02" disabled>เชื่อม R02 · A746</button></div>
 <div class="quick" id="extraBandControls" aria-label="เพิ่มนาฬิกาเรือนที่ 3 ถึง 5"></div>
+<div class="pair-guide" id="pairGuide" role="status" aria-live="polite"><strong id="pairGuideTitle">จับคู่ทีละเรือน ไม่ต้องจำ UUID</strong><p id="pairGuideText">ถ้า Bluefy แสดง UUID หลายรายการ ให้แยกเรือนเป้าหมายออกจากเรือนอื่นก่อนสแกน เว็บเปลี่ยนชื่อรายการนี้ไม่ได้ หลังเลือกต้องตรวจด้วยการปิด/เปิด Share HR ของเรือนจริงก่อนอนุญาตให้ส่งข้อมูล ห้ามเดาจากลำดับรหัส</p></div>
 <p class="muted" id="extraBandHelp">สำหรับเรือนที่ 3–5 ต้องได้รับสิทธิ์ R03–R05 จากเซิร์ฟเวอร์ก่อน</p>
 <details class="advanced" id="advancedPair"><summary>ตั้งค่าเพิ่มเติม / แก้ปัญหา</summary><label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
 <label for="expected">รหัสท้ายชื่อ Band จากเรือนจริง (4 ตัว)<input id="expected" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="กรอกรหัสของเรือนที่จะผูกกับช่องนี้"></label>
@@ -102,12 +106,19 @@ const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 // These are human-visible device hints, not Gateway tokens or server slot IDs.
 // Keep name matching mandatory: the native chooser does not attest physical ownership.
 const OPTIONAL_BAND_SUFFIXES=Object.freeze({R03:"1121",R04:"CD42"});
+function guidePair(slot,expected,message){
+ $("pairGuideTitle").textContent=slot+" · "+expected+" — ตรวจเรือนจริง";
+ $("pairGuideText").textContent=message;
+}
 // Web Bluetooth cannot filter native chooser entries by the LAST four characters;
 // check the selected advertised name before any HR upload. Never trust row order.
 function quickConnect(slot,expected){
  const current=live.get(slot);
  if(current?.lifecycle==="STALE")stopped(current,"ผู้ควบคุมขอเชื่อมใหม่ / NO DATA");
- return connectBand(slot,expected,bindings.get(slot)?.verified?"auto":"broad");
+ const verified=bindings.get(slot)?.verified===true;
+ guidePair(slot,expected,verified?"ลองเชื่อมกลับอุปกรณ์ที่ยืนยันแล้วในหน้านี้ก่อน":"เตรียม Share HR ของเรือน "+expected+" และแยกจากเรือนอื่น หาก Bluefy แสดง UUID หลายตัว ห้ามเดา ขั้นตอนต่อไปจะตรวจด้วยการปิด/เปิด Share HR และไม่ส่ง BPM จนยืนยัน");
+ // Generic/UUID names enter quarantined supervised pairing; named suffixes continue normally.
+ return connectBand(slot,expected,verified?"auto":"supervised");
 }
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
 let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null;
@@ -182,7 +193,7 @@ function paintOptionalBands(){
   extras.append(button);
  }
  $("extraBandHelp").textContent=!auth?"เข้าใช้งาน G01 ก่อนเพิ่มเรือนที่ 3–5":
-  permitted.length?"R03/R04 กดตามรหัสบนเรือนจริง • ชื่อผิดรหัสจะไม่รับข้อมูล • ถ้าแสดงเพียง Xiaomi/รหัสยาวให้ใช้ D ในเมนูเพิ่มเติม และเปิด Share HR ทีละเรือน":
+  permitted.length?"R03/R04 กดเชื่อมได้เลย • ถ้าขึ้น UUID จะเข้าตรวจเรือนอัตโนมัติ • หากแยกเรือนไม่ได้ ห้ามยืนยัน":
   "R03–R05 ยังไม่ได้รับสิทธิ์จากเซิร์ฟเวอร์ • ตรวจ STEVE_SLOT_MAP_JSON ของ G01 ใน Render ก่อน";
  const cards=$("reservedSlotCards");cards.replaceChildren();
  const pending=["R03","R04","R05"].filter(slot=>!sessions.has(slot));
@@ -200,7 +211,10 @@ function paintOptionalBands(){
 }
 function controls(){
  paintGatewayOverview();paintOptionalBands();
- for(const slot of ["R01","R02"])$("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||(live.has(slot)&&live.get(slot)?.lifecycle!=="STALE")||connecting||chooserPending||document.hidden;
+ for(const [slot,suffix] of [["R01","47FD"],["R02","A746"]]){
+  $("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||(live.has(slot)&&live.get(slot)?.lifecycle!=="STALE")||connecting||chooserPending||document.hidden;
+  $("quick"+slot).textContent=(live.get(slot)?.lifecycle==="STALE"?"เชื่อมใหม่ ":"เชื่อม ")+slot+" · "+suffix;
+}
  $("connect").disabled=!auth||!provision.length||connecting||chooserPending||document.hidden;
  $("load").disabled=loginPending||connecting||live.size>0;
  for(const session of sessions.values())paint(session);
@@ -404,6 +418,7 @@ async function connectBand(slot,expected,mode){
   const bound=bindings.get(slot);
   if(mode==="supervised"&&!bound&&genericDevice(s.device)&&s.device.id){
    s.probe={phase:"baseline",last:0};
+   guidePair(slot,expected,"รายการ Bluetooth ไม่ระบุเรือนจริง ขณะนี้รับ BPM ทดสอบเฉพาะในเครื่อง (ยังไม่ส่งจอกลาง) รอสัญญาณใหม่แล้วทำตามปุ่มตรวจเรือน");
    status("JavaScript เห็น "+(/^xiaomi$/i.test(s.device.name?.trim())?"Xiaomi":"ชื่อว่างหรือรหัสยาว")+" • ตรวจเรือนจริง "+expected+" และเปิด Share HR เพียงเรือนเดียว");
   }else if(!acceptsDevice(s.device,expected,bound)){
    s.hint="ตรวจชื่อและ Share HR แล้วเลือกชื่อที่ลงท้าย "+expected+" หากเห็น Xiaomi หรือรหัสยาว ให้ใช้โหมด D ทีละเรือน";
