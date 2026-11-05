@@ -18,7 +18,7 @@ class Element {
 function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],sharedStorage=new Map()){
  const nodes=new Map(), intervals=[], timers=new Map();let timerId=0;let clock=100000;
  const document={hidden:false,listeners:{},getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement(){return new Element();},addEventListener(n,f){this.listeners[n]=f;}};
- const window={isSecureContext:true,addEventListener(){},localStorage:{getItem:k=>sharedStorage.get(k)??null,setItem:(k,v)=>sharedStorage.set(k,String(v)),removeItem:k=>sharedStorage.delete(k)}};
+ const window={isSecureContext:true,listeners:{},addEventListener(n,f){this.listeners[n]=f;},localStorage:{getItem:k=>sharedStorage.get(k)??null,setItem:(k,v)=>sharedStorage.set(k,String(v)),removeItem:k=>sharedStorage.delete(k)}};
  const calls=[],fetches=[];let selection=null, uploadResponse={ok:true,status:200,json:async()=>({accepted:1})};
  const bluetooth={requestDevice(options){calls.push(options);return typeof selection==='function'?selection():Promise.resolve(selection);}};
  class Clock extends Date {static now(){return clock;}}
@@ -692,4 +692,27 @@ test('changing the authorized R-slot assignment invalidates saved pairing and bl
  assert.equal(changed.api.live.size,0);
  assert.equal(changed.calls.length,0);
  assert.match(changed.get('connectAllStatus').textContent,/จับคู่/);
+});
+
+
+test('native chooser pagehide does not tear down other live verified watch connections',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}]);
+ await h.login();
+ const a=device('one','47FD'),b=device('two','A746');
+ h.select(a);await h.get('quickR01').click();a.emit();await flush();
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ let resolve;
+ h.select(()=>new Promise(r=>{resolve=r;}));
+ const pending=h.get('quickR02').click();
+ assert.equal(h.calls.length,2);
+ h.document.hidden=true;h.document.listeners.visibilitychange();
+ h.window.listeners.pagehide();
+ assert.equal(a.gatt.connected,true,'native chooser should not disconnect healthy peer');
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ h.document.hidden=false;h.document.listeners.visibilitychange();
+ resolve(b);await pending;await flush();
+ assert.equal(h.api.live.get('R02')?.ready,true);
+ a.emit([6,71]);b.emit([6,72]);await flush();
+ assert.equal(h.api.live.get('R01')?.bpm,71);
+ assert.equal(h.api.live.get('R02')?.bpm,72);
 });
