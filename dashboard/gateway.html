@@ -755,7 +755,7 @@ setInterval(()=>{
   // Only repair missing BLE notifications. Fresh BLE with an HTTP failure must
   // keep its subscription and retry uploads on subsequent samples.
   if(!document.hidden&&!chooserPending&&!connecting&&!recoveryRunning&&s.ready&&!s.probe&&
-     Date.now()-(s.lastAt??s.readyAt)>20000&&binding?.verified&&binding.autoEnabled&&
+     Date.now()-(s.lastAt??s.readyAt)>60000&&binding?.verified&&binding.autoEnabled&&
      (binding.staleRetries||0)<2){
    binding.staleRetries=(binding.staleRetries||0)+1;
    stopped(s,"สัญญาณค้าง • กำลังเชื่อมกลับ / NO DATA");
