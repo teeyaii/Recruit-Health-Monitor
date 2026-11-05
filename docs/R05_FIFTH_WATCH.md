@@ -21,18 +21,22 @@ Status: code and **simulated** tests only. Not yet verified on iPhone/Bluefy har
 
 The server needs no code change. Authorization stays in the slot map.
 
-## Required Render change (owner only; not performed by Claude)
+## Required Render change
 
-On service **steve-1-0-live-gateway**, go to **Environment** and edit the existing key **`STEVE_SLOT_MAP_EXTRA_JSON`**:
+R05 is authorized through a **separate** additive key, so no existing secret-bearing key is read or rewritten:
 
-1. Keep every existing entry **exactly** as it is, including the current G01 R03/R04 aliases. Do not touch `STEVE_SLOT_MAP_JSON` or any token.
-2. Add one entry under `"G01"`: `"R05": "<new unique alias>"`. Use something like `trial_g01_r05_20261105`. It is an anonymous server alias, **not** the watch suffix, a MAC address or a person's ID, and it must not repeat any existing alias.
-   Shape after editing (the R03/R04 values must be your current ones):
-   ```json
-   {"G01":{"R03":"<existing R03 alias>","R04":"<existing R04 alias>","R05":"trial_g01_r05_20261105"}}
-   ```
-3. Save, then manually deploy the reviewed `main` commit. The server validates the map at startup and refuses to start on a duplicate slot or alias. If the deploy is unhealthy, revert only this key edit.
-4. Optional: register an anonymous R05 roster entry in the dashboard if 7-day history is wanted. Unregistered slots still show LIVE but are not archived.
+```
+STEVE_SLOT_MAP_EXTRA_R05_JSON = {"G01":{"R05":"trial_g01_r05_20261105"}}
+```
+
+- `server/contract.js` accepts additional keys named `STEVE_SLOT_MAP_EXTRA_<NAME>_JSON`. They pass the same strict validation as `STEVE_SLOT_MAP_EXTRA_JSON`:
+  - they may only extend gateways that already exist;
+  - no duplicate R-slot or alias is allowed across all maps;
+  - the server refuses to start if a rule is broken, and Render then keeps the previous deploy live.
+- `trial_g01_r05_20261105` is an anonymous server alias. It is not the watch suffix, a MAC address or a person's ID.
+- `STEVE_SLOT_MAP_JSON`, `STEVE_SLOT_MAP_EXTRA_JSON` (R03/R04) and every token stay untouched.
+- To roll back, delete only `STEVE_SLOT_MAP_EXTRA_R05_JSON` and redeploy.
+- Optional: register an anonymous R05 roster entry in the dashboard if 7-day history is wanted. Unregistered slots still show LIVE but are not archived.
 
 ## Connecting the fifth watch in Bluefy (after deploy)
 
