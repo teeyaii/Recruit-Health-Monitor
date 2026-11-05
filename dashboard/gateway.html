@@ -255,7 +255,7 @@ function paint(s){
  const tile=tiles.get(s.slot);
  if(tile?.dataset)tile.dataset.status=s.closed||s.bpm===null||!s.lastAt||Date.now()-s.lastAt>15000?"NO_DATA":"LIVE";
  const fresh=!s.closed&&s.bpm!==null&&Number.isSafeInteger(s.lastAt)&&Date.now()-s.lastAt<=15000;
- const confirmed=fresh&&s.ackAt&&Date.now()-s.ackAt<=15000;
+ const confirmed=fresh&&s.ackAt&&s.ackAt>=s.lastAt&&Date.now()-s.ackAt<=15000&&s.ack==="Server acknowledged";
  s.indicator.textContent=s.closed?"NO DATA • กดเชื่อมต่อใหม่":
   s.lifecycle==="STALE"?"NO DATA • สัญญาณค้าง กดเชื่อมต่อใหม่":
   s.error?"ส่งข้อมูลไม่สำเร็จ":
