@@ -101,9 +101,14 @@ if (env.STEVE_SLOT_MAP_JSON) {
         throw Error("Invalid gateway in "+source);
       if (strictMode && !gatewayTokens.has(gateway))
         throw Error("Provisioned gateway has no credential: "+gateway);
-      // Extra assignments may extend existing gateways only, never silently
-      // introduce a new gateway. Duplicate slot/device bindings fail closed.
-      if (source!=="STEVE_SLOT_MAP_JSON" && !assignments.has(gateway))
+      // A gateway-named key (STEVE_SLOT_MAP_EXTRA_G02_JSON) may contain ONLY
+      // that gateway and may introduce it (its credential is already required
+      // above in strict mode). Every other extra map may extend existing
+      // gateways only. Duplicate slot/device bindings fail closed.
+      const namedFor=source.match(/^STEVE_SLOT_MAP_EXTRA_(G0[1-5])_JSON$/)?.[1];
+      if (namedFor && gateway!==namedFor)
+        throw Error(source+" may only contain "+namedFor);
+      if (source!=="STEVE_SLOT_MAP_JSON" && !namedFor && !assignments.has(gateway))
         throw Error("Extra slot map cannot introduce gateway: "+gateway);
       const assigned=assignments.get(gateway)??new Map();
       for (const [slot,device] of Object.entries(slots)) {
