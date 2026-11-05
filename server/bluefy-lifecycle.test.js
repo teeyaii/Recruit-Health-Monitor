@@ -15,22 +15,22 @@ class Element {
  remove(){}
  click(){return this.listeners.click?.();}
 }
-function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],sharedStorage=new Map()){
+function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],sharedStorage=new Map(),gatewayId='G01'){
  const nodes=new Map(), intervals=[], timers=new Map();let timerId=0;let clock=100000;
  const document={hidden:false,listeners:{},getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement(){return new Element();},addEventListener(n,f){this.listeners[n]=f;}};
- const window={isSecureContext:true,addEventListener(){},localStorage:{getItem:k=>sharedStorage.get(k)??null,setItem:(k,v)=>sharedStorage.set(k,String(v)),removeItem:k=>sharedStorage.delete(k)}};
+ const window={isSecureContext:true,listeners:{},addEventListener(n,f){this.listeners[n]=f;},localStorage:{getItem:k=>sharedStorage.get(k)??null,setItem:(k,v)=>sharedStorage.set(k,String(v)),removeItem:k=>sharedStorage.delete(k)}};
  const calls=[],fetches=[];let selection=null, uploadResponse={ok:true,status:200,json:async()=>({accepted:1})};
  const bluetooth={requestDevice(options){calls.push(options);return typeof selection==='function'?selection():Promise.resolve(selection);}};
  class Clock extends Date {static now(){return clock;}}
  const context={document,window,navigator:{bluetooth},Date:Clock,Map,Set,AbortController,setInterval(f){intervals.push(f);},setTimeout(f,ms){timers.set(++timerId,{f,at:clock+ms});return timerId;},clearTimeout(id){timers.delete(id);},fetch:async(url,options)=>{
   fetches.push({url,options});
-  if(url==='/api/gateway/provision')return {ok:true,json:async()=>({gateway:'G01',slots:provisionedSlots})};
+  if(url==='/api/gateway/provision')return {ok:true,json:async()=>({gateway:gatewayId,slots:provisionedSlots})};
   return typeof uploadResponse==='function'?uploadResponse():uploadResponse;
  }};
  vm.createContext(context);
  vm.runInContext(script+'\nthis.api={connectBand,safeError,decodeHeartRate,live,bindings,stopped,upload};',context);
  const get=id=>document.getElementById(id);
- return {context,document,window,get,calls,fetches,api:context.api,select(d){selection=d;},reply(r){uploadResponse=r;},tick(ms){clock+=ms;for(const [id,t] of timers){if(t.at<=clock){timers.delete(id);t.f();}}intervals.forEach(f=>f());},async login(){get('gateway').value='G01';get('token').value='test-only-credential-with-32-characters';await get('load').click();},async connect(d,slot='R01',suffix='AB12',mode='standard'){selection=d;await context.api.connectBand(slot,suffix,mode);},hide(){document.hidden=true;document.listeners.visibilitychange();}};
+ return {context,document,window,get,calls,fetches,api:context.api,select(d){selection=d;},reply(r){uploadResponse=r;},tick(ms){clock+=ms;for(const [id,t] of timers){if(t.at<=clock){timers.delete(id);t.f();}}intervals.forEach(f=>f());},async login(){get('gateway').value=gatewayId;get('token').value='test-only-credential-with-32-characters';await get('load').click();},async connect(d,slot='R01',suffix='AB12',mode='standard'){selection=d;await context.api.connectBand(slot,suffix,mode);},hide(){document.hidden=true;document.listeners.visibilitychange();}};
 }
 function device(id='fake-one',suffix='AB12',failStage=null,error={name:'NetworkError'}){
  const d=new Element();d.id=id;d.name='Xiaomi Smart Band 10 '+suffix;d.calls=[];
@@ -138,7 +138,7 @@ test('getDevices reconnect matches only previously bound ID; unsupported require
 test('rapid taps and unresolved chooser never launch overlapping native prompts',async()=>{
  const h=harness();await h.login();let resolve;h.select(()=>new Promise(r=>resolve=r));
  const pending=h.api.connectBand('R01','AB12','standard');await h.api.connectBand('R02','CD34','broad');assert.equal(h.calls.length,1);
- h.hide();h.tick(20001);await pending;h.document.hidden=false;h.document.listeners.visibilitychange();
+ h.hide();h.tick(60001);await pending;h.document.hidden=false;h.document.listeners.visibilitychange();
  await h.api.connectBand('R01','AB12','standard');assert.equal(h.calls.length,1);
  resolve(device());await flush();await h.connect(device());assert.equal(h.calls.length,2);
 });
@@ -150,7 +150,7 @@ test('old notification and backgrounded upload cannot contaminate replacement se
  old.onValue({target:{value:packet([6,99])}});reply({ok:true,json:async()=>({accepted:1})});await flush();assert.equal(fresh.bpm,null);
 });
 test('native chooser timeout releases attempt but requires reset before a second chooser',async()=>{
- const h=harness();await h.login();h.select(()=>new Promise(()=>{}));const p=h.api.connectBand('R01','AB12','standard');h.tick(20001);await p;
+ const h=harness();await h.login();h.select(()=>new Promise(()=>{}));const p=h.api.connectBand('R01','AB12','standard');h.tick(60001);await p;
  assert.match(h.get('bleStatus').textContent,/TimeoutError/);assert.equal(h.api.live.size,0);
  await h.api.connectBand('R01','AB12','broad');assert.equal(h.calls.length,1);
  let reloaded=false;h.window.location={reload(){reloaded=true;}};h.get('resetBle').click();assert.equal(reloaded,false);assert.match(h.get("bleStatus").textContent,/Manual action required/);
@@ -285,9 +285,24 @@ test('expiry stops both bands, clears BPM and offers login without opening choos
  h.tick(36000001);await drain();assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('quickR01').disabled,true);assert.equal(h.calls.length,2);
  assert.equal(a.gatt.connected,false);assert.equal(b.gatt.connected,false);
 });
-test('server-revoked cookie clears live sessions instead of presenting unauthorized readings',async()=>{
- const h=harness();await h.login();const a=device();await h.connect(a);h.reply({ok:false,status:401});a.emit();await drain();
- assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('connect').disabled,true);
+test('server-revoked cookie (Render restart) keeps BLE but never presents unacknowledged readings; same-Gateway re-login resumes without re-pairing',async()=>{
+ const h=harness();await h.login();const a=device();await h.connect(a);a.emit();await drain();
+ h.reply({ok:false,status:401});h.tick(1100);a.emit([6,70]);await drain();
+ const s=h.api.live.get('R01');
+ assert.equal(a.gatt.connected,true,'healthy watch link is not torn down by a backend restart');
+ assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('connect').disabled,true);
+ assert.equal(h.get('gateway').disabled,true,'only the same Gateway may resume these streams');
+ assert.doesNotMatch(s.indicator.textContent,/Server acknowledged/);
+ assert.equal(h.get('load').disabled,false,'operator can log in again while watches stay connected');
+ const before=h.fetches.filter(x=>x.url==='/api/ingest').length;
+ h.tick(1100);a.emit([6,71]);await drain();
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,before,'no upload attempted without a Gateway session');
+ h.reply({ok:true,status:200,json:async()=>({accepted:1})});
+ const choices=h.calls.length;await h.login();
+ assert.equal(h.api.live.get('R01'),s,'same session retained after re-login');
+ h.tick(1100);a.emit([6,72]);await drain();
+ assert.equal(s.bpm,72);assert.match(s.indicator.textContent,/Server acknowledged/);
+ assert.equal(h.calls.length,choices,'no native chooser for resume');
 });
 
 test('hiding Bluefy always stops BLE streams and refuses hidden HR uploads',async()=>{
@@ -321,11 +336,11 @@ test('G01 can provision R03 and R04 on one Bluefy page and keep four physical se
   {id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}]);
  await h.login();
  assert.equal(h.get('extraBandControls').children.length,2,'only authorized additional slots have controls');
- assert.equal(h.get('reservedSlotCards').children.length,3,'unpaired R03–R05 begin as NO DATA');
+ assert.equal(h.get('reservedSlotCards').children.length,2,'only authorized unpaired R03/R04 are listed as NO DATA');
  const list=[['R01','AB12',69],['R02','CD34',81],['R03','EF12',93],['R04','CD56',103]];
  for(const [slot,suffix] of list)await h.connect(device('physical-'+slot,suffix),slot,suffix);
  assert.equal(h.api.live.size,4,'G01 does not enforce a two-device cap in JavaScript');
- assert.equal(h.get('reservedSlotCards').children.length,1,'paired R03/R04 are not falsely listed as vacant');
+ assert.equal(h.get('reservedSlotCards').children.length,0,'paired R03/R04 are not falsely listed as vacant');
  for(const [slot,suffix,bpm] of list)h.api.live.get(slot).device.emit([6,bpm]);
  await flush();
  const samples=h.fetches.filter(x=>x.url==='/api/ingest')
@@ -391,7 +406,7 @@ test('failed A scan exposes one-tap B scan without entering suffix or affecting 
  const b=h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม R03 · 1121');
  await b.click();await drain();
  const failed=h.get('slots').children.at(-1);
- const broad=failed.children[7];
+ const broad=failed.children.at(-1).children[1];
  assert.match(broad.textContent,/สแกน B/);
  assert.equal(broad.hidden,false);
  assert.equal(broad.disabled,false);
@@ -435,9 +450,13 @@ test('opaque picker identifier cannot supply physical suffix even as a whole tok
  const h=harness();await h.login();
  const d=device('deadbeef-AB12-0000');d.name='';
  await h.connect(d);
- assert.equal(h.api.live.size,0);
- assert.deepEqual(d.calls,[]);
- assert.match(h.get('simpleStatus').textContent,/ชื่อ/);
+ // Standard scan now routes UUID-only names to the same quarantine as Broad/supervised.
+ const s=h.api.live.get('R01');
+ assert.ok(s?.probe,'UUID-only device is quarantined, never accepted by its opaque id');
+ assert.equal(h.api.bindings.has('R01'),false,'no binding until physical off/on verification');
+ d.emit([6,80]);await drain();
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,0,'quarantined device never uploads');
+ assert.equal(s.measure.textContent,'NO DATA');
 });
 
 test('only accepted heart rate enables unnamed same-page recovery',async()=>{
@@ -514,20 +533,30 @@ test('top R01 uses Broad scan and cancelled picker keeps fresh R02 connected',as
  h.tick(3001);await drain();assert.equal(b.gatt.connected,true);assert.equal(h.api.live.get('R02').device,b);
 });
 
-test('silent verified stream recovers automatically twice, preserves peers, and rearms after fresh ACK',async()=>{
+test('silent verified stream: resubscribes on same link first, then bounded reconnect twice, preserves peers, rearms after fresh ACK',async()=>{
  const h=harness();await h.login();const a=device(),b=device('two','CD34');
  await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();
  const peer=h.api.live.get('R02');
- for(let i=0;i<2;i++){
-  b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
-  assert.equal(h.api.live.get('R02'),peer);assert.equal(h.api.live.get('R01').ready,true);
- }
- const silent=h.api.live.get('R01');
- b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
- assert.equal(h.api.live.get('R01'),silent);assert.equal(silent.bpm,null);
- a.emit();await drain();assert.equal(h.api.bindings.get('R01').staleRetries,0);
- b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
- assert.notEqual(h.api.live.get('R01'),silent);assert.equal(h.calls.length,2);
+ // Advance in 5 s steps while R02 keeps streaming; R01 stays silent.
+ const advance=async ms=>{for(let t=0;t<ms;t+=5000){h.tick(5000);b.emit();await drain();}};
+ const first=h.api.live.get('R01');
+ await advance(30000);
+ assert.equal(h.api.live.get('R01'),first,'tier 1 keeps the same session');
+ assert.equal(a.gatt.connected,true,'tier 1 never drops the GATT link');
+ assert.ok(a.calls.filter(x=>x==='subscribe').length>=2,'notifications were re-armed in place');
+ assert.equal(first.lifecycle,'STALE');assert.equal(first.bpm,null,'silent watch is NO DATA, never LIVE');
+ await advance(20000);
+ assert.notEqual(h.api.live.get('R01'),first,'tier 2 reconnects the silent slot only');
+ assert.equal(h.api.live.get('R02'),peer);assert.equal(peer.bpm,66);
+ await advance(50000);
+ const third=h.api.live.get('R01');
+ await advance(50000);
+ assert.equal(h.api.live.get('R01'),third,'automatic full reconnect is bounded to two per silence');
+ assert.equal(third.bpm,null);
+ a.emit();await drain();assert.equal(h.api.bindings.get('R01').staleRetries,0,'fresh ACK rearms recovery');
+ await advance(50000);
+ assert.notEqual(h.api.live.get('R01'),third);
+ assert.equal(h.calls.length,2,'no native chooser during automatic recovery');
 });
 
 
@@ -692,4 +721,126 @@ test('changing the authorized R-slot assignment invalidates saved pairing and bl
  assert.equal(changed.api.live.size,0);
  assert.equal(changed.calls.length,0);
  assert.match(changed.get('connectAllStatus').textContent,/จับคู่/);
+});
+
+
+test('native chooser pagehide does not tear down other live verified watch connections',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}]);
+ await h.login();
+ const a=device('one','47FD'),b=device('two','A746');
+ h.select(a);await h.get('quickR01').click();a.emit();await flush();
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ let resolve;
+ h.select(()=>new Promise(r=>{resolve=r;}));
+ const pending=h.get('quickR02').click();
+ assert.equal(h.calls.length,2);
+ h.document.hidden=true;h.document.listeners.visibilitychange();
+ h.window.listeners.pagehide();
+ assert.equal(a.gatt.connected,true,'native chooser should not disconnect healthy peer');
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ h.document.hidden=false;h.document.listeners.visibilitychange();
+ resolve(b);await pending;await flush();
+ assert.equal(h.api.live.get('R02')?.ready,true);
+ a.emit([6,71]);b.emit([6,72]);await flush();
+ assert.equal(h.api.live.get('R01')?.bpm,71);
+ assert.equal(h.api.live.get('R02')?.bpm,72);
+});
+
+
+test('foreground watch with temporary HR silence is not forcibly disconnected after 20 seconds',async()=>{
+ const h=harness();await h.login();const watch=device('watch','47FD');
+ h.select(watch);await h.get('quickR01').click();watch.emit([6,73]);await flush();
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ h.tick(21000);await flush();
+ assert.equal(watch.gatt.connected,true,'temporary silence must not trigger forced BLE disconnect');
+ assert.equal(h.api.live.get('R01')?.lifecycle,'STALE','safety status remains NO DATA');
+ watch.emit([6,74]);await flush();
+ assert.equal(h.api.live.get('R01')?.bpm,74,'stream resumes without re-pairing');
+ assert.equal(h.calls.length,1,'no native chooser reopened');
+});
+
+
+// ---- STEVE 1.0 reliability recovery regression tests ----
+function countingDevice(id,suffix){
+ const d=device(id,suffix);d.active={};
+ const add=d.addEventListener.bind(d),remove=d.removeEventListener.bind(d);
+ d.addEventListener=(n,f)=>{d.active[n]=(d.active[n]||0)+1;add(n,f);};
+ d.removeEventListener=(n,f)=>{if(d.listeners[n]===f)d.active[n]--;remove(n,f);};
+ const c=d.characteristic,cadd=c.addEventListener.bind(c),cremove=c.removeEventListener.bind(c);c.active=0;
+ c.addEventListener=(n,f)=>{c.active++;cadd(n,f);};
+ c.removeEventListener=(n,f)=>{if(c.listeners[n]===f)c.active--;cremove(n,f);};
+ return d;
+}
+for(const mode of ['standard','broad','supervised']){
+ test('scan '+mode+' treats an unverified UUID-only Band identically: quarantined, no upload',async()=>{
+  const h=harness();await h.login();const d=device('uuid-only');d.name='';
+  await h.connect(d,'R01','47FD',mode);
+  const s=h.api.live.get('R01');
+  assert.ok(s?.probe,mode+' scan must quarantine instead of rejecting or accepting');
+  d.emit([6,90]);await drain();
+  assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,0);
+  assert.equal(h.api.bindings.has('R01'),false,'unknown device is never silently bound');
+ });
+}
+test('automatic recovery never enrolls an unknown UUID-only device',async()=>{
+ const h=harness();await h.login();const stranger=device('stranger');stranger.name='';
+ h.context.navigator.bluetooth.getDevices=async()=>[stranger];
+ await h.api.connectBand('R01','47FD','autoLookup');
+ assert.equal(h.api.live.size,0);assert.equal(h.api.bindings.has('R01'),false);
+});
+test('repeated reconnect cycles never accumulate BLE listeners',async()=>{
+ const h=harness();await h.login();const d=countingDevice('band-one','47FD');
+ h.select(d);await h.get('quickR01').click();d.emit();await drain();
+ for(let i=0;i<5;i++){
+  d.gatt.connected=false;d.listeners.gattserverdisconnected?.();await drain();
+  assert.equal(h.api.live.get('R01')?.ready,true,'cycle '+i+' reconnected');
+  d.emit();await drain();
+  assert.equal(d.active.gattserverdisconnected,1,'exactly one disconnect listener');
+  assert.equal(d.characteristic.active,1,'exactly one HR listener');
+ }
+ assert.equal(h.calls.length,1,'no chooser during reconnect');
+});
+test('flapping watch hits a bounded per-slot reconnect budget; peers unaffected; manual tap rearms',async()=>{
+ const h=harness();await h.login();
+ const a=device('band-one','47FD'),b=device('band-two','A746');
+ h.select(a);await h.get('quickR01').click();h.select(b);await h.get('quickR02').click();a.emit();b.emit();await drain();
+ const peer=h.api.live.get('R02');
+ let reconnects=0;
+ for(let i=0;i<12;i++){
+  if(!h.api.live.get('R01')?.ready)break;
+  reconnects++;a.gatt.connected=false;a.listeners.gattserverdisconnected?.();await drain();
+ }
+ assert.ok(reconnects>=6&&reconnects<=8,'reconnect loop is bounded, got '+reconnects);
+ assert.equal(h.api.live.has('R01'),false,'budget exhausted: waits for operator');
+ assert.equal(h.api.live.get('R02'),peer);assert.equal(b.gatt.connected,true);
+ b.emit([6,77]);await drain();assert.equal(peer.bpm,77);
+ h.select(()=>{throw Error('verified watch should reconnect without chooser');});
+ await h.get('quickR01').click();await drain();
+ assert.equal(h.api.live.get('R01')?.ready,true,'manual tap resets the budget');
+});
+test('G02 lists R06–R10 from provisioning without inventing suffixes and hides G01 fixed buttons',async()=>{
+ const slots=['R06','R07','R08','R09','R10'].map((id,i)=>({id,device_id:'opaque-g02-'+i}));
+ const h=harness(slots,new Map(),'G02');await h.login();
+ assert.equal(h.get('quickR01').hidden,true);assert.equal(h.get('quickR02').hidden,true);
+ const buttons=h.get('extraBandControls').children;
+ assert.deepEqual(buttons.map(x=>x.textContent),['เพิ่ม R06','เพิ่ม R07','เพิ่ม R08','เพิ่ม R09','เพิ่ม R10']);
+ assert.equal(h.get('reservedSlotCards').children.length,5);
+ await buttons[0].click();
+ assert.equal(h.calls.length,0,'no chooser until the operator reads the suffix from the watch');
+ assert.equal(h.get('slot').value,'R06');assert.equal(h.get('expected').value,'');
+ h.get('expected').value='9F3A';h.get('scanMode').value='standard';
+ const w=device('g02-watch','9F3A');h.select(w);await h.get('connect').click();w.emit([6,88]);await drain();
+ const sent=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body));
+ assert.equal(sent.at(-1).gateway,'G02');assert.equal(sent.at(-1).readings[0].id,'R06');
+ assert.equal(sent.at(-1).readings[0].device_id,'opaque-g02-0');
+});
+test('two-tier silence repair: 26 s silence re-arms notifications without disconnect or chooser',async()=>{
+ const h=harness();await h.login();const d=device('band-one','47FD');
+ h.select(d);await h.get('quickR01').click();d.emit();await drain();
+ const s=h.api.live.get('R01');
+ for(let t=0;t<26000;t+=2000){h.tick(2000);await drain();}
+ assert.equal(d.gatt.connected,true);assert.equal(h.api.live.get('R01'),s);
+ assert.equal(d.calls.filter(x=>x==='subscribe').length,2);
+ assert.equal(s.measure.textContent,'NO DATA','stale stream is never shown LIVE');
+ d.emit([6,64]);await drain();assert.equal(s.bpm,64);assert.equal(h.calls.length,1);
 });
