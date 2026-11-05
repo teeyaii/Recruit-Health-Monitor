@@ -33,9 +33,10 @@ const assert=require('assert/strict');
   assert.deepEqual(await page.evaluate(()=>window.choices.map(c=>c.active)),[true,true]);
   await page.evaluate(()=>window.bands.forEach(d=>d.emit()));await page.waitForFunction(()=>Array.from(live.values()).every(s=>s.ackAt));
   assert.equal(await page.locator('#slots > .card').count(),2);
-  assert.equal(await page.locator('#reservedSlots article').count(),2,'only authorized unpaired R03/R04 are listed');
+  assert.equal(await page.locator('#reservedSlots article').count(),3,'unpaired R03/R04 plus the unconfigured R05 placeholder');
+  assert.match(await page.locator('#reservedSlots').innerText(),/R05 • ยังไม่ได้ตั้งค่า/);
   assert.equal(await page.locator('#reservedSlots button').count(),0);
-  assert.equal(await page.locator('#reservedSlots').innerText().then(t=>(t.match(/NO DATA/g)||[]).length),2);
+  assert.equal(await page.locator('#reservedSlots').innerText().then(t=>(t.match(/NO DATA/g)||[]).length),3);
   assert.equal(await page.evaluate(()=>live.size),2,'presentation slots must not create BLE sessions');
   for(const width of [390,1440]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);fs.mkdirSync('ui-artifacts',{recursive:true});await page.screenshot({path:'ui-artifacts/gateway-'+width+'.png',fullPage:true});}
   const text=await page.locator('body').innerText();assert.ok(!/Notifications:|Backend:|GATT|BATTERY/i.test(text));
