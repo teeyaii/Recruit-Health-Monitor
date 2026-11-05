@@ -625,6 +625,60 @@ $("connect").addEventListener("click",()=>{
  return connectBand(slot,fixed||$("expected").value.trim().toUpperCase(),$("scanMode").value);
 });
 $("slot").addEventListener("change",()=>{$("expected").value=bindings.get($("slot").value)?.expected||"";});
+async function connectAllRemembered(){
+ if(!auth||bulkConnecting||connecting||chooserPending||document.hidden)return;
+ bulkConnecting=true;controls();
+ const epoch=generation,targets=provision.slice(),missing=[],failed=[];
+ let started=0,already=0;
+ try{
+  const boundTargets=targets.filter(p=>bindings.get(p.id)?.verified===true);
+  if(!boundTargets.length){
+   $("connectAllStatus").textContent="ยังไม่มีเรือนที่ยืนยันแล้ว • จับคู่ R01–R04 ทีละเรือนครั้งแรกก่อน จากนั้นปุ่มนี้จะเชื่อมให้ทั้งหมด";
+   return;
+  }
+  // getDevices returns previously authorized handles. It cannot grant access
+  // or reliably resolve an unidentified UUID without first-time manual pairing.
+  let granted=[];
+  if(boundTargets.some(p=>!bindings.get(p.id)?.device)){
+   if(typeof navigator.bluetooth?.getDevices==="function"){
+    try{
+     granted=await Promise.race([navigator.bluetooth.getDevices(),new Promise((_,reject)=>setTimeout(()=>reject({name:"TimeoutError"}),5000))]);
+     if(!Array.isArray(granted))granted=[];
+    }catch{granted=[];}
+   }
+  }
+  const used=new Set();
+  for(const pair of targets){
+   if(generation!==epoch||!auth||document.hidden||chooserPending)break;
+   const slot=pair.id,binding=bindings.get(slot);
+   if(!binding?.verified){missing.push(slot);continue;}
+   const current=live.get(slot);
+   if(current?.ready&&current.lifecycle!=="STALE"&&!current.closed){already++;continue;}
+   if(current)await stopped(current,"ผู้ควบคุมขอเชื่อมทุกเรือน / NO DATA");
+   let device=binding.device;
+   if(!device)device=granted.find(d=>d?.id===binding.id);
+   if(!device||device.id!==binding.id||used.has(device.id)||!acceptsDevice(device,binding.expected,binding)){
+    failed.push(slot);continue;
+   }
+   used.add(device.id);
+   binding.device=device;binding.autoEnabled=true;
+   $("connectAllStatus").textContent="กำลังเชื่อม "+slot+" • "+(started+already)+"/"+targets.length+" เรือน";
+   await connectBand(slot,binding.expected,"auto");
+   if(live.get(slot)?.ready)started++;else failed.push(slot);
+  }
+  const connected=started+already;
+  const pending=[...missing,...failed];
+  $("connectAllStatus").textContent="เชื่อม BLE แล้ว "+connected+"/"+targets.length+" เรือน • รอ BPM และ Server ACK"
+   +(missing.length?" • ต้องจับคู่ครั้งแรก: "+missing.join(", "):"")
+   +(failed.length?" • กดเชื่อมรายเรือน: "+failed.join(", "):"")
+   +(failed.length&&typeof navigator.bluetooth?.getDevices!=="function"?" • Bluefy นี้ไม่รองรับเรียกอุปกรณ์ที่เคยอนุญาตหลังโหลดหน้าใหม่":"");
+  if(pending.length)guidePair(pending[0],bandSuffix(pending[0])||"----","เชื่อมได้เฉพาะเรือนที่ยืนยันแล้ว และ Bluefy ยังให้สิทธิ์เข้าถึง • ถ้าสิทธิ์หาย ต้องแตะเลือกเรือนจริงใหม่ ห้ามเดา UUID");
+ }finally{
+  bulkConnecting=false;controls();
+  if(recoveryRequested&&!document.hidden)Promise.resolve().then(recoverKnown);
+ }
+}
+$("connectAll").addEventListener("click",connectAllRemembered);
 $("resetBle").addEventListener("click",()=>{
  suspend();
  // Keep auth and bindings in this page; a native chooser cannot be cancelled by JS.
