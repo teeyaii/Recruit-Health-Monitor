@@ -16,7 +16,9 @@ button.secondary{background:#324760;color:#fff}
 button:disabled{opacity:.45}.bpm{font-size:2rem;font-weight:750;letter-spacing:.03em}
 .status{font-size:.93rem;overflow-wrap:anywhere}#slots .card{margin:12px 0}
 .reserved-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.reserved-slots .card{margin:0;border-style:dashed}.reserved-slots h3{font-size:1rem;margin:0 0 12px}.reserved-slots .waiting{font-size:1.2rem;font-weight:700;color:#c3d5a6}.reserved-slots p{margin:8px 0}.reserved-slots small{display:block}@media(max-width:540px){.reserved-slots{grid-template-columns:1fr}}
-[hidden]{display:none!important}summary{cursor:pointer;color:#b7c4af;padding:10px 0}.quick{display:flex;gap:10px;flex-wrap:wrap}.quick button{flex:1;min-width:130px}.technical{font-size:.8rem;color:#abb5a5}body{background:#131813}:root{background:#131813;color:#eff2e9}.card{background:#20271f;border-color:#414c3b}button{background:#c3d5a6;color:#182014}button.secondary{background:#3a4734}input,select{background:#161d16;border-color:#67735f}.bpm{font-size:2.8rem}.presentation .setup,.presentation .advanced{display:none}.presentation .bpm{font-size:3.5rem}
+[hidden]{display:none!important}summary{cursor:pointer;color:#b7c4af;padding:10px 0}.quick{display:flex;gap:10px;flex-wrap:wrap}.quick button{flex:1;min-width:130px}.technical{font-size:.8rem;color:#abb5a5}body{background:#131813}:root{background:#131813;color:#eff2e9}.card{background:#20271f;border-color:#414c3b}button{background:#c3d5a6;color:#182014}button.secondary{background:#3a4734}
+button.connect-all{display:block;width:100%;margin:12px 0 4px;background:#b3e0a7;color:#12261a;font-size:1.05rem;padding:15px}
+#connectAllStatus{font-size:.84rem;min-height:1.8em;margin:4px 0 12px}input,select{background:#161d16;border-color:#67735f}.bpm{font-size:2.8rem}.presentation .setup,.presentation .advanced{display:none}.presentation .bpm{font-size:3.5rem}
 
 /* Polished mobile Gateway: visual-only; BLE lifecycle, auth and upload unchanged. */
 :root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0c1714;color:#f1f8f2}
@@ -79,6 +81,8 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 <section class="card">
 <h2>เชื่อมต่อสายรัด</h2>
 <p class="muted">กดปุ่ม R01–R04 ตามรหัสเรือนจริง • หาก Bluefy ขึ้น UUID แทนชื่อ ให้ทำขั้นตอนตรวจเรือนด้านล่าง ไม่ต้องกรอกรหัสยาว</p>
+<button id="connectAll" class="connect-all" type="button" disabled>เชื่อมทุกเรือนที่จำไว้</button>
+<p id="connectAllStatus" class="muted" role="status" aria-live="polite">จับคู่ครั้งแรกทีละเรือน แล้วครั้งต่อไปกดปุ่มเดียว • หาก Bluefy จำสิทธิ์ Bluetooth ได้จะไม่ต้องเลือก UUID ซ้ำ</p>
 <div class="quick"><button id="quickR01" disabled>เชื่อม R01 · 47FD</button><button id="quickR02" disabled>เชื่อม R02 · A746</button></div>
 <div class="quick" id="extraBandControls" aria-label="เพิ่มนาฬิกาเรือนที่ 3 ถึง 5"></div>
 <div class="pair-guide" id="pairGuide" role="status" aria-live="polite"><strong id="pairGuideTitle">จับคู่ทีละเรือน ไม่ต้องจำ UUID</strong><p id="pairGuideText">ถ้า Bluefy แสดง UUID หลายรายการ ให้แยกเรือนเป้าหมายออกจากเรือนอื่นก่อนสแกน เว็บเปลี่ยนชื่อรายการนี้ไม่ได้ หลังเลือกต้องตรวจด้วยการปิด/เปิด Share HR ของเรือนจริงก่อนอนุญาตให้ส่งข้อมูล ห้ามเดาจากลำดับรหัส</p></div>
@@ -121,7 +125,7 @@ function quickConnect(slot,expected){
  return connectBand(slot,expected,verified?"auto":"supervised");
 }
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
-let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null;
+let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null, bulkConnecting=false;
 let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
 let lockTrialEnabled=false,lockStartedAt=0,hiddenNotifications=0,hiddenAcks=0;
 function lockMessage(message){$("lockTrialStatus").textContent=message;}
@@ -176,7 +180,7 @@ function paintOptionalBands(){
  const permitted=provision.filter(p=>["R03","R04","R05"].includes(p.id));
  const extras=$("extraBandControls");extras.replaceChildren();
  for(const item of permitted){
-  const slot=item.id,knownSuffix=auth?.gateway==="G01"&&OPTIONAL_BAND_SUFFIXES[slot];
+  const slot=item.id,knownSuffix=bandSuffix(slot);
   const button=element("button","secondary",knownSuffix?(live.get(slot)?.lifecycle==="STALE"?"เชื่อมใหม่ ":"เชื่อม ")+slot+" · "+knownSuffix:
    sessions.has(slot)?slot+" • ดูสถานะ":"เพิ่ม "+slot);
   button.type="button";button.disabled=connecting||chooserPending||document.hidden||!auth||(live.has(slot)&&live.get(slot)?.lifecycle!=="STALE");
@@ -211,6 +215,8 @@ function paintOptionalBands(){
 }
 function controls(){
  paintGatewayOverview();paintOptionalBands();
+ $("connectAll").disabled=!auth||connecting||chooserPending||bulkConnecting||recoveryRunning||document.hidden;
+ $("connectAll").textContent=bulkConnecting?"กำลังเชื่อมทุกเรือน...":"เชื่อมทุกเรือนที่จำไว้ ("+provision.filter(p=>bindings.get(p.id)?.verified).length+"/"+provision.length+")";
  for(const [slot,suffix] of [["R01","47FD"],["R02","A746"]]){
   $("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||(live.has(slot)&&live.get(slot)?.lifecycle!=="STALE")||connecting||chooserPending||document.hidden;
   $("quick"+slot).textContent=(live.get(slot)?.lifecycle==="STALE"?"เชื่อมใหม่ ":"เชื่อม ")+slot+" · "+suffix;
@@ -485,7 +491,7 @@ async function connectBand(slot,expected,mode){
     }
     s.ack=result.detail;
     if(result.ok){
-     if(bpm!==null){bindings.get(slot).verified=true;bindings.get(slot).staleRetries=0;}
+     if(bpm!==null){const binding=bindings.get(slot);if(binding){binding.verified=true;binding.staleRetries=0;rememberVerified(slot,binding);}}
      s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";
      if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenAcks++;
     }
@@ -513,6 +519,7 @@ async function connectBand(slot,expected,mode){
     }else if(probe.phase==="confirm"&&Date.now()-probe.last<=15000){
      s.probe=null;s.verify.hidden=true;s.readyAt=Date.now();
      bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:true,autoEnabled:true});
+     rememberVerified(slot,bindings.get(slot));
      guidePair(slot,expected,"ยืนยันเรือนจริงแล้ว รอ BPM ใหม่พร้อม Server acknowledged ก่อนถือว่าเชื่อมสำเร็จ การผูกนี้ใช้ได้เฉพาะหน้า Gateway ที่เปิดอยู่");
      $("simpleStatus").textContent=slot+" ผ่านการตรวจเรือนจริง • รอ BPM ใหม่";
      status("ยืนยันแล้ว • รอ BPM ใหม่");
@@ -535,6 +542,7 @@ async function connectBand(slot,expected,mode){
 function applyProvision(payload){
  if(!/^G0[1-5]$/.test(payload.gateway)||!Array.isArray(payload.slots)||!payload.slots.every(s=>/^R(0[1-9]|1[0-5])$/.test(s.id)&&/^[a-zA-Z0-9_-]{4,64}$/.test(s.device_id)))throw Error("Invalid provision");
  clearSlotCards();bindings.clear();auth={gateway:payload.gateway,expiresAt:payload.expiresAt||Date.now()+(["G01","G02","G03"].includes(payload.gateway)?36000000:7200000)};provision=payload.slots;
+ restoreRemembered();
  $("token").value="";$("gateway").value=payload.gateway;$("gateway").disabled=true;$("loginFields").hidden=true;
  $("slot").replaceChildren();
  for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}
@@ -622,7 +630,7 @@ function suspend(){
  controls();
 }
 async function recoverKnown(){
- if(!recoveryRequested||recoveryRunning||connecting||document.hidden||!auth)return;
+ if(!recoveryRequested||recoveryRunning||connecting||bulkConnecting||document.hidden||!auth)return;
  if(chooserPending){status("NO DATA • Manual action required: ปิดหน้าต่างเลือกที่ค้างก่อน แล้วกด Soft BLE Reset");return;}
  recoveryRequested=false;recoveryRunning=true;
  const epoch=generation;
