@@ -348,6 +348,87 @@ test('G01 can provision R03 and R04 on one Bluefy page and keep four physical se
  h.api.live.get('R04').device.emit([6,104]);await flush();
  assert.equal(h.api.live.get('R04').bpm,104,'disconnecting R03 does not disrupt R04');
 });
+
+test('four LIVE watches: stale R03 can be reconnected alone without disturbing other slots or opening chooser',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},
+  {id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}]);
+ await h.login();
+ const bands=[['R01','47FD',64],['R02','A746',71],['R03','1121',82],['R04','CD42',92]];
+ const devices=new Map();
+ for(const [slot,suffix] of bands){
+  const band=device('band-'+slot,suffix);devices.set(slot,band);h.select(band);
+  if(slot==='R01'||slot==='R02')await h.get('quick'+slot).click();
+  else await h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม '+slot+' · '+suffix).click();
+ }
+ assert.equal(h.api.live.size,4);
+ for(const [slot,,bpm] of bands)devices.get(slot).emit([6,bpm]);
+ await drain();
+ assert.equal(h.get('gatewayDevices').textContent,'4 เรือน');
+ const oldR03=h.api.live.get('R03');
+ h.tick(16001);await drain(); // All initial measurements expire, none may be mislabeled LIVE.
+ assert.equal(h.get('gatewayDevices').textContent,'0 เรือน');
+ assert.equal(oldR03.bpm,null);
+ assert.equal(oldR03.retry.disabled,false,'stale watch must offer single-slot recovery');
+ assert.match(oldR03.indicator.textContent,/NO DATA/);
+ for(const [slot,,bpm] of bands.filter(x=>x[0]!=='R03'))devices.get(slot).emit([6,bpm]);
+ await drain();
+ assert.equal(h.get('gatewayDevices').textContent,'3 เรือน');
+ const before=h.calls.length;
+ await oldR03.retry.click();await drain();
+ assert.equal(h.calls.length,before,'recovery uses previously authorized live-page handle');
+ const newR03=h.api.live.get('R03');
+ assert.notEqual(newR03,oldR03);
+ assert.equal(newR03.ready,true);
+ assert.equal(newR03.bpm,null,'reconnect cannot invent BPM');
+ for(const slot of ['R01','R02','R04']){
+  assert.equal(h.api.live.get(slot).ready,true,'R03 restart must not stop '+slot);
+  assert.equal(h.api.live.get(slot).device.gatt.connected,true);
+ }
+ devices.get('R03').emit([6,79]);await drain();
+ assert.equal(h.api.live.get('R03').bpm,79);
+ assert.equal(h.get('gatewayDevices').textContent,'4 เรือน');
+ assert.equal(h.get('gatewayUpload').textContent,'รับแล้ว 4 เรือน');
+});
+
+test('failed A scan exposes one-tap B scan without entering suffix or affecting other watches',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R03',device_id:'opaque-three'}]);
+ await h.login();
+ const first=device('stable','47FD');h.select(first);await h.get('quickR01').click();
+ first.emit([6,72]);await drain();
+ h.select(()=>Promise.reject({name:'NotFoundError'}));
+ const b=h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม R03 · 1121');
+ await b.click();await drain();
+ const failed=h.get('slots').children.at(-1);
+ const broad=failed.children[7];
+ assert.match(broad.textContent,/สแกน B/);
+ assert.equal(broad.hidden,false);
+ assert.equal(broad.disabled,false);
+ assert.equal(h.get('expected').value,'','no manual suffix entry is needed');
+ h.select(device('new-three','1121'));await broad.click();await drain();
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[2])),{acceptAllDevices:true,optionalServices:['heart_rate']});
+ assert.equal(h.api.live.get('R03')?.ready,true);
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ assert.equal(h.api.live.get('R01').bpm,72);
+});
+
+test('gateway distinguishes received BLE pulse from acknowledged latest pulse',async()=>{
+ const h=harness();await h.login();
+ let respond;
+ h.reply(()=>new Promise(resolve=>{respond=resolve;}));
+ const a=device('band-01','47FD');h.select(a);await h.get('quickR01').click();
+ a.emit([6,65]);await drain();
+ const s=h.api.live.get('R01');
+ assert.match(s.indicator.textContent,/รอ Server ACK/);
+ assert.equal(h.get('gatewayUpload').textContent,'กำลังส่งข้อมูล');
+ respond({ok:true,json:async()=>({accepted:1})});await drain();
+ assert.match(s.indicator.textContent,/Server acknowledged/);
+ h.tick(1100);a.emit([6,67]);await drain();
+ assert.match(s.indicator.textContent,/รอ Server ACK|Server acknowledged/);
+ h.tick(16000);assert.equal(s.bpm,null);
+ assert.match(s.indicator.textContent,/NO DATA/);
+ assert.equal(s.retry.disabled,false);
+});
+
 test('unprovisioned R03/R04 cannot open BLE chooser or pretend to be connected',async()=>{
  const h=harness();await h.login();
  assert.equal(h.get('extraBandControls').children.length,0);
