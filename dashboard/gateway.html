@@ -254,14 +254,23 @@ async function upload(s,bpm,timestamp,disconnect=false){
 function paint(s){
  const tile=tiles.get(s.slot);
  if(tile?.dataset)tile.dataset.status=s.closed||s.bpm===null||!s.lastAt||Date.now()-s.lastAt>15000?"NO_DATA":"LIVE";
- s.indicator.textContent=s.closed?"NO DATA • กดเชื่อมต่อใหม่":s.bpm===null?"NO DATA • รอสัญญาณใหม่":s.error?"ส่งข้อมูลไม่สำเร็จ":"กำลังรับข้อมูล";
+ const fresh=!s.closed&&s.bpm!==null&&Number.isSafeInteger(s.lastAt)&&Date.now()-s.lastAt<=15000;
+ const confirmed=fresh&&s.ackAt&&Date.now()-s.ackAt<=15000;
+ s.indicator.textContent=s.closed?"NO DATA • กดเชื่อมต่อใหม่":
+  s.lifecycle==="STALE"?"NO DATA • สัญญาณค้าง กดเชื่อมต่อใหม่":
+  s.error?"ส่งข้อมูลไม่สำเร็จ":
+  confirmed?"LIVE • Server acknowledged":
+  fresh?"LIVE จาก Band • รอ Server ACK":"NO DATA • รอสัญญาณใหม่";
  s.diagnostics.textContent=s.lifecycle+" • "+s.state;
  s.measure.textContent=s.bpm===null?"NO DATA":String(s.bpm)+" BPM";
  s.age.textContent=s.lastAt?"วัดล่าสุด "+new Date(s.lastAt).toLocaleTimeString("th-TH")+" • "+Math.round((Date.now()-s.lastAt)/1000)+" วินาที":"ยังไม่มีข้อมูล";
  s.notify.textContent="Notifications: "+s.notifications;
  s.backend.textContent="Backend: "+s.ack+(s.ackAt?" • "+new Date(s.ackAt).toLocaleTimeString("th-TH"):"");
  s.errorNode.textContent=s.error||"";
- s.retry.disabled=!s.closed||connecting||chooserPending||!auth||document.hidden;
+ const manualRecovery=s.closed||s.lifecycle==="STALE";
+ s.retry.disabled=!manualRecovery||connecting||chooserPending||!auth||document.hidden;
+ s.broadRetry.hidden=!manualRecovery;
+ s.broadRetry.disabled=!manualRecovery||connecting||chooserPending||!auth||document.hidden;
  s.stop.disabled=s.closed;
 }
 function stopped(s,reason="DISCONNECTED / NO DATA"){
@@ -292,12 +301,26 @@ function addTile(slot,expected,mode){
  const measure=element("div","bpm","NO DATA"),indicator=element("p","status","กำลังเชื่อมต่อ"),age=element("small","","ยังไม่มีข้อมูล");
  const notify=element("p","status"),backend=element("p","status"),errorNode=element("p","status");
  const retry=element("button","secondary","เชื่อมต่อใหม่ "+slot),stop=element("button","secondary","ตัดการเชื่อมต่อ "+slot);
- retry.addEventListener("click",()=>connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"standard":mode));
+ const broadRetry=element("button","secondary","ค้นหาไม่เจอ? สแกน B · "+slot);
+ retry.addEventListener("click",()=>{
+  // Recover a stale, already-authorized handle without disturbing other watches.
+  // A native picker still requires its own click if the handle is no longer usable.
+  if(!s.closed&&live.get(slot)===s&&s.lifecycle==="STALE"){
+   stopped(s,"MANUAL RECONNECT / NO DATA");
+   return connectBand(slot,expected,"auto");
+  }
+  return connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"standard":mode);
+ });
+ broadRetry.addEventListener("click",()=>{
+  if(!s.closed&&live.get(slot)===s&&s.lifecycle==="STALE")stopped(s,"MANUAL BROAD RESCAN / NO DATA");
+  // Direct click preserves the user gesture for the native Broad BLE chooser.
+  return connectBand(slot,expected,"broad");
+ });
  stop.addEventListener("click",()=>{const b=bindings.get(slot);if(b)b.autoEnabled=false;stopped(live.get(slot),"หยุดโดยผู้ทดสอบ / NO DATA");});
  const details=element("details","advanced technical"),summary=element("summary","","รายละเอียด"),diagnostics=element("p","status");
  details.append(summary,diagnostics,notify,backend,errorNode);
- div.append(head,measure,indicator,age,details,retry,stop);$("slots").append(div);tiles.set(slot,div);
- return {indicator,measure,age,notify,backend,errorNode,retry,stop,diagnostics};
+ div.append(head,measure,indicator,age,details,retry,stop,broadRetry);$("slots").append(div);tiles.set(slot,div);
+ return {indicator,measure,age,notify,backend,errorNode,retry,stop,broadRetry,diagnostics};
 }
 function bounded(s,promise){
  return new Promise((resolve,reject)=>{
