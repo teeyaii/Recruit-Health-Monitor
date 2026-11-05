@@ -607,3 +607,65 @@ test('R01 named quick button still connects immediately without supervised steps
  assert.equal(h.api.bindings.get('R01').verified,true);
  assert.equal(h.get('quickR01').textContent,'เชื่อม R01 · 47FD');
 });
+
+
+test('one button reconnects four previously verified bands after reload via exact granted IDs without native picker',async()=>{
+ const roster=['R01','R02','R03','R04'].map((id,i)=>({id,device_id:'opaque-'+(i+1)}));
+ const shared=new Map(),one=harness(roster,shared);
+ await one.login();
+ const suffixes=['47FD','A746','1121','CD42'],bands=suffixes.map((suffix,i)=>device('stable-'+i,suffix));
+ for(let i=0;i<4;i++){
+  one.select(bands[i]);
+  const slot=roster[i].id;
+  if(i<2)await one.get('quick'+slot).click();
+  else await one.get('extraBandControls').children.find(x=>x.textContent.includes(slot)).click();
+  bands[i].emit();await drain();
+  assert.equal(one.api.bindings.get(slot)?.verified,true);
+ }
+ assert.equal(one.calls.length,4);
+ assert.ok(shared.size,'verified browser pairing info should be stored without gateway credentials');
+ const saved=JSON.stringify([...shared]);
+ assert.doesNotMatch(saved,/test-only-credential-with-32-characters|opaque-1|BPM/);
+ for(const b of bands)b.gatt.disconnect();
+ const two=harness(roster,shared);await two.login();
+ assert.equal(two.api.bindings.size,4);
+ two.context.navigator.bluetooth.getDevices=async()=>[bands[3],device('unknown','FFFF'),bands[2],bands[0],bands[1]];
+ two.select(()=>{throw Error('no chooser allowed for reconnect-all');});
+ await two.get('connectAll').click();await drain();
+ assert.equal(two.calls.length,0,'all previously granted IDs must reconnect without requestDevice');
+ assert.equal(two.api.live.size,4);
+ assert.equal([...two.api.live.values()].filter(s=>s.ready).length,4);
+ for(const b of bands)b.emit();
+ await drain();
+ assert.equal(two.fetches.filter(x=>x.url==='/api/ingest').length,4);
+ assert.match(two.get('connectAllStatus').textContent,/4\/4/);
+});
+test('reconnect all never guesses an unidentified or ungranted UUID',async()=>{
+ const roster=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],saved=new Map();
+ const original=harness(roster,saved);await original.login();
+ const a=device('remember-one','47FD');original.select(a);await original.get('quickR01').click();a.emit();await drain();
+ a.gatt.disconnect();
+ const next=harness(roster,saved);await next.login();
+ const wrong=device('other-uuid','47FD'),b=device('unknown','A746');b.name='';
+ next.context.navigator.bluetooth.getDevices=async()=>[wrong,b];
+ await next.get('connectAll').click();await drain();
+ assert.equal(next.calls.length,0);
+ assert.equal(next.api.live.size,0);
+ assert.match(next.get('connectAllStatus').textContent,/R01/);
+ assert.match(next.get('connectAllStatus').textContent,/R02/);
+ assert.equal(next.fetches.some(x=>x.url==='/api/ingest'),false);
+});
+test('bulk connect falls back safely when getDevices is unsupported; same-page memory works',async()=>{
+ const roster=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],saved=new Map();
+ const a=harness(roster,saved);await a.login();
+ const watch=device('watch','47FD');a.select(watch);await a.get('quickR01').click();watch.emit();await drain();
+ a.context.navigator.bluetooth.getDevices=undefined;
+ await a.api.stopped(a.api.live.get('R01'));
+ await a.get('connectAll').click();await drain();
+ assert.equal(a.api.live.get('R01')?.ready,true,'same page can use live device reference');
+ const fresh=harness(roster,saved);await fresh.login();
+ fresh.context.navigator.bluetooth.getDevices=undefined;
+ await fresh.get('connectAll').click();await drain();
+ assert.equal(fresh.api.live.size,0,'no chooser or false connection when getDevices unsupported after reload');
+ assert.match(fresh.get('connectAllStatus').textContent,/ไม่รองรับ/);
+});
