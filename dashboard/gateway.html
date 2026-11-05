@@ -51,6 +51,18 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 #slots details{border-top:1px solid #3e5b44;margin:10px 0}
 #slots details p{margin:6px 0}
 #slots button{width:100%;margin:5px 0}
+#slots{gap:9px}
+#slots .card{padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center}
+#slots .card>strong{grid-column:1;font-size:.96rem}
+#slots .card>.bpm{grid-column:2;grid-row:1/span 2;text-align:right;font-size:clamp(1.25rem,5vw,1.8rem);white-space:nowrap}
+#slots .card>.status{grid-column:1/-1;margin:2px 0;font-size:.83rem}
+#slots .card>small{grid-column:1/-1;padding:0;margin:0;color:#b9cdbd;font-size:.75rem}
+#slots .card>details{grid-column:1/-1;margin:4px 0 0}
+#slots .card>.band-actions{grid-column:1/-1;display:flex;gap:8px;margin-top:6px}
+#slots .card>.band-actions button{flex:1;min-width:0;width:auto;margin:0;padding:9px 7px;min-height:42px;font-size:.85rem}
+#slots .card>.band-actions button[hidden],#slots .card>.band-actions button:disabled{display:none}
+.browser-notice{padding:12px 14px;border:1px solid #bd9866;border-radius:10px;background:#3a2b1c;color:#fff0d8;font-size:.93rem}
+@media(max-width:540px){#slots .card{padding:11px 12px}#slots .card>.band-actions button{font-size:.82rem}}
 .quick button{background:#bce0ac;color:#11291c;min-height:50px}
 .reserved-slots .card{background:#1b2a20;border-style:dashed;box-shadow:none}
 .reserved-slots .waiting{color:#bed1b7;font-size:1rem}
@@ -80,6 +92,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 </section>
 <section class="card">
 <h2>เชื่อมต่อสายรัด</h2>
+<p id="browserNotice" class="browser-notice" role="alert" hidden>เบราว์เซอร์นี้ไม่รองรับ Bluetooth • เปิดลิงก์นี้ในแอป Bluefy บน iPhone แทน Chrome/Safari</p>
 <p class="muted">กดปุ่ม R01–R04 ตามรหัสเรือนจริง • หาก Bluefy ขึ้น UUID แทนชื่อ ให้ทำขั้นตอนตรวจเรือนด้านล่าง ไม่ต้องกรอกรหัสยาว</p>
 <button id="connectAll" class="connect-all" type="button" disabled>เชื่อมทุกเรือนที่จำไว้</button>
 <p id="connectAllStatus" class="muted" role="status" aria-live="polite">จับคู่ครั้งแรกทีละเรือน แล้วครั้งต่อไปกดปุ่มเดียว • หาก Bluefy จำสิทธิ์ Bluetooth ได้จะไม่ต้องเลือก UUID ซ้ำ</p>
@@ -228,6 +241,8 @@ function paintOptionalBands(){
 }
 function controls(){
  paintGatewayOverview();paintOptionalBands();
+ const unsupported=window.isSecureContext===false||typeof navigator.bluetooth?.requestDevice!=="function";
+ $("browserNotice").hidden=!unsupported;
  $("connectAll").disabled=!auth||connecting||chooserPending||bulkConnecting||recoveryRunning||document.hidden;
  $("connectAll").textContent=bulkConnecting?"กำลังเชื่อมทุกเรือน...":"เชื่อมทุกเรือนที่จำไว้ ("+provision.filter(p=>bindings.get(p.id)?.verified).length+"/"+provision.length+")";
  for(const [slot,suffix] of [["R01","47FD"],["R02","A746"]]){
@@ -318,6 +333,8 @@ function paint(s){
  const manualRecovery=s.closed||s.lifecycle==="STALE";
  s.retry.disabled=!manualRecovery||connecting||chooserPending||!auth||document.hidden;
  s.broadRetry.hidden=!manualRecovery;
+ s.stop.hidden=s.closed;
+ s.broadRetry.textContent="สแกน B";
  s.broadRetry.disabled=!manualRecovery||connecting||chooserPending||!auth||document.hidden;
  s.stop.disabled=s.closed;
 }
@@ -369,7 +386,8 @@ function addTile(slot,expected,mode){
  const verify=element("button","secondary");verify.hidden=true;
  const details=element("details","advanced technical"),summary=element("summary","","รายละเอียด"),diagnostics=element("p","status");
  details.append(summary,diagnostics,notify,backend,errorNode);
- div.append(head,measure,indicator,age,details,retry,stop,broadRetry,verify);$("slots").append(div);tiles.set(slot,div);
+ const actions=element("div","band-actions");actions.append(retry,broadRetry,stop,verify);
+ div.append(head,measure,indicator,age,details,actions);$("slots").append(div);tiles.set(slot,div);
  return {verify,indicator,measure,age,notify,backend,errorNode,retry,stop,broadRetry,diagnostics};
 }
 function bounded(s,promise){
