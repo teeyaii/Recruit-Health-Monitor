@@ -303,16 +303,18 @@ function addTile(slot,expected,mode){
  const retry=element("button","secondary","เชื่อมต่อใหม่ "+slot),stop=element("button","secondary","ตัดการเชื่อมต่อ "+slot);
  const broadRetry=element("button","secondary","ค้นหาไม่เจอ? สแกน B · "+slot);
  retry.addEventListener("click",()=>{
-  // Recover a stale, already-authorized handle without disturbing other watches.
-  // A native picker still requires its own click if the handle is no longer usable.
-  if(!s.closed&&live.get(slot)===s&&s.lifecycle==="STALE"){
-   stopped(s,"MANUAL RECONNECT / NO DATA");
+  // Tile is constructed before the session exists. Resolve the live owner
+  // at click time to avoid stale closures and wrong-slot recovery.
+  const current=live.get(slot);
+  if(current&&!current.closed&&current.lifecycle==="STALE"){
+   stopped(current,"MANUAL RECONNECT / NO DATA");
    return connectBand(slot,expected,"auto");
   }
   return connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"standard":mode);
  });
  broadRetry.addEventListener("click",()=>{
-  if(!s.closed&&live.get(slot)===s&&s.lifecycle==="STALE")stopped(s,"MANUAL BROAD RESCAN / NO DATA");
+  const current=live.get(slot);
+  if(current&&!current.closed&&current.lifecycle==="STALE")stopped(current,"MANUAL BROAD RESCAN / NO DATA");
   // Direct click preserves the user gesture for the native Broad BLE chooser.
   return connectBand(slot,expected,"broad");
  });
