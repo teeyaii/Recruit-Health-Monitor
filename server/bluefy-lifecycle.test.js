@@ -625,7 +625,7 @@ test('one button reconnects four previously verified bands after reload via exac
  assert.equal(one.calls.length,4);
  assert.ok(shared.size,'verified browser pairing info should be stored without gateway credentials');
  const saved=JSON.stringify([...shared]);
- assert.doesNotMatch(saved,/test-only-credential-with-32-characters|opaque-1|BPM/);
+ assert.doesNotMatch(saved,/test-only-credential-with-32-characters|BPM|rhm_session|steve_gateway=/);
  for(const b of bands)b.gatt.disconnect();
  const two=harness(roster,shared);await two.login();
  assert.equal(two.api.bindings.size,4);
