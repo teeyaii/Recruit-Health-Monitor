@@ -81,7 +81,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 <p class="muted" id="extraBandHelp">สำหรับเรือนที่ 3–5 ต้องได้รับสิทธิ์ R03–R05 จากเซิร์ฟเวอร์ก่อน</p>
 <details class="advanced" id="advancedPair"><summary>ตั้งค่าเพิ่มเติม / แก้ปัญหา</summary><label for="slot">ช่องที่อนุญาต<select id="slot" disabled><option value="">โหลดช่องก่อน</option></select></label>
 <label for="expected">รหัสท้ายชื่อ Band จากเรือนจริง (4 ตัว)<input id="expected" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="กรอกรหัสของเรือนที่จะผูกกับช่องนี้"></label>
-<label for="scanMode">โหมดสแกน<select id="scanMode"><option value="standard">A. Standard Heart Rate Scan</option><option value="broad">B. Broad BLE Scan — สแกนทั้งหมดเพื่อแก้ปัญหา</option><option value="known">C. เชื่อมอุปกรณ์ที่เคยอนุญาต (ถ้ารองรับ)</option></select></label>
+<label for="scanMode">โหมดสแกน<select id="scanMode"><option value="standard">A. Standard Heart Rate Scan</option><option value="broad">B. Broad BLE Scan — สแกนทั้งหมดเพื่อแก้ปัญหา</option><option value="known">C. เชื่อมอุปกรณ์ที่เคยอนุญาต (ถ้ารองรับ)</option><option value="supervised">D. ลงทะเบียน Xiaomi ทีละเรือนกับผู้ควบคุม</option></select></label>
 
 
 <button id="connect" disabled>เชื่อมต่อ Band 10</button>
@@ -108,6 +108,7 @@ let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
 let lockTrialEnabled=false,lockStartedAt=0,hiddenNotifications=0,hiddenAcks=0;
 function lockMessage(message){$("lockTrialStatus").textContent=message;}
 function beginLockProbe(){
+ for(const s of Array.from(live.values()))if(s.probe)stopped(s,"ยกเลิกการตรวจเมื่อออกจากหน้า");
  if(lockStartedAt)return;
  lockStartedAt=Date.now();hiddenNotifications=0;hiddenAcks=0;
  for(const s of live.values()){
@@ -236,6 +237,7 @@ function decodeHeartRate(data){
 }
 async function upload(s,bpm,timestamp,disconnect=false){
  const credentials=auth;
+ if(s.probe)return {ok:false,detail:"กำลังตรวจเรือนจริง"};
  if(!credentials)return {ok:false,detail:"ไม่มีสิทธิ์ Gateway"};
  if(!disconnect && ((document.hidden&&!lockTrialEnabled)||s.closed||Date.now()-timestamp>14000))return {ok:false,detail:"ข้อมูลเก่า / NO DATA"};
  const pair=provision.find(x=>x.id===s.slot);
@@ -250,6 +252,7 @@ async function upload(s,bpm,timestamp,disconnect=false){
    credentials:"same-origin",headers:{"X-STEVE-Gateway":"1","Content-Type":"application/json"},
    body:JSON.stringify({gateway:credentials.gateway,source:"GATEWAY",readings:[item]})});
   if(r.status===401 && auth===credentials)expireSession();
+  if(r.status===409)return {ok:false,conflict:true,detail:"อีกเครื่องถือสิทธิ์ช่องนี้ • ให้ออกจากระบบบนเครื่องเดิมก่อนส่งต่อ"};
   if(!r.ok)return {ok:false,detail:"Gateway upload rejected • HTTP "+r.status};
   const payload=await r.json();
   return payload.accepted===1?{ok:true,detail:"Server acknowledged"}:{ok:false,detail:"Server ไม่รับข้อมูลช่องนี้ (accepted != 1)"};
@@ -324,10 +327,11 @@ function addTile(slot,expected,mode){
   return connectBand(slot,expected,"broad");
  });
  stop.addEventListener("click",()=>{const b=bindings.get(slot);if(b)b.autoEnabled=false;stopped(live.get(slot),"หยุดโดยผู้ทดสอบ / NO DATA");});
+ const verify=element("button","secondary");verify.hidden=true;
  const details=element("details","advanced technical"),summary=element("summary","","รายละเอียด"),diagnostics=element("p","status");
  details.append(summary,diagnostics,notify,backend,errorNode);
- div.append(head,measure,indicator,age,details,retry,stop,broadRetry);$("slots").append(div);tiles.set(slot,div);
- return {indicator,measure,age,notify,backend,errorNode,retry,stop,broadRetry,diagnostics};
+ div.append(head,measure,indicator,age,details,retry,stop,broadRetry,verify);$("slots").append(div);tiles.set(slot,div);
+ return {verify,indicator,measure,age,notify,backend,errorNode,retry,stop,broadRetry,diagnostics};
 }
 function bounded(s,promise){
  return new Promise((resolve,reject)=>{
@@ -347,11 +351,15 @@ function matchesExpected(device,expected){
  if(/^[A-F0-9-]+$/.test(name))return false;
  return device.name!==device.id && name.split(/[^A-Z0-9]+/).filter(Boolean).pop()===expected;
 }
+function genericDevice(device){
+ const name=String(device.name||"").trim();
+ return !name||/^xiaomi$/i.test(name)||/^[a-f0-9-]{32,}$/i.test(name);
+}
 function acceptsDevice(device,expected,bound){
  if(!device?.id)return false;
  if(matchesExpected(device,expected))return true;
  const unnamed=!device.name?.trim()||device.name===device.id||/^[a-f0-9-]{32,}$/i.test(device.name);
- return unnamed&&bound?.verified&&bound.id===device.id&&bound.expected===expected;
+ return (unnamed||genericDevice(device))&&bound?.verified&&bound.id===device.id&&bound.expected===expected;
 }
 async function connectBand(slot,expected,mode){
  const automatic=mode==="auto"||mode==="autoLookup";
@@ -366,7 +374,7 @@ async function connectBand(slot,expected,mode){
   if(document.hidden||window.isSecureContext===false||typeof navigator.bluetooth?.requestDevice!=="function")throw {name:"NotSupportedError"};
   step(s,"chooser");
   // No asynchronous work before requestDevice: preserve the button's user gesture.
-  const options=mode==="broad"?{acceptAllDevices:true,optionalServices:[HR_SERVICE]}:{filters:[{services:[HR_SERVICE]}]};
+  const options=(mode==="broad"||mode==="supervised")?{acceptAllDevices:true,optionalServices:[HR_SERVICE]}:{filters:[{services:[HR_SERVICE]}]};
   if(mode==="auto"&&bindings.get(slot)?.device){
    s.device=bindings.get(slot).device;
   }else if(mode==="known"||automatic){
@@ -386,11 +394,14 @@ async function connectBand(slot,expected,mode){
    s.device=await bounded(s,choice);
   }
   validAttempt(s);step(s,"selected");
-  if(!acceptsDevice(s.device,expected,bindings.get(slot))){
-   s.hint="ตรวจ Share HR แล้วเลือกชื่อที่ลงท้าย "+expected+" หากเห็นเพียงรหัสยาว ให้ยกเลิก";
+  const bound=bindings.get(slot);
+  if(mode==="supervised"&&!bound&&genericDevice(s.device)&&s.device.id){
+   s.probe={phase:"baseline",last:0};
+   status("JavaScript เห็น "+(/^xiaomi$/i.test(s.device.name?.trim())?"Xiaomi":"ชื่อว่างหรือรหัสยาว")+" • ตรวจเรือนจริง "+expected+" และเปิด Share HR เพียงเรือนเดียว");
+  }else if(!acceptsDevice(s.device,expected,bound)){
+   s.hint="ตรวจชื่อและ Share HR แล้วเลือกชื่อที่ลงท้าย "+expected+" หากเห็น Xiaomi หรือรหัสยาว ให้ใช้โหมด D ทีละเรือน";
    s.error="อุปกรณ์ที่เลือกไม่ตรงรหัสเรือนจริงของช่องนี้ — เลือกใหม่";throw {name:"InvalidStateError"};
   }
-  const bound=bindings.get(slot);
   if(pairedDevices.has(s.device.id)||Array.from(bindings.entries()).some(([other,b])=>other!==slot&&(b.id===s.device.id||b.expected===expected))){
    s.error="เรือนนี้ถูกกำหนดให้ช่องอื่นแล้ว";throw {name:"InvalidStateError"};
   }
@@ -418,6 +429,17 @@ async function connectBand(slot,expected,mode){
    if(s.closed||(document.hidden&&!lockTrialEnabled)||!s.ready)return;
    let bpm=null;
    try{bpm=decodeHeartRate(event.target.value)}catch{}
+   if(s.probe){
+    const probe=s.probe;
+    if(document.hidden)return;
+    if(probe.phase==="quiet"||bpm!==null)probe.last=Date.now();
+    if(bpm!==null&&(probe.phase==="baseline"||probe.phase==="resume")){
+     probe.phase=probe.phase==="baseline"?"off":"confirm";
+     s.verify.textContent=probe.phase==="off"?"ปิด Share HR บนเรือน "+expected+" แล้วแตะ":"ยืนยันว่าได้ตรวจเรือน "+expected+" เพียงเรือนเดียวและสลับ Share HR ด้วยตนเอง";
+     s.verify.hidden=false;
+    }
+    return;
+   }
    if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenNotifications++;
     const now=Date.now(),sequence=++s.sequence;
    s.lastAt=now;s.bpm=bpm;transition(s,bpm===null?"RECOVERABLE":"LIVE");s.stage="receiving";
@@ -431,6 +453,13 @@ async function connectBand(slot,expected,mode){
     // A newer BLE notification cannot erase an HTTPS failure. Only successful
     // acknowledgements belong to one measurement and must pass the freshness guard.
     if(result.ok&&(s.sequence!==sequence||Date.now()-now>15000))return;
+    if(result.conflict){
+     s.error=result.detail;s.ownsDevice=false;pairedDevices.delete(s.device.id);
+     s.device.removeEventListener("gattserverdisconnected",s.onDisconnect);
+     try{s.device.gatt.disconnect()}catch{}
+     const binding=bindings.get(slot);if(binding)binding.autoEnabled=false;
+     stopped(s,result.detail);$("simpleStatus").textContent=result.detail;return;
+    }
     s.ack=result.detail;
     if(result.ok){
      if(bpm!==null)bindings.get(slot).verified=true;
@@ -445,6 +474,26 @@ async function connectBand(slot,expected,mode){
   await bounded(s,s.characteristic.startNotifications());
   validAttempt(s);
   s.characteristic.addEventListener("characteristicvaluechanged",s.onValue);
+  if(s.probe){
+   s.ready=true;s.state="ตรวจเรือนจริง • รอ HR ในเครื่อง";paint(s);
+   s.verify.addEventListener("click",()=>{
+    if(s.closed||document.hidden||!s.probe||live.get(slot)!==s)return;
+    const probe=s.probe;
+    if(probe.phase==="off"){
+     probe.phase="quiet";probe.last=Date.now();
+     s.verify.textContent="หลังสัญญาณหยุด 15 วินาที แตะก่อนเปิด Share HR";
+    }else if(probe.phase==="quiet"){
+     if(Date.now()-probe.last<15000){status("ยังยืนยันช่วงหยุดไม่ได้ • หากมีหลายเรือนให้ยกเลิก");return;}
+     probe.phase="resume";s.verify.hidden=true;status("เปิด Share HR บนเรือนเดิม แล้วรอสัญญาณกลับ");
+    }else if(probe.phase==="confirm"&&Date.now()-probe.last<=15000){
+     s.probe=null;s.verify.hidden=true;s.readyAt=Date.now();
+     bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:true,autoEnabled:true});
+     status("ยืนยันแล้ว • รอ BPM ใหม่");
+    }
+   });
+   status(slot+" • JavaScript เห็น "+(/^xiaomi$/i.test(s.device.name?.trim())?"Xiaomi":"ชื่อว่างหรือรหัสยาว")+" • แยกเรือน "+expected+" ตรวจรหัสบนเรือนจริง หากแยกไม่ได้ให้กดตัดการเชื่อมต่อ");
+   return;
+  }
   bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,autoEnabled:true});
   s.readyAt=Date.now();s.ready=true;$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");

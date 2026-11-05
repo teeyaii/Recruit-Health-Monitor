@@ -472,3 +472,30 @@ test('subscription without first notification offers a single-slot retry',async(
  assert.equal(s.retry.disabled,false);
  assert.equal(s.measure.textContent,'NO DATA');
 });
+
+
+test('supervised enrollment quarantines Xiaomi and UUID names through off/on and confirmation',async()=>{
+ for(const name of ['Xiaomi','550e8400-e29b-41d4-a716-446655440000','']){
+  const h=harness();await h.login();const d=device();d.name=name;
+  await h.connect(d,'R01','AB12','supervised');
+  const s=h.api.live.get('R01'), uploads=()=>h.fetches.filter(x=>x.url==='/api/ingest');
+  d.emit();s.verify.click();h.tick(16000);d.emit();s.verify.click();
+  assert.equal(s.probe.phase,'quiet');
+  h.tick(16000);s.verify.click();d.emit();
+  assert.equal(uploads().length,0);assert.equal(h.api.bindings.size,0);
+  s.verify.click();assert.equal(uploads().length,0);d.emit();await drain();
+  assert.equal(uploads().length,1);
+  await h.api.stopped(s);
+  h.context.navigator.bluetooth.getDevices=async()=>[d];
+  await h.connect(null,'R01','AB12','known');assert.equal(h.api.live.get('R01').device,d);
+  const fresh=harness();await fresh.login();fresh.context.navigator.bluetooth.getDevices=async()=>[d];
+  await fresh.connect(null,'R01','AB12','known');assert.equal(fresh.api.live.size,0);
+ }
+});
+test('supervised scan rejects conflicting named band and cancels provisional disconnect without writes',async()=>{
+ const h=harness();await h.login();
+ await h.connect(device('wrong','FFFF'),'R01','AB12','supervised');assert.equal(h.api.live.size,0);
+ const d=device();d.name='Xiaomi';await h.connect(d,'R01','AB12','supervised');d.emit();
+ await h.api.stopped(h.api.live.get('R01'));assert.equal(h.api.bindings.size,0);
+ assert.equal(h.fetches.some(x=>x.url==='/api/ingest'),false);
+});
