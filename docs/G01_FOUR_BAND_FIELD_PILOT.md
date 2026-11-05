@@ -47,3 +47,37 @@ Set this as `STEVE_SLOT_MAP_EXTRA_JSON` on the **same** existing Render service.
 The expected authorized G01 slots after redeploy are R01, R02, R03, R04. The Bluefy UI receives the aliases through authenticated provisioning. First check R01/R02 independently and ensure the backend reports fresh Server ACK for R03/R04 before attempting prolonged use. If an environment update creates an unhealthy deploy, revert only the new optional `STEVE_SLOT_MAP_EXTRA_JSON` key; the original base configuration must remain unchanged.
 
 No change to real profiles, roster, historical measurements or clinical alerting is implied. A Render Free restart may temporarily interrupt real BLE telemetry or volatile state.
+
+## iPhone / Bluefy field acceptance
+
+ทดสอบนอกช่วงเฝ้าระวัง เปิดหน้า Gateway ค้างไว้และเปิด Share HR ที่เรือนเป้าหมาย กดปุ่มของช่อง ตรวจชื่อที่ลงท้ายตามปุ่ม หากรายการว่างให้ลองสแกน B หากมีเพียงรหัสยาวให้ยกเลิก แม้เปิด Share HR ทีละเรือนก็ยังอาจพบอุปกรณ์ใกล้เคียงได้ ห้ามเดาจากลำดับหรือ BPM
+
+รอให้แต่ละช่องแสดง BPM สดและ Server ACK จนครบสี่ช่อง หยุดเฉพาะ R03 ตรวจว่าอีกสามช่องยังส่งข้อมูลต่อ จากนั้นเชื่อม R03 และรอ ACK ใหม่ ทดสอบยกเลิก chooser, ขาดเครือข่าย, กลับจากพื้นหลังและโหลดหน้าใหม่แยกกัน หลังโหลดใหม่ให้แตะเลือกชื่อเรือนอีกครั้ง เมื่อขาดข้อมูลต้องเห็น NO DATA
+
+ทดลองต่อเนื่อง 10 นาที แล้ว 60 นาที บันทึกเวอร์ชัน iOS/Bluefy จำนวนช่องที่ได้ ACK และระยะขาดข้อมูลแยกรายช่อง หยุดทดสอบเมื่อมีการผูกผิดช่องหรือแสดงข้อมูลเก่าเป็น LIVE ห้ามบันทึกรหัสอุปกรณ์หรือข้อมูลผู้สวมใส่ในรายงาน
+
+
+## UUID-only Bluefy native picker — guided safe flow (5 November 2026)
+
+When Bluefy lists UUID-shaped entries rather than the physical suffix, the web page **cannot change the native chooser's labels or expose the full list to JavaScript**. The R01–R04 quick buttons now automatically select supervised Broad enrollment for new devices, so the operator does not have to find Scan D in advanced settings.
+
+1. **Before tapping the quick button**, isolate the physical target band, reduce competing nearby BLE advertisements, and keep other bands out of range when practical. Merely turning off Share HR on other bands may not remove them from Bluefy's chooser. Never identify a watch by UUID order or by an unrelated heartbeat.
+2. Tap R01=47FD, R02=A746, R03=1121, or R04=CD42. If a specific advertised device name visibly matches the suffix, it is checked as before. If the selected JavaScript name is empty, `Xiaomi`, or UUID-shaped, STEVE enters a **quarantined physical off/on check**. The selected watch is not yet authorized for ingestion.
+3. To complete quarantine, observe a fresh local HR notification, **turn off Share HR on that exact physical band**, tap the on-screen check button, and wait at least 15 seconds without notifications. Tap to continue, **turn Share HR on for the same band**, wait for a fresh notification, and explicitly confirm the physical identity. Only subsequent readings may upload; require fresh `Server acknowledged`.
+4. If the operator cannot confidently isolate which physical watch matches the selected entry, **cancel/stop the session; do not confirm**. Off/on signal correspondence is a useful operational check, not cryptographic proof of hardware identity.
+5. For a verified same-page band, the quick reconnect first reuses the saved in-memory handle, preventing unnecessary rescans. Reload/new phone requires independent identity verification and native user-gesture pairing. Foreground, unlocked iPhone remains required in ordinary use.
+
+Test wrong-device choices, cancelled chooser, GATT disconnect during quarantine, other active bands' independent live streams, and 10-minute/60-minute uninterrupted field operation before any production merge. Do not use this as a validated medical safety alarm.
+
+
+## One-tap connect all remembered watches (5 November 2026)
+
+The Gateway now shows **เชื่อมทุกเรือนที่จำไว้ (N/M)**. For G01, owner-confirmed physical suffixes are R01=47FD, R02=A746, R03=1121, R04=CD42. R05 has no assumed suffix; it must be entered and physically verified on first enrollment, and the server must provision R05.
+
+**First enrollment:** Tap each R-slot once, select the correct device in Bluefy, and finish the named-suffix check or supervised physical Share HR off/on verification when the native chooser shows only UUIDs. Wait for new BPM and Server acknowledged. Only verified browser handle IDs, suffix and matching server-side anonymous slot alias are recorded in origin-local browser storage. No Gateway secrets, HR samples or patient identifiers are saved. Records persist after Gateway logout but are not synced to another phone.
+
+**Subsequent uses:** While the Bluefy page stays open, press **เชื่อมทุกเรือนที่จำไว้** to reconnect verified watches using in-memory handles. After page reload, the Gateway restores slot aliases and uses navigator.bluetooth.getDevices() to retrieve previously permitted exact handles. If the browser supports it and permissions persist, the button connects all available verified watches *sequentially*, then they stream concurrently. Missing watches are reported by R-slot and others remain connected. Require fresh BPM + server ACK for LIVE.
+
+**Platform limitation:** Some Bluefy releases / iOS permission situations do not support getDevices() or may revoke permissions. The page cannot silently grant Bluetooth access or infer which UUID belongs to which watch. If a handle is missing or changed, report that the one R-slot requires manual pairing; never choose another by row order. The user may need to update Bluefy to a release supporting getDevices. Only the same HTTPS origin and phone can reuse permissions.
+
+**Acceptance:** Validate (a) 4-watch reconnect from one button in a single page, (b) reload with granted devices where getDevices exists, (c) R05 only if provisioned and physically verified, (d) 10/60-min continuous HR + ACK, (e) no false LIVE or cross-slot identity, (f) single-slot dropout leaves healthy peers live. Keep Bluefy foreground and iPhone awake.

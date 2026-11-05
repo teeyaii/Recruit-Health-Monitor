@@ -4,7 +4,7 @@ const fs=require('fs');
 const assert=require('assert/strict');
 (async()=>{
  const token='browser-test-only-gateway-token-1234567890',port=25000+Math.floor(Math.random()*1000),base='http://127.0.0.1:'+port;
- const proc=spawn(process.execPath,['server/index.js'],{env:{...process.env,PORT:String(port),STEVE_VIEWER_TOKEN:'browser-test-only-viewer-token-1234567890',STEVE_GATEWAY_TOKEN_G01:token,STEVE_SLOT_MAP_JSON:JSON.stringify({G01:{R01:'opaque-one',R02:'opaque-two'}})},stdio:'pipe'});
+ const proc=spawn(process.execPath,['server/index.js'],{env:{...process.env,PORT:String(port),STEVE_VIEWER_TOKEN:'browser-test-only-viewer-token-1234567890',STEVE_GATEWAY_TOKEN_G01:token,STEVE_SLOT_MAP_JSON:JSON.stringify({G01:{R01:'opaque-one',R02:'opaque-two',R03:'opaque-three',R04:'opaque-four'}})},stdio:'pipe'});
  let browser;
  try{
   for(let i=0;i<80;i++){try{if((await fetch(base+'/health')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
@@ -14,7 +14,7 @@ const assert=require('assert/strict');
    window.choices=[];window.bands=[];
    Object.defineProperty(navigator,'bluetooth',{value:{requestDevice(options){
     window.choices.push({options,active:navigator.userActivation.isActive});
-    const suffix=window.bands.length?'A746':'47FD',d=new EventTarget(),c=new EventTarget();d.id=suffix;d.name='Band 10 '+suffix;
+    const suffix=['47FD','A746','1121','CD42'][window.bands.length],d=new EventTarget(),c=new EventTarget();d.id=suffix;d.name='Band 10 '+suffix;
     c.startNotifications=async()=>c;
     d.gatt={connected:false,async connect(){this.connected=true;return this;},async getPrimaryService(){return {getCharacteristic:async()=>c};},disconnect(){this.connected=false;d.dispatchEvent(new Event('gattserverdisconnected'));}};
     d.emit=()=>{const e=new Event('characteristicvaluechanged');c.value=new DataView(Uint8Array.from([6,65]).buffer);c.dispatchEvent(e);};window.bands.push(d);return Promise.resolve(d);
@@ -22,6 +22,8 @@ const assert=require('assert/strict');
   });
   await page.goto(base+'/gateway');await page.locator('#token').fill(token);await page.locator('#load').click();await page.waitForFunction(()=>document.getElementById('loginFields').hidden);
   assert.equal(await page.locator('#token').inputValue(),'');
+  await page.setViewportSize({width:390,height:844});
+  for(const slot of ['R01','R02','R03','R04'])assert.equal(await page.getByRole('button',{name:new RegExp('^เชื่อม '+slot+' ·')}).isVisible(),true);
   const cookies=await context.cookies();const cookie=cookies.find(c=>c.name==='steve_gateway');assert.ok(cookie.httpOnly);assert.equal(cookie.sameSite,'Strict');assert.ok(cookie.expires-Date.now()/1000<=36000&&cookie.expires-Date.now()/1000>=35990);
   assert.equal(await page.evaluate(()=>document.cookie.includes('steve_gateway')),false);
   await page.reload();await page.waitForFunction(()=>!document.getElementById('quickR01').disabled);

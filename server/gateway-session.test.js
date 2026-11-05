@@ -54,8 +54,16 @@ test('HTTP session restores own provision, enforces slots and CSRF, cannot read 
   r=await ingest({gateway:'G02',readings:[]});assert.equal(r.status,403);
   r=await ingest({gateway:'G01',readings:[{id:'R01',device_id:'wrong',hr:65,timestamp:Date.now()}]});assert.equal((await r.json()).accepted,0);
   r=await ingest({gateway:'G01',readings:[{id:'R01',device_id:'opaque-one',hr:65,timestamp:Date.now()}]});assert.equal((await r.json()).accepted,1);
+  const secondLogin=await fetch(base+'/api/gateway/session',login);
+  const secondHeaders={...headers,Cookie:secondLogin.headers.get('set-cookie').split(';')[0]};
+  const secondWrite=(id,device_id,state)=>fetch(base+'/api/ingest',{method:'POST',headers:secondHeaders,
+   body:JSON.stringify({gateway:'G01',readings:[{id,device_id,hr:70,state,timestamp:Date.now()}]})});
+  assert.equal((await secondWrite('R01','opaque-one','CONNECTED')).status,409);
+  assert.equal((await secondWrite('R01','opaque-one','DISCONNECTED')).status,409);
+  assert.equal((await (await secondWrite('R02','opaque-two','CONNECTED')).json()).accepted,1);
   r=await fetch(base+'/api/ingest',{method:'POST',headers:{...headers,Origin:'http://evil.test'},body:'{}'});assert.equal(r.status,401);
   r=await fetch(base+'/api/gateway/session',{method:'DELETE',headers});assert.equal(r.status,200);
   r=await fetch(base+'/api/gateway/provision',{headers});assert.equal(r.status,401);
+  assert.equal((await (await secondWrite('R01','opaque-one','CONNECTED')).json()).accepted,1);
  }finally{proc.kill();}
 });

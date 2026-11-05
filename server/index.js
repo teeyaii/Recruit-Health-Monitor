@@ -45,6 +45,13 @@ const reassignmentCutoff=new Map();
 const clients=new Map();
 const sessions=new Map();
 const gatewaySessions=new GatewaySessions();
+// This server holds sessions and live readings in the same process. A browser
+// keeps its slot across brief BLE outages until logout, renewal or expiry.
+const slotOwners=new Map();
+function releaseBrowserSlots(session){
+ if(!session)return;
+ for(const [slot,owner] of slotOwners)if(owner===session)slotOwners.delete(slot);
+}
 const failedLogins=new Map();
 const roster=new RosterStore(durable.enabled?"":process.env.STEVE_ROSTER_FILE||"");
 let conditions={wbgtC:null,timestamp:null,source:"not recorded"};
@@ -172,6 +179,7 @@ const server=http.createServer(async(req,res)=>{
   if(!gatewayBrowserRequest(req)){send(res,403,{error:'origin mismatch'});return;}
   const gateway=gatewayForBearer(req);
   if(!gateway || !/^G0[1-5]$/.test(gateway)){send(res,401,{error:'gateway credential required'});return;}
+  releaseBrowserSlots(gatewaySessions.get(req));
   const key=gatewaySessions.create(req,gateway);
   if(!key){send(res,503,{error:'session capacity reached'});return;}
   res.setHeader('Set-Cookie',gatewaySessions.cookie(key,gateway));
@@ -179,6 +187,7 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname==='/api/gateway/session' && req.method==='DELETE'){
   if(!gatewayBrowserRequest(req)){send(res,403,{error:'origin mismatch'});return;}
+  releaseBrowserSlots(gatewaySessions.get(req));
   gatewaySessions.revoke(req);res.setHeader('Set-Cookie',gatewaySessions.cookie(''));send(res,200,{ok:true});return;
  }
  // Browser sessions grant only provision/ingest, never viewer or operator access.
@@ -476,6 +485,7 @@ const server=http.createServer(async(req,res)=>{
   if(!body||typeof body.gateway!=="string"||!/^G0[1-5]$/.test(body.gateway)||!Array.isArray(body.readings)||body.readings.length>15){send(res,422,{error:"invalid gateway or batch"});return;}
   if(strictMode&&gatewayId!==body.gateway){send(res,403,{error:"gateway identity mismatch"});return;}
   if(SYNTHETIC ? body.source!=="SIMULATED" : body.source!=null && body.source!=="GATEWAY"){send(res,422,{error:"source does not match server mode"});return;}
+  if(browserGateway&&gatewaySessions.get(req)!==browserGateway){send(res,401,{error:"gateway session expired"});return;}
   const now=Date.now();let accepted=0,autoCreated=0;
   const seen=new Set();
   for(const item of body.readings){
@@ -490,6 +500,12 @@ const server=http.createServer(async(req,res)=>{
    const prior=recruits.get(item.id);if(prior&&(prior.eventAt??prior.timestamp)>=item.timestamp)continue;
    if(prior && prior.gateway!==body.gateway && now-prior.timestamp<=TTL_MS)continue;
    const disconnected=item.state==="DISCONNECTED";
+   const owner=slotOwners.get(item.id);
+   if(owner&&owner.expiry>now&&owner!==browserGateway){
+    if(body.readings.length===1){send(res,409,{error:"slot owned by another Gateway session"});return;}
+    continue;
+   }
+   if(browserGateway&&!disconnected)slotOwners.set(item.id,browserGateway);
    recruits.set(item.id,{device_id:item.device_id,hr:disconnected?null:item.hr,timestamp:disconnected?(prior?.timestamp??null):item.timestamp,
     eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});
    // Only enrolled recruits with genuine accepted HR measurements create history.
@@ -550,4 +566,3 @@ async function boot(){
  server.listen(PORT,"0.0.0.0",()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
 }
 boot().catch(()=>{console.error("STEVE secure storage startup failed; check remote store configuration");process.exitCode=1;});
-

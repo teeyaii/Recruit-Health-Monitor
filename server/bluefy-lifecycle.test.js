@@ -15,10 +15,10 @@ class Element {
  remove(){}
  click(){return this.listeners.click?.();}
 }
-function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}]){
+function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],sharedStorage=new Map()){
  const nodes=new Map(), intervals=[], timers=new Map();let timerId=0;let clock=100000;
  const document={hidden:false,listeners:{},getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement(){return new Element();},addEventListener(n,f){this.listeners[n]=f;}};
- const window={isSecureContext:true,addEventListener(){}};
+ const window={isSecureContext:true,addEventListener(){},localStorage:{getItem:k=>sharedStorage.get(k)??null,setItem:(k,v)=>sharedStorage.set(k,String(v)),removeItem:k=>sharedStorage.delete(k)}};
  const calls=[],fetches=[];let selection=null, uploadResponse={ok:true,status:200,json:async()=>({accepted:1})};
  const bluetooth={requestDevice(options){calls.push(options);return typeof selection==='function'?selection():Promise.resolve(selection);}};
  class Clock extends Date {static now(){return clock;}}
@@ -42,7 +42,7 @@ function device(id='fake-one',suffix='AB12',failStage=null,error={name:'NetworkE
  return d;
 }
 test('standard scan invokes chooser synchronously from click and discovers named HR UUIDs',async()=>{
- const h=harness();await h.login();const d=device();h.select(d);h.get('slot').value='R01';h.get('expected').value='AB12';h.get('scanMode').value='standard';
+ const h=harness();await h.login();const d=device('fake-one','47FD');h.select(d);h.get('slot').value='R01';h.get('expected').value='AB12';h.get('scanMode').value='standard';
  const connecting=h.get('connect').click();assert.equal(h.calls.length,1);await connecting;
  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0])),{filters:[{services:['heart_rate']}]});
  assert.deepEqual(d.calls,['gatt','heart_rate','heart_rate_measurement','subscribe']);
@@ -138,7 +138,7 @@ test('getDevices reconnect matches only previously bound ID; unsupported require
 test('rapid taps and unresolved chooser never launch overlapping native prompts',async()=>{
  const h=harness();await h.login();let resolve;h.select(()=>new Promise(r=>resolve=r));
  const pending=h.api.connectBand('R01','AB12','standard');await h.api.connectBand('R02','CD34','broad');assert.equal(h.calls.length,1);
- h.hide();await pending;h.document.hidden=false;h.document.listeners.visibilitychange();
+ h.hide();h.tick(20001);await pending;h.document.hidden=false;h.document.listeners.visibilitychange();
  await h.api.connectBand('R01','AB12','standard');assert.equal(h.calls.length,1);
  resolve(device());await flush();await h.connect(device());assert.equal(h.calls.length,2);
 });
@@ -437,4 +437,267 @@ test('unprovisioned R03/R04 cannot open BLE chooser or pretend to be connected',
  await h.api.connectBand('R03','EF12','standard');
  assert.equal(h.calls.length,0);
  assert.equal(h.api.live.size,0);
+});
+
+test('opaque picker identifier cannot supply physical suffix even as a whole token',async()=>{
+ const h=harness();await h.login();
+ const d=device('deadbeef-AB12-0000');d.name='';
+ await h.connect(d);
+ assert.equal(h.api.live.size,0);
+ assert.deepEqual(d.calls,[]);
+ assert.match(h.get('simpleStatus').textContent,/ชื่อ/);
+});
+
+test('only accepted heart rate enables unnamed same-page recovery',async()=>{
+ const h=harness();await h.login();const d=device();
+ await h.connect(d);const s=h.api.live.get('R01');
+ assert.equal(h.api.bindings.get('R01').verified,false);
+ d.emit();await drain();assert.equal(h.api.bindings.get('R01').verified,true);
+ await h.api.stopped(s);d.name='';
+ h.context.navigator.bluetooth.getDevices=async()=>[d];
+ await h.connect(null,'R01','AB12','known');
+ assert.equal(h.api.live.get('R01')?.device,d);
+});
+test('logout removes prior slot controls and stale device references',async()=>{
+ const h=harness();await h.login();await h.connect(device());
+ await h.get('clear').click();
+ assert.equal(h.get('slots').children.length,0);
+ assert.equal(h.api.bindings.size,0);
+});
+
+test('subscription without first notification offers a single-slot retry',async()=>{
+ const h=harness();await h.login();await h.connect(device());
+ h.tick(15001);
+ const s=h.api.live.get('R01');
+ assert.equal(s.retry.disabled,false);
+ assert.equal(s.measure.textContent,'NO DATA');
+});
+
+
+test('supervised enrollment quarantines Xiaomi and UUID names through off/on and confirmation',async()=>{
+ for(const name of ['Xiaomi','550e8400-e29b-41d4-a716-446655440000','']){
+  const h=harness();await h.login();const d=device();d.name=name;
+  await h.connect(d,'R01','AB12','supervised');
+  const s=h.api.live.get('R01'), uploads=()=>h.fetches.filter(x=>x.url==='/api/ingest');
+  d.emit();s.verify.click();h.tick(16000);d.emit();s.verify.click();
+  assert.equal(s.probe.phase,'quiet');
+  h.tick(16000);s.verify.click();d.emit();
+  assert.equal(uploads().length,0);assert.equal(h.api.bindings.size,0);
+  s.verify.click();assert.equal(uploads().length,0);d.emit();await drain();
+  assert.equal(uploads().length,1);
+  await h.api.stopped(s);
+  h.context.navigator.bluetooth.getDevices=async()=>[d];
+  await h.connect(null,'R01','AB12','known');assert.equal(h.api.live.get('R01').device,d);
+  const fresh=harness();await fresh.login();fresh.context.navigator.bluetooth.getDevices=async()=>[d];
+  await fresh.connect(null,'R01','AB12','known');assert.equal(fresh.api.live.size,0);
+ }
+});
+test('supervised scan rejects conflicting named band and cancels provisional disconnect without writes',async()=>{
+ const h=harness();await h.login();
+ await h.connect(device('wrong','FFFF'),'R01','AB12','supervised');assert.equal(h.api.live.size,0);
+ const d=device();d.name='Xiaomi';await h.connect(d,'R01','AB12','supervised');d.emit();
+ await h.api.stopped(h.api.live.get('R01'));assert.equal(h.api.bindings.size,0);
+ assert.equal(h.fetches.some(x=>x.url==='/api/ingest'),false);
+});
+
+test('Broad picker visibility pause preserves other bands and recovers only stale streams',async()=>{
+ const h=harness();await h.login();const a=device('one','47FD');await h.connect(a,'R01','47FD');a.emit();await drain();
+ const original=h.api.live.get('R01');let resolve;
+ h.select(()=>new Promise(r=>resolve=r));
+ const pending=h.api.connectBand('R02','A746','broad');
+ h.hide();assert.equal(a.gatt.connected,true);assert.equal(h.api.live.get('R01'),original);
+ h.tick(16000);foreground(h);const b=device('two','A746');resolve(b);await pending;
+ assert.equal(h.api.live.get('R01'),original);assert.equal(original.bpm,null);
+ b.emit();await drain();h.tick(3001);await drain();
+ assert.notEqual(h.api.live.get('R01'),original);assert.equal(b.gatt.connected,true);
+ assert.equal(h.calls.length,2);
+ a.emit();await drain();assert.equal(h.api.live.get('R01').bpm,66);
+});
+
+test('top R01 uses Broad scan and cancelled picker keeps fresh R02 connected',async()=>{
+ const h=harness();await h.login();const b=device('two','A746');await h.connect(b,'R02','A746');b.emit();await drain();
+ let reject;h.select(()=>new Promise((r,j)=>reject=j));const p=h.get('quickR01').click();
+ assert.equal(h.calls.at(-1).acceptAllDevices,true);
+ h.hide();assert.equal(b.gatt.connected,true);foreground(h);reject({name:'NotFoundError'});await p;
+ h.tick(3001);await drain();assert.equal(b.gatt.connected,true);assert.equal(h.api.live.get('R02').device,b);
+});
+
+test('silent verified stream recovers automatically twice, preserves peers, and rearms after fresh ACK',async()=>{
+ const h=harness();await h.login();const a=device(),b=device('two','CD34');
+ await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();
+ const peer=h.api.live.get('R02');
+ for(let i=0;i<2;i++){
+  b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
+  assert.equal(h.api.live.get('R02'),peer);assert.equal(h.api.live.get('R01').ready,true);
+ }
+ const silent=h.api.live.get('R01');
+ b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
+ assert.equal(h.api.live.get('R01'),silent);assert.equal(silent.bpm,null);
+ a.emit();await drain();assert.equal(h.api.bindings.get('R01').staleRetries,0);
+ b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
+ assert.notEqual(h.api.live.get('R01'),silent);assert.equal(h.calls.length,2);
+});
+
+
+test('one-tap R01 stale reconnect reuses verified handle without another picker or disturbing R02',async()=>{
+ const h=harness();await h.login();
+ const a=device('band-one','47FD'),b=device('band-two','A746');
+ h.select(a);await h.get('quickR01').click();
+ h.select(b);await h.get('quickR02').click();
+ a.emit();b.emit();await drain();
+ assert.equal(h.api.bindings.get('R01').verified,true);
+ const peer=h.api.live.get('R02'),choices=h.calls.length;
+ h.tick(14000);b.emit();await drain();h.tick(1001);
+ assert.equal(h.api.live.get('R01').lifecycle,'STALE');
+ assert.equal(h.get('quickR01').disabled,false);
+ h.select(()=>{throw Error('native picker must not re-open for verified watch');});
+ await h.get('quickR01').click();await drain();
+ assert.equal(h.calls.length,choices);
+ assert.equal(h.api.live.get('R01').ready,true);
+ assert.equal(h.api.live.get('R02'),peer);
+ assert.equal(b.gatt.connected,true);
+ b.emit();await drain();assert.equal(peer.bpm,66);
+});
+test('R03 stale quick button keeps assigned suffix and retries only its verified BLE handle',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},{id:'R03',device_id:'opaque-three'}]);
+ await h.login();const d=device('band-three','1121');h.select(d);
+ const button=()=>h.get('extraBandControls').children.find(x=>x.textContent.includes('R03 · 1121'));
+ await button().click();d.emit();await drain();
+ assert.equal(h.api.bindings.get('R03').verified,true);
+ const choices=h.calls.length;
+ h.tick(15001);
+ assert.match(button().textContent,/เชื่อมใหม่/);
+ assert.equal(button().disabled,false);
+ h.select(()=>{throw Error('R03 should reuse its verified handle');});
+ await button().click();await drain();
+ assert.equal(h.calls.length,choices);
+ assert.equal(h.api.live.get('R03').ready,true);
+ assert.equal(h.api.live.get('R03').expected,'1121');
+});
+
+
+test('R04 UUID-only quick pairing is quarantined with Thai guidance until physical off/on confirmation',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},{id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}]);await h.login();
+ const d=device('scan-four','CD42');d.name='F204BBBD-F29B-755D-5727-B8D5D88FF111';
+ h.select(d);
+ const button=h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม R04 · CD42');
+ assert.ok(button);
+ await button.click();
+ assert.equal(h.calls.at(-1).acceptAllDevices,true);
+ const s=h.api.live.get('R04');assert.equal(s.mode,'supervised');
+ assert.equal(s.probe.phase,'baseline');assert.match(h.get('pairGuideText').textContent,/ไม่ส่ง/);
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,0);
+ d.emit();assert.equal(s.probe.phase,'off');
+ assert.match(h.get('pairGuideText').textContent,/ขั้น 1\/3/);
+ s.verify.click();assert.equal(s.probe.phase,'quiet');assert.match(h.get('pairGuideText').textContent,/15 วินาที/);
+ h.tick(16000);s.verify.click();assert.equal(s.probe.phase,'resume');
+ d.emit();assert.equal(s.probe.phase,'confirm');
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,0,'unverified UUID must not produce a server ingest');
+ s.verify.click();assert.equal(s.probe,null);
+ d.emit();await drain();
+ assert.equal(h.api.bindings.get('R04').verified,true);
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,1);
+});
+test('R01 named quick button still connects immediately without supervised steps',async()=>{
+ const h=harness();await h.login();const d=device('named-one','47FD');h.select(d);
+ await h.get('quickR01').click();
+ assert.equal(h.api.live.get('R01').mode,'supervised');
+ assert.equal(h.api.live.get('R01').probe,undefined);
+ d.emit();await drain();
+ assert.equal(h.api.bindings.get('R01').verified,true);
+ assert.equal(h.get('quickR01').textContent,'เชื่อม R01 · 47FD');
+});
+
+
+test('one button reconnects four previously verified bands after reload via exact granted IDs without native picker',async()=>{
+ const roster=['R01','R02','R03','R04'].map((id,i)=>({id,device_id:'opaque-'+(i+1)}));
+ const shared=new Map(),one=harness(roster,shared);
+ await one.login();
+ const suffixes=['47FD','A746','1121','CD42'],bands=suffixes.map((suffix,i)=>device('stable-'+i,suffix));
+ for(let i=0;i<4;i++){
+  one.select(bands[i]);
+  const slot=roster[i].id;
+  if(i<2)await one.get('quick'+slot).click();
+  else await one.get('extraBandControls').children.find(x=>x.textContent.includes(slot)).click();
+  bands[i].emit();await drain();
+  assert.equal(one.api.bindings.get(slot)?.verified,true);
+ }
+ assert.equal(one.calls.length,4);
+ assert.ok(shared.size,'verified browser pairing info should be stored without gateway credentials');
+ const saved=JSON.stringify([...shared]);
+ assert.doesNotMatch(saved,/test-only-credential-with-32-characters|BPM|rhm_session|steve_gateway=/);
+ for(const b of bands)b.gatt.disconnect();
+ const two=harness(roster,shared);await two.login();
+ assert.equal(two.api.bindings.size,4);
+ two.context.navigator.bluetooth.getDevices=async()=>[bands[3],device('unknown','FFFF'),bands[2],bands[0],bands[1]];
+ two.select(()=>{throw Error('no chooser allowed for reconnect-all');});
+ await two.get('connectAll').click();await drain();
+ assert.equal(two.calls.length,0,'all previously granted IDs must reconnect without requestDevice');
+ assert.equal(two.api.live.size,4);
+ assert.equal([...two.api.live.values()].filter(s=>s.ready).length,4);
+ for(const b of bands)b.emit();
+ await drain();
+ assert.equal(two.fetches.filter(x=>x.url==='/api/ingest').length,4);
+ assert.match(two.get('connectAllStatus').textContent,/4\/4/);
+});
+test('reconnect all never guesses an unidentified or ungranted UUID',async()=>{
+ const roster=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],saved=new Map();
+ const original=harness(roster,saved);await original.login();
+ const a=device('remember-one','47FD');original.select(a);await original.get('quickR01').click();a.emit();await drain();
+ a.gatt.disconnect();
+ const next=harness(roster,saved);await next.login();
+ const wrong=device('other-uuid','47FD'),b=device('unknown','A746');b.name='';
+ next.context.navigator.bluetooth.getDevices=async()=>[wrong,b];
+ await next.get('connectAll').click();await drain();
+ assert.equal(next.calls.length,0);
+ assert.equal(next.api.live.size,0);
+ assert.match(next.get('connectAllStatus').textContent,/R01/);
+ assert.match(next.get('connectAllStatus').textContent,/R02/);
+ assert.equal(next.fetches.some(x=>x.url==='/api/ingest'),false);
+});
+test('bulk connect falls back safely when getDevices is unsupported; same-page memory works',async()=>{
+ const roster=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],saved=new Map();
+ const a=harness(roster,saved);await a.login();
+ const watch=device('watch','47FD');a.select(watch);await a.get('quickR01').click();watch.emit();await drain();
+ a.context.navigator.bluetooth.getDevices=undefined;
+ await a.api.stopped(a.api.live.get('R01'));
+ await a.get('connectAll').click();await drain();
+ assert.equal(a.api.live.get('R01')?.ready,true,'same page can use live device reference');
+ const fresh=harness(roster,saved);await fresh.login();
+ fresh.context.navigator.bluetooth.getDevices=undefined;
+ await fresh.get('connectAll').click();await drain();
+ assert.equal(fresh.api.live.size,0,'no chooser or false connection when getDevices unsupported after reload');
+ assert.match(fresh.get('connectAllStatus').textContent,/ไม่รองรับ/);
+});
+
+
+test('authorized R05 learns its user-provided suffix and participates in reconnect-all after reload',async()=>{
+ const slots=['R01','R02','R03','R04','R05'].map((id,i)=>({id,device_id:'opaque-'+(i+1)}));
+ const storage=new Map(),h=harness(slots,storage);await h.login();
+ const e=device('real-five','BEEF');h.select(e);
+ h.get('slot').value='R05';h.get('expected').value='BEEF';h.get('scanMode').value='supervised';
+ await h.get('connect').click();e.emit();await drain();
+ assert.equal(h.api.bindings.get('R05')?.verified,true);
+ assert.match(h.get('extraBandControls').children.find(x=>x.textContent.includes('R05')).textContent,/BEEF/);
+ e.gatt.disconnect();
+ const second=harness(slots,storage);await second.login();
+ second.context.navigator.bluetooth.getDevices=async()=>[e];
+ await second.get('connectAll').click();await drain();
+ assert.equal(second.calls.length,0);
+ assert.equal(second.api.live.get('R05')?.ready,true);
+ assert.equal(second.api.live.get('R05')?.expected,'BEEF');
+ assert.match(second.get('connectAllStatus').textContent,/1\/5/);
+});
+test('changing the authorized R-slot assignment invalidates saved pairing and blocks one-tap reconnect',async()=>{
+ const storage=new Map(),initial=harness([{id:'R01',device_id:'old-opaque'}],storage);
+ await initial.login();const d=device('id-one','47FD');
+ initial.select(d);await initial.get('quickR01').click();d.emit();await drain();
+ d.gatt.disconnect();
+ const changed=harness([{id:'R01',device_id:'new-opaque'}],storage);await changed.login();
+ changed.context.navigator.bluetooth.getDevices=async()=>[d];
+ assert.equal(changed.api.bindings.size,0);
+ await changed.get('connectAll').click();await drain();
+ assert.equal(changed.api.live.size,0);
+ assert.equal(changed.calls.length,0);
+ assert.match(changed.get('connectAllStatus').textContent,/จับคู่/);
 });

@@ -27,7 +27,10 @@ test("Bluefy pilot uses native Web BLE notifications and strictly same-origin Ga
  assert.match(html,/visibilitychange/);
  assert.match(html,/pagehide/);
  assert.match(html,/BACKGROUND \/ NO DATA/);
- assert.doesNotMatch(match[1],/localStorage|sessionStorage|sendBeacon|https?:\/\//i);
+ assert.doesNotMatch(match[1],/sessionStorage|sendBeacon|https?:\/\//i);
+ // Only verified origin-scoped BLE handle associations may persist: never tokens or measurements.
+ assert.match(match[1],/localStorage\?\.setItem\(REMEMBERED_KEY,JSON\.stringify\(saved\)\)/);
+ assert.doesNotMatch(match[1],/localStorage\?\.setItem\([^\n]*(?:token|bpm|auth|credential)/i);
 });
 test("HR parser handles real Band 10 8-bit packets and uint16 format",()=>{
  const decode=decoderFromPage();
