@@ -35,7 +35,7 @@ test("Bluefy pilot uses native Web BLE notifications and strictly same-origin Ga
 test("Gateway shows unsupported-browser warning and compact watch recovery controls",()=>{
  assert.match(html,/id="browserNotice"/);
  assert.match(html,/navigator\.bluetooth\?\.requestDevice/);
- assert.match(html,/class","band-actions"/);
+ assert.match(html,/element\("div","band-actions"\)/);
  assert.match(html,/#slots \.card>\.band-actions/);
  assert.match(html,/s\.stop\.hidden=s\.closed/);
  assert.match(html,/s\.broadRetry\.textContent="สแกน B"/);
