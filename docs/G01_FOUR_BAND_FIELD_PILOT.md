@@ -47,3 +47,11 @@ Set this as `STEVE_SLOT_MAP_EXTRA_JSON` on the **same** existing Render service.
 The expected authorized G01 slots after redeploy are R01, R02, R03, R04. The Bluefy UI receives the aliases through authenticated provisioning. First check R01/R02 independently and ensure the backend reports fresh Server ACK for R03/R04 before attempting prolonged use. If an environment update creates an unhealthy deploy, revert only the new optional `STEVE_SLOT_MAP_EXTRA_JSON` key; the original base configuration must remain unchanged.
 
 No change to real profiles, roster, historical measurements or clinical alerting is implied. A Render Free restart may temporarily interrupt real BLE telemetry or volatile state.
+
+## iPhone / Bluefy field acceptance
+
+ทดสอบนอกช่วงเฝ้าระวัง เปิดหน้า Gateway ค้างไว้และเปิด Share HR ที่เรือนเป้าหมาย กดปุ่มของช่อง ตรวจชื่อที่ลงท้ายตามปุ่ม หากรายการว่างให้ลองสแกน B หากมีเพียงรหัสยาวให้ยกเลิก แม้เปิด Share HR ทีละเรือนก็ยังอาจพบอุปกรณ์ใกล้เคียงได้ ห้ามเดาจากลำดับหรือ BPM
+
+รอให้แต่ละช่องแสดง BPM สดและ Server ACK จนครบสี่ช่อง หยุดเฉพาะ R03 ตรวจว่าอีกสามช่องยังส่งข้อมูลต่อ จากนั้นเชื่อม R03 และรอ ACK ใหม่ ทดสอบยกเลิก chooser, ขาดเครือข่าย, กลับจากพื้นหลังและโหลดหน้าใหม่แยกกัน หลังโหลดใหม่ให้แตะเลือกชื่อเรือนอีกครั้ง เมื่อขาดข้อมูลต้องเห็น NO DATA
+
+ทดลองต่อเนื่อง 10 นาที แล้ว 60 นาที บันทึกเวอร์ชัน iOS/Bluefy จำนวนช่องที่ได้ ACK และระยะขาดข้อมูลแยกรายช่อง หยุดทดสอบเมื่อมีการผูกผิดช่องหรือแสดงข้อมูลเก่าเป็น LIVE ห้ามบันทึกรหัสอุปกรณ์หรือข้อมูลผู้สวมใส่ในรายงาน

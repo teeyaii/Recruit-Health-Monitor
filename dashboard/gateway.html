@@ -133,7 +133,7 @@ const stages={capability:"1/9 ตรวจ Web Bluetooth",chooser:"2/9 เปิ
 function status(message){$("bleStatus").textContent=message;}
 function serverStatus(message){$("serverStatus").textContent=message;}
 function expireSession(){
- auth=null;generation++;recoveryRequested=false;
+ auth=null;generation++;recoveryRequested=false;bindings.clear();provision=[];
  for(const s of Array.from(live.values()))stopped(s,"SESSION EXPIRED / NO DATA");
  $("loginFields").hidden=false;$("gateway").disabled=false;
  serverStatus("หมดเวลาเข้าใช้งาน • กรอกรหัสเพื่อเข้าใหม่");controls();
@@ -144,7 +144,7 @@ function paintGatewayOverview(){
   !x.closed&&x.bpm!==null&&Number.isSafeInteger(x.lastAt)&&now-x.lastAt<=15000);
  $("gatewayBadge").textContent=auth?.gateway||"ยังไม่เข้าสู่ระบบ";
  $("gatewayDevices").textContent=fresh.length+" เรือน";
- const acknowledged=fresh.filter(x=>x.ackAt&&now-x.ackAt<=15000).length;
+ const acknowledged=fresh.filter(x=>x.ack==="Server acknowledged"&&x.ackAt===x.lastAt).length;
  $("gatewayUpload").textContent=!auth?"ยังไม่เชื่อมต่อ":
   acknowledged?"รับแล้ว "+acknowledged+" เรือน":fresh.length?"กำลังส่งข้อมูล":"รอ BPM จริง";
 }
@@ -152,14 +152,14 @@ function paintOptionalBands(){
  const permitted=provision.filter(p=>["R03","R04","R05"].includes(p.id));
  const extras=$("extraBandControls");extras.replaceChildren();
  for(const item of permitted){
-  const slot=item.id,knownSuffix=OPTIONAL_BAND_SUFFIXES[slot];
+  const slot=item.id,knownSuffix=auth?.gateway==="G01"&&OPTIONAL_BAND_SUFFIXES[slot];
   const button=element("button","secondary",knownSuffix?"เชื่อม "+slot+" · "+knownSuffix:
    sessions.has(slot)?slot+" • ดูสถานะ":"เพิ่ม "+slot);
   button.type="button";button.disabled=connecting||chooserPending||document.hidden||!auth||live.has(slot);
   button.addEventListener("click",()=>{
    // Use the same user-gesture BLE chooser as R01/R02, not a saved Bluetooth
    // handle or automatic background connection. Wrong physical bands are rejected.
-   if(knownSuffix){connectBand(slot,knownSuffix,"standard");return;}
+   if(knownSuffix){connectBand(slot,knownSuffix,bindings.get(slot)?.verified?"auto":"standard");return;}
    $("advancedPair").open=true;$("slot").value=slot;
    $("expected").value=bindings.get(slot)?.expected||"";
    $("scanMode").value="standard";
@@ -262,7 +262,7 @@ function paint(s){
   confirmed?"LIVE • Server acknowledged":
   fresh?"LIVE จาก Band • รอ Server ACK":"NO DATA • รอสัญญาณใหม่";
  s.diagnostics.textContent=s.lifecycle+" • "+s.state;
- s.measure.textContent=s.bpm===null?"NO DATA":String(s.bpm)+" BPM";
+ s.measure.textContent=fresh?String(s.bpm)+" BPM":"NO DATA";
  s.age.textContent=s.lastAt?"วัดล่าสุด "+new Date(s.lastAt).toLocaleTimeString("th-TH")+" • "+Math.round((Date.now()-s.lastAt)/1000)+" วินาที":"ยังไม่มีข้อมูล";
  s.notify.textContent="Notifications: "+s.notifications;
  s.backend.textContent="Backend: "+s.ack+(s.ackAt?" • "+new Date(s.ackAt).toLocaleTimeString("th-TH"):"");
@@ -297,7 +297,7 @@ function element(tag,cls,textValue){
 function addTile(slot,expected,mode){
  tiles.get(slot)?.remove();
  const div=element("div","card");
- const head=element("strong","",slot+" • HEART RATE");
+ const head=element("strong","",slot+" · "+expected);
  const measure=element("div","bpm","NO DATA"),indicator=element("p","status","กำลังเชื่อมต่อ"),age=element("small","","ยังไม่มีข้อมูล");
  const notify=element("p","status"),backend=element("p","status"),errorNode=element("p","status");
  const retry=element("button","secondary","เชื่อมต่อใหม่ "+slot),stop=element("button","secondary","ตัดการเชื่อมต่อ "+slot);
@@ -338,8 +338,15 @@ function validAttempt(s){
 }
 function matchesExpected(device,expected){
  // User enters the physical band's four-character suffix, not an opaque server ID.
- const words=(String(device.name||"")+" "+String(device.id||"")).toUpperCase().split(/[^A-Z0-9]+/);
- return words.includes(expected);
+ const name=String(device.name||"").trim().toUpperCase();
+ if(/^[A-F0-9-]+$/.test(name))return false;
+ return device.name!==device.id && name.split(/[^A-Z0-9]+/).filter(Boolean).pop()===expected;
+}
+function acceptsDevice(device,expected,bound){
+ if(!device?.id)return false;
+ if(matchesExpected(device,expected))return true;
+ const unnamed=!device.name?.trim()||device.name===device.id||/^[a-f0-9-]{32,}$/i.test(device.name);
+ return unnamed&&bound?.verified&&bound.id===device.id&&bound.expected===expected;
 }
 async function connectBand(slot,expected,mode){
  const automatic=mode==="auto"||mode==="autoLookup";
@@ -364,7 +371,7 @@ async function connectBand(slot,expected,mode){
    const allowed=await bounded(s,navigator.bluetooth.getDevices());
    validAttempt(s);
    const previous=bindings.get(slot);
-   s.device=allowed.find(d=>previous&&d.id===previous.id&&matchesExpected(d,expected));
+   s.device=allowed.find(d=>previous&&d.id===previous.id&&acceptsDevice(d,expected,previous));
    if(!s.device){s.error="ไม่พบอุปกรณ์ที่เคยจับคู่ช่องนี้ • เลือก A หรือ B แล้วกดเชื่อมต่ออีกครั้ง";throw {name:"NotFoundError"};}
   }else{
    chooserPending=true;
@@ -374,7 +381,8 @@ async function connectBand(slot,expected,mode){
    s.device=await bounded(s,choice);
   }
   validAttempt(s);step(s,"selected");
-  if(!s.device?.id || !matchesExpected(s.device,expected)){
+  if(!acceptsDevice(s.device,expected,bindings.get(slot))){
+   s.hint="ตรวจ Share HR แล้วเลือกชื่อที่ลงท้าย "+expected+" หากเห็นเพียงรหัสยาว ให้ยกเลิก";
    s.error="อุปกรณ์ที่เลือกไม่ตรงรหัสเรือนจริงของช่องนี้ — เลือกใหม่";throw {name:"InvalidStateError"};
   }
   const bound=bindings.get(slot);
@@ -419,7 +427,7 @@ async function connectBand(slot,expected,mode){
     // acknowledgements belong to one measurement and must pass the freshness guard.
     if(result.ok&&(s.sequence!==sequence||Date.now()-now>15000))return;
     s.ack=result.detail;
-    if(result.ok){s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenAcks++;}
+    if(result.ok){if(bpm!==null)bindings.get(slot).verified=true;s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenAcks++;}
     else{s.bpm=null;transition(s,"ERROR");s.state="SERVER REJECTED / OFFLINE";s.error=stages.upload+" • "+result.detail;$("simpleStatus").textContent="ส่งข้อมูลไม่สำเร็จ • ตรวจเครือข่ายหรือเข้าใช้งานใหม่";}
     paint(s);
    }).finally(()=>{s.busy=false;});
@@ -428,14 +436,14 @@ async function connectBand(slot,expected,mode){
   await bounded(s,s.characteristic.startNotifications());
   validAttempt(s);
   s.characteristic.addEventListener("characteristicvaluechanged",s.onValue);
-  bindings.set(slot,{id:s.device.id,expected,device:s.device,autoEnabled:true});
-  s.ready=true;$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
+  bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,autoEnabled:true});
+  s.readyAt=Date.now();s.ready=true;$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
   s.error=(stages[s.stage]||stages.capability)+" • "+(s.error||safeError(e));
   await stopped(s,"เชื่อมต่อไม่สำเร็จ / NO DATA");
   if(sessions.get(slot)!==s)return;
-  $("simpleStatus").textContent=slot+" เชื่อมไม่สำเร็จ • ตรวจ Share HR แล้วกดใหม่ หรือเปิดตั้งค่าเพิ่มเติม";paint(s);status(slot+" • "+s.error+" • กดลองใหม่ หรือเลือกโหมดสแกน BLE ทั้งหมด");
+  $("simpleStatus").textContent=slot+" • "+(s.hint||"ตรวจ Share HR แล้วลองอีกครั้ง หากไม่พบให้กดสแกน B และเลือกเฉพาะชื่อที่ตรงรหัสท้าย");paint(s);status(slot+" • "+s.error+" • กดลองใหม่ หรือเลือกโหมดสแกน BLE ทั้งหมด");
  }finally{if(attemptOwner===s){attemptOwner=null;connecting=false;controls();if(recoveryRequested&&!recoveryRunning&&!document.hidden)Promise.resolve().then(recoverKnown);}}
 }
 
@@ -474,13 +482,17 @@ $("load").addEventListener("click",async()=>{
  finally{loginPending=false;pendingSession=null;$("token").value="";controls();}
 });
 for(const [slot,suffix] of [["R01","47FD"],["R02","A746"]]){
- $("quick"+slot).addEventListener("click",()=>connectBand(slot,suffix,"standard"));
+ $("quick"+slot).addEventListener("click",()=>connectBand(slot,suffix,bindings.get(slot)?.verified?"auto":"standard"));
 }
 $("presentation").addEventListener("click",()=>{document.body.classList.toggle("presentation");$("presentation").textContent=document.body.classList.contains("presentation")?"ออกจากโหมดนำเสนอ":"โหมดนำเสนอ";});
 // Reload restores authorization only, never invents BLE handles or fresh readings.
 if(window.location)loadProvision(generation).catch(()=>{});
 
-$("connect").addEventListener("click",()=>connectBand($("slot").value,$("expected").value.trim().toUpperCase(),$("scanMode").value));
+$("connect").addEventListener("click",()=>{
+ const slot=$("slot").value;
+ const fixed=auth?.gateway==="G01"&&({R01:"47FD",R02:"A746",...OPTIONAL_BAND_SUFFIXES})[slot];
+ return connectBand(slot,fixed||$("expected").value.trim().toUpperCase(),$("scanMode").value);
+});
 $("slot").addEventListener("change",()=>{$("expected").value=bindings.get($("slot").value)?.expected||"";});
 $("resetBle").addEventListener("click",()=>{
  suspend();
@@ -554,7 +566,7 @@ window.addEventListener("pagehide",()=>{if(lockTrialEnabled)beginLockProbe();els
 setInterval(()=>{
  if(auth && Date.now()>=auth.expiresAt)expireSession();
  for(const s of live.values()){
-  if(s.lastAt && Date.now()-s.lastAt>15000){s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";}
+  if(s.ready && Date.now()-(s.lastAt??s.readyAt)>15000){s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";}
   paint(s);
  }
  paintGatewayOverview();

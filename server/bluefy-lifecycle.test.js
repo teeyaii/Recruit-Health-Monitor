@@ -42,7 +42,7 @@ function device(id='fake-one',suffix='AB12',failStage=null,error={name:'NetworkE
  return d;
 }
 test('standard scan invokes chooser synchronously from click and discovers named HR UUIDs',async()=>{
- const h=harness();await h.login();const d=device();h.select(d);h.get('slot').value='R01';h.get('expected').value='AB12';h.get('scanMode').value='standard';
+ const h=harness();await h.login();const d=device('fake-one','47FD');h.select(d);h.get('slot').value='R01';h.get('expected').value='AB12';h.get('scanMode').value='standard';
  const connecting=h.get('connect').click();assert.equal(h.calls.length,1);await connecting;
  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0])),{filters:[{services:['heart_rate']}]});
  assert.deepEqual(d.calls,['gatt','heart_rate','heart_rate_measurement','subscribe']);
@@ -437,4 +437,24 @@ test('unprovisioned R03/R04 cannot open BLE chooser or pretend to be connected',
  await h.api.connectBand('R03','EF12','standard');
  assert.equal(h.calls.length,0);
  assert.equal(h.api.live.size,0);
+});
+
+test('opaque picker identifier cannot supply physical suffix even as a whole token',async()=>{
+ const h=harness();await h.login();
+ const d=device('deadbeef-AB12-0000');d.name='';
+ await h.connect(d);
+ assert.equal(h.api.live.size,0);
+ assert.deepEqual(d.calls,[]);
+ assert.match(h.get('simpleStatus').textContent,/ชื่อ/);
+});
+
+test('only accepted heart rate enables unnamed same-page recovery',async()=>{
+ const h=harness();await h.login();const d=device();
+ await h.connect(d);const s=h.api.live.get('R01');
+ assert.equal(h.api.bindings.get('R01').verified,false);
+ d.emit();await drain();assert.equal(h.api.bindings.get('R01').verified,true);
+ await h.api.stopped(s);d.name='';
+ h.context.navigator.bluetooth.getDevices=async()=>[d];
+ await h.connect(null,'R01','AB12','known');
+ assert.equal(h.api.live.get('R01')?.device,d);
 });
