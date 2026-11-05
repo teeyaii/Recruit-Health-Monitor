@@ -138,3 +138,36 @@ test("named additive key adds R05 without touching existing EXTRA map; collision
   assert.notEqual(exit,0,"cross-key collision case "+i+" must fail at startup");
  }
 });
+
+test("gateway-named key introduces G02 R06–R10 only for itself; G01 and existing maps untouched; misuse fails startup",async()=>{
+ const tokens={...gatewayTokens,G03:"ci-gateway-three-secret-longer-than-thirty-two-chars"};
+ const baseEnv={...process.env,RECRUIT_MONITOR_TOKEN:"",STEVE_VIEWER_TOKEN:viewerSecret,
+  STEVE_GATEWAY_TOKENS_JSON:JSON.stringify(tokens),NODE_ENV:"test",
+  STEVE_SLOT_MAP_JSON:JSON.stringify({G01:{R01:"synthetic-device-01",R02:"synthetic-device-02"}}),
+  STEVE_SLOT_MAP_EXTRA_JSON:JSON.stringify({G01:{R03:"pilot-additive-03",R04:"pilot-additive-04"}}),
+  STEVE_SLOT_MAP_EXTRA_R05_JSON:JSON.stringify({G01:{R05:"trial_g01_r05_20261105"}})};
+ const g02={G02:Object.fromEntries(["R06","R07","R08","R09","R10"].map(r=>[r,"trial_g02_"+r.toLowerCase()+"_20261105"]))};
+ const okPort=port+60;
+ const proc=spawn(process.execPath,["index.js"],{cwd:new URL(".",import.meta.url),stdio:"ignore",
+  env:{...baseEnv,PORT:String(okPort),STEVE_SLOT_MAP_EXTRA_G02_JSON:JSON.stringify(g02)}});
+ try{
+  let ready=false;for(let i=0;i<60;i++){try{if((await fetch("http://127.0.0.1:"+okPort+"/health")).ok){ready=true;break;}}catch{}await delay(100);}
+  assert.ok(ready);
+  const get=async g=>(await (await fetch("http://127.0.0.1:"+okPort+"/api/gateway/provision",{headers:{Authorization:"Bearer "+tokens[g]}})).json()).slots;
+  assert.deepEqual((await get("G01")).map(x=>x.id),["R01","R02","R03","R04","R05"],"G01 unchanged");
+  assert.deepEqual(await get("G02"),Object.entries(g02.G02).map(([id,device_id])=>({id,device_id})),"G02 gets exactly R06–R10");
+  assert.deepEqual(await get("G03"),[],"G03 receives nothing");
+ }finally{proc.kill();}
+ const bad=[
+  ["STEVE_SLOT_MAP_EXTRA_G02_JSON",{G01:{R06:"x-alias-06"}}],          // named key for another gateway
+  ["STEVE_SLOT_MAP_EXTRA_G02_JSON",{G02:{R05:"x-alias-05"}}],          // steals G01's R05
+  ["STEVE_SLOT_MAP_EXTRA_G02_JSON",{G02:{R06:"pilot-additive-03"}}],   // reuses an alias
+  ["STEVE_SLOT_MAP_EXTRA_G04_JSON",{G04:{R11:"x-alias-11"}}],          // gateway without credential
+  ["STEVE_SLOT_MAP_EXTRA_PHASEC_JSON",{G03:{R11:"x-alias-11"}}]];      // non-named key cannot introduce
+ for(const [i,[key,map]] of bad.entries()){
+  const p=spawn(process.execPath,["index.js"],{cwd:new URL(".",import.meta.url),stdio:"ignore",
+   env:{...baseEnv,PORT:String(port+70+i),[key]:JSON.stringify(map)}});
+  const exit=await new Promise(resolve=>p.once("exit",code=>resolve(code)));
+  assert.notEqual(exit,0,"misuse case "+i+" must fail at startup");
+ }
+});

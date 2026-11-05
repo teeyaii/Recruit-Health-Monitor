@@ -40,6 +40,10 @@ Likely causes, addressed in the next PR:
 
 The owner reports that all four watches on one iPhone/Bluefy now reconnect in every previously failing scenario: Share HR off/on, carried out of range and back, Render restart with re-login, and page reload. No manual re-pairing was needed. This is owner-reported physical evidence and is separate from the automated simulation. Duration and drop counts were not recorded.
 
+## Owner hardware result, 5 watches on G01 (after #68, `9523315`)
+
+R01–R05 connected on one iPhone/Bluefy, streaming with server ACK. The owner reports **15 minutes stable**. The 60-minute endurance test was **skipped by owner decision, not passed**. No per-watch drop counts were recorded. Next step: second gateway G02 (R06–R10), see `docs/G02_SECOND_GATEWAY.md`.
+
 ## Automated evidence (simulated, not hardware)
 
 - `server/bluefy-lifecycle.test.js`: four independent sessions, failed-watch isolation, chooser interruption, scan-mode consistency (A/B/D), no listener accumulation over 5 reconnects, bounded flapping budget, 401 → re-login resume, G02 R06–R10 provisioning.
