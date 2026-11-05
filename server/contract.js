@@ -83,12 +83,16 @@ let assignments=null;
 // Render's env-variable update API cannot read the existing secret-bearing base map.
 // Therefore do not replace STEVE_SLOT_MAP_JSON just to add R-slots: validate an
 // extra map with the same strict uniqueness rules and retain every original mapping.
-if (env.STEVE_SLOT_MAP_EXTRA_JSON && !env.STEVE_SLOT_MAP_JSON)
+// Further additive maps may use separate keys STEVE_SLOT_MAP_EXTRA_<NAME>_JSON
+// (e.g. STEVE_SLOT_MAP_EXTRA_R05_JSON) so a new slot can be authorized WITHOUT
+// reading or rewriting an existing secret-bearing key. Same strict rules apply.
+const extraKeys=[...(env.STEVE_SLOT_MAP_EXTRA_JSON?["STEVE_SLOT_MAP_EXTRA_JSON"]:[]),
+  ...Object.keys(env).filter(k=>/^STEVE_SLOT_MAP_EXTRA_[A-Z0-9]+_JSON$/.test(k)&&env[k]).sort()];
+if (extraKeys.length && !env.STEVE_SLOT_MAP_JSON)
   throw Error("STEVE_SLOT_MAP_EXTRA_JSON requires existing STEVE_SLOT_MAP_JSON");
 if (env.STEVE_SLOT_MAP_JSON) {
   const sources=[["STEVE_SLOT_MAP_JSON",parseObject(env.STEVE_SLOT_MAP_JSON,"STEVE_SLOT_MAP_JSON")]];
-  if (env.STEVE_SLOT_MAP_EXTRA_JSON)
-    sources.push(["STEVE_SLOT_MAP_EXTRA_JSON",parseObject(env.STEVE_SLOT_MAP_EXTRA_JSON,"STEVE_SLOT_MAP_EXTRA_JSON")]);
+  for (const key of extraKeys) sources.push([key,parseObject(env[key],key)]);
   const seenSlots=new Set(),seenDevices=new Set();
   assignments=new Map();
   for (const [source,supplied] of sources) {
@@ -99,7 +103,7 @@ if (env.STEVE_SLOT_MAP_JSON) {
         throw Error("Provisioned gateway has no credential: "+gateway);
       // Extra assignments may extend existing gateways only, never silently
       // introduce a new gateway. Duplicate slot/device bindings fail closed.
-      if (source==="STEVE_SLOT_MAP_EXTRA_JSON" && !assignments.has(gateway))
+      if (source!=="STEVE_SLOT_MAP_JSON" && !assignments.has(gateway))
         throw Error("Extra slot map cannot introduce gateway: "+gateway);
       const assigned=assignments.get(gateway)??new Map();
       for (const [slot,device] of Object.entries(slots)) {

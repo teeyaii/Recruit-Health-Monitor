@@ -73,6 +73,7 @@ test('SIMULATED: two gateways x five bands publish concurrently with correct ide
   // 3. Cross-gateway: G02 can never write a G01 slot, even with the right opaque id.
   assert.equal((await (await one(g02,'R01',140,Date.now())).json()).accepted,0);
   assert.equal((await (await one(g01,'R06',140,Date.now())).json()).accepted,0);
+  assert.equal((await (await g02([{id:'R05',device_id:device('R05'),hr:141,timestamp:Date.now()}])).json()).accepted,0,'G02 never receives G01-only R05');
   // 4. Wrong device id for own slot is rejected (no wrong-wearer association).
   assert.equal((await (await g01([{id:'R02',device_id:'sim-g02-1',hr:99,timestamp:Date.now()}])).json()).accepted,0);
   // 5. A second live phone for G01 cannot steal a slot while the owner is active.

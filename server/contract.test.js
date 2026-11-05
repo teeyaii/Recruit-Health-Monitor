@@ -112,3 +112,29 @@ test("additive map rejects duplicate existing slot, duplicate device, unknown ga
   assert.notEqual(exit,0,"invalid additive case "+i+" must fail at startup");
  }
 });
+
+test("named additive key adds R05 without touching existing EXTRA map; collisions across keys fail startup",async()=>{
+ const baseEnv={...process.env,RECRUIT_MONITOR_TOKEN:"",STEVE_VIEWER_TOKEN:viewerSecret,
+  STEVE_GATEWAY_TOKENS_JSON:JSON.stringify(gatewayTokens),NODE_ENV:"test",
+  STEVE_SLOT_MAP_JSON:JSON.stringify(slotMap),
+  STEVE_SLOT_MAP_EXTRA_JSON:JSON.stringify({G01:{R04:"pilot-additive-04"}})};
+ const okPort=port+40;
+ const proc=spawn(process.execPath,["index.js"],{cwd:new URL(".",import.meta.url),stdio:"ignore",
+  env:{...baseEnv,PORT:String(okPort),STEVE_SLOT_MAP_EXTRA_R05_JSON:JSON.stringify({G01:{R05:"trial_g01_r05_20261105"}})}});
+ try{
+  let ready=false;for(let i=0;i<60;i++){try{if((await fetch("http://127.0.0.1:"+okPort+"/health")).ok){ready=true;break;}}catch{}await delay(100);}
+  assert.ok(ready);
+  const g01=await (await fetch("http://127.0.0.1:"+okPort+"/api/gateway/provision",{headers:{Authorization:"Bearer "+gatewayTokens.G01}})).json();
+  assert.deepEqual(g01.slots,[{id:"R01",device_id:"synthetic-device-01"},{id:"R02",device_id:"synthetic-device-02"},
+   {id:"R04",device_id:"pilot-additive-04"},{id:"R05",device_id:"trial_g01_r05_20261105"}],"existing aliases unchanged, R05 appended");
+  const g02=await (await fetch("http://127.0.0.1:"+okPort+"/api/gateway/provision",{headers:{Authorization:"Bearer "+gatewayTokens.G02}})).json();
+  assert.deepEqual(g02.slots.map(x=>x.id),["R03"],"G02 never receives R05");
+ }finally{proc.kill();}
+ const bad=[{G01:{R04:"other-alias"}},{G01:{R05:"pilot-additive-04"}},{G03:{R05:"x-alias-05"}},{G01:{R05:"synthetic-device-01"}}];
+ for(const [i,extra] of bad.entries()){
+  const p=spawn(process.execPath,["index.js"],{cwd:new URL(".",import.meta.url),stdio:"ignore",
+   env:{...baseEnv,PORT:String(port+50+i),STEVE_SLOT_MAP_EXTRA_R05_JSON:JSON.stringify(extra)}});
+  const exit=await new Promise(resolve=>p.once("exit",code=>resolve(code)));
+  assert.notEqual(exit,0,"cross-key collision case "+i+" must fail at startup");
+ }
+});

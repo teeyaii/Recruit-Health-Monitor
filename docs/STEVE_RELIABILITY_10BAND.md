@@ -1,6 +1,6 @@
 # STEVE 1.0 — Reliability recovery and 10-band readiness
 
-Status: **code and simulated tests only. No iPhone/Bluefy hardware verification of these changes yet.**
+Status (5 Nov 2026, Render live `97169b4`): **4-watch reconnect scenarios pass on the owner's iPhone/Bluefy** (owner-reported, see the third hardware result below). A fifth watch, 10/60-minute endurance and a second gateway (G02) are not yet verified.
 Baseline audited: `main` = Render live = `3d470236b9659e78b4f9e6177a7c0991379b766c`, Render auto-deploy off. Builds on PR #64.
 
 ## Root causes found in `dashboard/gateway.html` and `server/index.js`
@@ -35,6 +35,10 @@ Likely causes, addressed in the next PR:
 - After leaving range, the remembered handle may not reconnect until the device is rediscovered. The recommended Web Bluetooth flow (`watchAdvertisements`, then `connect`) is now tried first. It is best effort and falls back to connecting directly. Support in Bluefy is **unverified**.
 - A tap on a verified watch whose automatic reconnect is failing now opens the Broad chooser directly (identity still checked), so the operator no longer has to dig into the advanced panel.
 - The card's "รายละเอียด" now shows the failure count, next retry, advertisement result and last error, and the BLE status line shows getDevices/watchAdvertisements support. Use these as field evidence.
+
+## Owner hardware result, third test (after #67 deploy, `97169b4`), PASS
+
+The owner reports that all four watches on one iPhone/Bluefy now reconnect in every previously failing scenario: Share HR off/on, carried out of range and back, Render restart with re-login, and page reload. No manual re-pairing was needed. This is owner-reported physical evidence and is separate from the automated simulation. Duration and drop counts were not recorded.
 
 ## Automated evidence (simulated, not hardware)
 

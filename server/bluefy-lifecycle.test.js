@@ -336,11 +336,12 @@ test('G01 can provision R03 and R04 on one Bluefy page and keep four physical se
   {id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}]);
  await h.login();
  assert.equal(h.get('extraBandControls').children.length,2,'only authorized additional slots have controls');
- assert.equal(h.get('reservedSlotCards').children.length,2,'only authorized unpaired R03/R04 are listed as NO DATA');
+ assert.equal(h.get('reservedSlotCards').children.length,3,'unpaired R03/R04 plus the unconfigured R05 placeholder');
+ assert.match(h.get('reservedSlotCards').children[2].children[0].textContent,/R05 • ยังไม่ได้ตั้งค่า/);
  const list=[['R01','AB12',69],['R02','CD34',81],['R03','EF12',93],['R04','CD56',103]];
  for(const [slot,suffix] of list)await h.connect(device('physical-'+slot,suffix),slot,suffix);
  assert.equal(h.api.live.size,4,'G01 does not enforce a two-device cap in JavaScript');
- assert.equal(h.get('reservedSlotCards').children.length,0,'paired R03/R04 are not falsely listed as vacant');
+ assert.equal(h.get('reservedSlotCards').children.length,1,'only the unconfigured R05 placeholder remains; paired R03/R04 are not listed as vacant');
  for(const [slot,suffix,bpm] of list)h.api.live.get(slot).device.emit([6,bpm]);
  await flush();
  const samples=h.fetches.filter(x=>x.url==='/api/ingest')
@@ -928,4 +929,106 @@ test('two-tier silence repair: 26 s silence re-arms notifications without discon
  assert.equal(d.calls.filter(x=>x==='subscribe').length,2);
  assert.equal(s.measure.textContent,'NO DATA','stale stream is never shown LIVE');
  d.emit([6,64]);await drain();assert.equal(s.bpm,64);assert.equal(h.calls.length,1);
+});
+
+
+// ---- R05 fifth watch (G01) — SIMULATED, not iPhone/Bluefy hardware ----
+const FIVE=['R01','R02','R03','R04','R05'].map((id,i)=>({id,device_id:'opaque-g01-'+(i+1)}));
+async function fourLive(h){
+ const bands=[['R01','47FD'],['R02','A746'],['R03','1121'],['R04','CD42']].map(([slot,sfx])=>[slot,device('band-'+slot,sfx)]);
+ for(const [slot,d] of bands){h.select(d);
+  if(slot==='R01'||slot==='R02')await h.get('quick'+slot).click();
+  else await h.get('extraBandControls').children.find(x=>x.textContent.includes(slot)).click();
+  d.emit([6,60+Number(slot.slice(1))]);await drain();}
+ return Object.fromEntries(bands);
+}
+async function enrollR05(h,d,suffix='5E05'){
+ await h.get('extraBandControls').children.find(x=>x.textContent==='เพิ่ม R05').click();
+ assert.equal(h.get('slot').value,'R05');assert.equal(h.get('scanMode').value,'supervised','R05 uses the same Broad + quarantine path');
+ h.get('expected').value=suffix;h.select(d);await h.get('connect').click();await drain();
+}
+test('R05: unprovisioned on G01 shows a safe unconfigured placeholder, no control, no chooser',async()=>{
+ const h=harness(FIVE.slice(0,4));await h.login();
+ const buttons=h.get('extraBandControls').children.map(x=>x.textContent);
+ assert.deepEqual(buttons,['เชื่อม R03 · 1121','เชื่อม R04 · CD42']);
+ const cards=h.get('reservedSlotCards').children;
+ assert.match(cards.at(-1).children[0].textContent,/R05 • ยังไม่ได้ตั้งค่า/);
+ assert.match(cards.at(-1).children[3].textContent,/slot map บน Render/);
+ assert.match(h.get('extraBandHelp').textContent,/ยังไม่ได้ตั้งค่า: R05.*STEVE_SLOT_MAP_EXTRA_JSON/);
+ await h.api.connectBand('R05','5E05','supervised');
+ assert.equal(h.calls.length,0,'never bypasses backend authorization');assert.equal(h.api.live.has('R05'),false);
+});
+test('R05: provisioned on G01 appears as the fifth control with เพิ่ม R05; unknown suffix is never invented',async()=>{
+ const h=harness(FIVE);await h.login();
+ assert.deepEqual(h.get('extraBandControls').children.map(x=>x.textContent),['เชื่อม R03 · 1121','เชื่อม R04 · CD42','เพิ่ม R05']);
+ assert.equal(h.get('connectAll').textContent,'เชื่อมทุกเรือนที่จำไว้ (0/5)');
+ assert.equal(h.get('reservedSlotCards').children.some(c=>/ยังไม่ได้ตั้งค่า/.test(c.children[0].textContent)),false);
+ await h.get('extraBandControls').children[2].click();
+ assert.equal(h.calls.length,0,'no chooser until the suffix is read from the watch');assert.equal(h.get('expected').value,'');
+});
+test('R05: connecting the fifth watch keeps four simulated streams live; named suffix enrolls, uploads only after match',async()=>{
+ const h=harness(FIVE);await h.login();const four=await fourLive(h);
+ const before=Object.fromEntries(Object.keys(four).map(s=>[s,h.api.live.get(s)]));
+ const r05=device('band-R05','5E05');await enrollR05(h,r05);
+ for(const s of Object.keys(four)){assert.equal(h.api.live.get(s),before[s],s+' session untouched');assert.equal(four[s].gatt.connected,true);}
+ r05.emit([6,99]);for(const [s,d] of Object.entries(four))d.emit([6,70+Number(s.slice(1))]);await drain();
+ assert.equal(h.api.live.get('R05').bpm,99);
+ for(const s of Object.keys(four))assert.equal(h.api.live.get(s).bpm,70+Number(s.slice(1)),s+' independent');
+ const r05Uploads=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body).readings[0]).filter(x=>x.id==='R05');
+ assert.ok(r05Uploads.length>=1);assert.ok(r05Uploads.every(x=>x.device_id==='opaque-g01-5'));
+ assert.equal(h.api.bindings.get('R05').verified,true);
+ assert.match(h.get('connectAll').textContent,/\(5\/5\)/);
+});
+test('R05: UUID-only watch cannot transmit before supervised Share HR off/on verification',async()=>{
+ const h=harness(FIVE);await h.login();await fourLive(h);
+ const u=device('uuid-r05');u.name='';await enrollR05(h,u);
+ const s=h.api.live.get('R05');assert.ok(s.probe,'quarantined');
+ const n=h.fetches.filter(x=>x.url==='/api/ingest'&&JSON.parse(x.options.body).readings[0].id==='R05').length;
+ u.emit([6,88]);await drain();
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest'&&JSON.parse(x.options.body).readings[0].id==='R05').length,n,'no R05 upload while quarantined');
+ assert.equal(h.api.bindings.has('R05'),false);assert.equal(s.measure.textContent,'NO DATA');
+});
+test('R05: wrong named Band, a suffix owned by R01–R04, and an already-bound watch are all rejected',async()=>{
+ const h=harness(FIVE);await h.login();const four=await fourLive(h);
+ await enrollR05(h,device('other','1234'),'5E05');
+ assert.equal(h.api.live.has('R05'),false);assert.match(h.get('bleStatus').textContent,/ไม่ตรงรหัส/);
+ const choices=h.calls.length;
+ const r05Button=h.get('extraBandControls').children.find(x=>x.textContent.includes('R05'));
+ assert.equal(r05Button.textContent,'R05 • ดูสถานะ');await r05Button.click();
+ h.get('expected').value='47FD';await h.get('connect').click();await drain();
+ assert.equal(h.calls.length,choices,'suffix of R01 rejected before any chooser');assert.match(h.get('bleStatus').textContent,/ของ R01/);
+ h.get('expected').value='5E05';h.select(four.R02);await h.get('connect').click();await drain();
+ assert.equal(h.api.live.has('R05'),false,'R02 watch cannot be bound to R05');
+ assert.equal(h.api.live.get('R02').device,four.R02);assert.equal(four.R02.gatt.connected,true);
+});
+test('R05: suffix entered once is remembered; after reload R05 joins connect-all and reconnects without chooser',async()=>{
+ const storage=new Map();const h=harness(FIVE,storage);await h.login();
+ const four=await fourLive(h);const r05=device('band-R05','5E05');await enrollR05(h,r05);r05.emit();await drain();
+ const page=harness(FIVE,storage);
+ page.context.navigator.bluetooth.getDevices=async()=>[...Object.values(four),r05];
+ await page.login();
+ assert.ok(page.get('extraBandControls').children.some(x=>x.textContent==='เชื่อม R05 · 5E05'),'suffix remembered');
+ for(let t=0;t<6000;t+=1000){page.tick(1000);await drain();}
+ for(const s of ['R01','R02','R03','R04','R05'])assert.equal(page.api.live.get(s)?.ready,true,s);
+ assert.equal(page.calls.length,0,'no chooser');
+ assert.equal(page.get('expected').value,'','suffix never re-entered');
+});
+test('R05: drops and reconnects independently while R01–R04 stay live',async()=>{
+ const h=harness(FIVE);await h.login();const four=await fourLive(h);
+ const r05=device('band-R05','5E05');await enrollR05(h,r05);r05.emit();await drain();
+ for(let t=0;t<62000;t+=4000){h.tick(4000);r05.emit();for(const d of Object.values(four))d.emit();await drain();}
+ const peers=Object.fromEntries(Object.keys(four).map(s=>[s,h.api.live.get(s)]));
+ const old=h.api.live.get('R05');
+ r05.gatt.connected=false;r05.listeners.gattserverdisconnected?.();await drain();
+ assert.notEqual(h.api.live.get('R05'),old);assert.equal(h.api.live.get('R05')?.ready,true);
+ for(const s of Object.keys(four))assert.equal(h.api.live.get(s),peers[s]);
+ const choices=h.calls.length;r05.emit([6,91]);await drain();
+ assert.equal(h.api.live.get('R05').bpm,91);assert.equal(h.calls.length,choices);
+});
+test('R05: G02 never shows or connects G01-only R05',async()=>{
+ const slots=['R06','R07','R08','R09','R10'].map((id,i)=>({id,device_id:'opaque-g02-'+i}));
+ const h=harness(slots,new Map(),'G02');await h.login();
+ const all=[...h.get('extraBandControls').children.map(x=>x.textContent),...h.get('reservedSlotCards').children.map(c=>c.children[0].textContent)].join(' ');
+ assert.doesNotMatch(all,/R0[1-5]\b/);
+ await h.api.connectBand('R05','5E05','supervised');assert.equal(h.calls.length,0);
 });

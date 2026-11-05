@@ -123,6 +123,20 @@ const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 // Keep name matching mandatory: the native chooser does not attest physical ownership.
 const OPTIONAL_BAND_SUFFIXES=Object.freeze({R03:"1121",R04:"CD42"});
 const FIXED_BAND_SUFFIXES=Object.freeze({R01:"47FD",R02:"A746",...OPTIONAL_BAND_SUFFIXES});
+// Planned physical layout (Issue #50). Display-only: a planned slot that the
+// server has not provisioned for THIS Gateway is shown as an unconfigured
+// placeholder and can never connect or upload. Other gateways' slots are never shown.
+const GATEWAY_PLAN=Object.freeze({G01:["R01","R02","R03","R04","R05"],G02:["R06","R07","R08","R09","R10"]});
+function unconfiguredSlots(){
+ return auth?(GATEWAY_PLAN[auth.gateway]||[]).filter(id=>!provision.some(p=>p.id===id)):[];
+}
+// The operator types a suffix read from the physical watch. Reject one that
+// already belongs to another slot before any chooser opens.
+function suffixConflict(slot,expected){
+ for(const [other,suffix] of Object.entries(auth?.gateway==="G01"?FIXED_BAND_SUFFIXES:{}))if(other!==slot&&suffix===expected)return other;
+ for(const [other,b] of bindings)if(other!==slot&&b.expected===expected)return other;
+ return null;
+}
 // Save only origin-scoped, previously verified Web Bluetooth handles on this
 // device. Never store Gateway tokens, medical readings or browser IDs on server.
 const REMEMBERED_KEY="steve.gateway.verified-devices.v1";
@@ -241,19 +255,23 @@ function paintOptionalBands(){
    if(knownSuffix)return quickConnect(slot,knownSuffix);
    $("advancedPair").open=true;$("slot").value=slot;
    $("expected").value=bindings.get(slot)?.expected||"";
-   $("scanMode").value="standard";
-   $("simpleStatus").textContent=slot+" • กรอกรหัสท้ายชื่อ Band (4 ตัว) แล้วกด เชื่อมต่อ Band 10";
+   // Same Broad + quarantine path as the R01–R04 quick buttons: a named Band
+   // must match the suffix; a UUID-only entry must pass the Share HR off/on check.
+   $("scanMode").value="supervised";
+   $("simpleStatus").textContent=slot+" • อ่านรหัส 4 ตัวท้ายชื่อจากนาฬิกาจริง กรอกในช่อง แล้วกด เชื่อมต่อ Band 10 (กรอกครั้งเดียว ระบบจะจำหลังยืนยัน)";
    $("expected").focus?.();
   });
   extras.append(button);
  }
- $("extraBandHelp").textContent=!auth?"เข้าใช้งาน Gateway ก่อน":
+ const missingText=unconfiguredSlots().length?" • ยังไม่ได้ตั้งค่า: "+unconfiguredSlots().join(", ")+" (เพิ่มใน STEVE_SLOT_MAP_EXTRA_JSON ของ "+auth.gateway+")":"";
+ $("extraBandHelp").textContent=(!auth?"เข้าใช้งาน Gateway ก่อน":
   permitted.length?"มีรหัสท้ายแล้วกดเชื่อมได้เลย • ช่องที่ยังไม่มีรหัส ให้อ่าน 4 ตัวท้ายจากนาฬิกาจริง • ถ้าขึ้น UUID จะเข้าตรวจเรือนอัตโนมัติ":
   topFixed.length?"เรือนเพิ่มเติมยังไม่ได้รับสิทธิ์ • ตรวจ STEVE_SLOT_MAP_JSON ของ "+auth.gateway+" ใน Render":
-  "Gateway นี้ยังไม่ได้รับสิทธิ์ช่องใด • ตรวจ STEVE_SLOT_MAP_JSON ใน Render";
+  "Gateway นี้ยังไม่ได้รับสิทธิ์ช่องใด • ตรวจ STEVE_SLOT_MAP_JSON ใน Render")+(auth?missingText:"");
  const cards=$("reservedSlotCards");cards.replaceChildren();
  const pending=provision.map(p=>p.id).filter(slot=>!topFixed.includes(slot)&&!sessions.has(slot));
- $("reservedSlots").hidden=pending.length===0;
+ const unconfigured=unconfiguredSlots().filter(slot=>!topFixed.includes(slot));
+ $("reservedSlots").hidden=pending.length===0&&unconfigured.length===0;
  $("reservedHint").textContent=(auth?.gateway||"")+" • ช่องที่ได้รับสิทธิ์แต่ยังไม่ได้เชื่อมต่อ";
  for(const slot of pending){
   const authorized=true;
@@ -262,6 +280,14 @@ function paintOptionalBands(){
    element("p","waiting",authorized?"พร้อมจับคู่":"รออนุญาตช่อง"),
    element("p","","NO DATA"),
    element("small","",bandSuffix(slot)?"รหัสท้าย "+bandSuffix(slot):"ยังไม่มีรหัสท้าย • อ่านจากนาฬิกาจริง"));
+  cards.append(tile);
+ }
+ for(const slot of unconfigured){
+  const tile=element("article","card unconfigured");
+  tile.append(element("h3","",slot+" • ยังไม่ได้ตั้งค่า"),
+   element("p","waiting","รอสิทธิ์จากเซิร์ฟเวอร์"),
+   element("p","","NO DATA"),
+   element("small","","ผู้ดูแลต้องเพิ่ม "+slot+" ให้ "+auth.gateway+" ใน slot map บน Render ก่อน • ยังเชื่อมต่อไม่ได้"));
   cards.append(tile);
  }
 }
@@ -701,7 +727,10 @@ if(window.location)loadProvision(generation).catch(()=>{});
 $("connect").addEventListener("click",()=>{
  const slot=$("slot").value;
  const fixed=auth?.gateway==="G01"&&({R01:"47FD",R02:"A746",...OPTIONAL_BAND_SUFFIXES})[slot];
- return connectBand(slot,fixed||$("expected").value.trim().toUpperCase(),$("scanMode").value);
+ const expected=fixed||$("expected").value.trim().toUpperCase();
+ const owner=/^[A-F0-9]{4}$/.test(expected)&&suffixConflict(slot,expected);
+ if(owner){status("รหัส "+expected+" เป็นของ "+owner+" แล้ว • ตรวจรหัสท้ายบนนาฬิกาของ "+slot+" อีกครั้ง");$("simpleStatus").textContent=slot+" • รหัสซ้ำกับ "+owner+" ไม่เปิดหน้าต่างเลือก";return;}
+ return connectBand(slot,expected,$("scanMode").value);
 });
 $("slot").addEventListener("change",()=>{$("expected").value=bindings.get($("slot").value)?.expected||"";});
 async function connectAllRemembered(){
