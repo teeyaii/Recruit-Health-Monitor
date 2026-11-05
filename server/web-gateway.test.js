@@ -32,6 +32,14 @@ test("Bluefy pilot uses native Web BLE notifications and strictly same-origin Ga
  assert.match(match[1],/localStorage\?\.setItem\(REMEMBERED_KEY,JSON\.stringify\(saved\)\)/);
  assert.doesNotMatch(match[1],/localStorage\?\.setItem\([^\n]*(?:token|bpm|auth|credential)/i);
 });
+test("Gateway removes unsupported lock-screen and dimming experiment completely",()=>{
+ for(const removed of ["screenExperiment","lockTrial","dimScreen","lockTrialStatus","setScreenDimEnabled","LOCK TEST","hiddenNotifications"]){
+  assert.doesNotMatch(html,new RegExp(removed,"i"),"unavailable experimental controls and code must not remain: "+removed);
+ }
+ assert.match(match[1],/if\(document\.hidden\)\{if\(chooserPending\)\{controls\(\);return;\}suspend\(\);\}/);
+ assert.match(match[1],/window\.addEventListener\("pagehide",\(\)=>suspend\(\)\)/);
+ assert.match(match[1],/if\(s\.closed\|\|document\.hidden\|\|!s\.ready\)return;/);
+});
 test("HR parser handles real Band 10 8-bit packets and uint16 format",()=>{
  const decode=decoderFromPage();
  assert.equal(decode(data([0x06,0x35])),53);

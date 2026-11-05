@@ -290,40 +290,32 @@ test('server-revoked cookie clears live sessions instead of presenting unauthori
  assert.equal(h.api.live.size,0);assert.equal(h.get('loginFields').hidden,false);assert.equal(h.get('connect').disabled,true);
 });
 
-test('opt-in lock screen trial keeps existing BLE handle while hidden, records only fresh hidden acknowledgements',async()=>{
- const h=harness();await h.login();const band=device();await h.connect(band);
- band.emit([6,65]);await flush();
- h.get('lockTrial').click();
- h.hide();await flush();
- assert.equal(h.api.live.has('R01'),true,'experimental hidden path must not stop BLE by JS');
- assert.equal(band.gatt.connected,true);
- assert.equal(h.api.live.get('R01').bpm,null,'entering trial must clear prior value');
- h.tick(1500);await flush(); // Allow the existing per-Band 1-second upload throttle to elapse.
- band.emit([6,71]);await flush();
- assert.equal(h.api.live.get('R01').bpm,71,'only a new BLE event can restore value');
- const fresh=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body).readings[0]);
- assert.equal(fresh.at(-1).hr,71,'new hidden sample uses actual measurement timestamp');
- h.document.hidden=false;h.document.listeners.visibilitychange();await flush();
- assert.match(h.get('lockTrialStatus').textContent,/BPM ระหว่างซ่อน 1 ครั้ง/);
- assert.match(h.get('lockTrialStatus').textContent,/Server ACK ระหว่างซ่อน 1 ครั้ง/);
+test('hiding Bluefy always stops BLE streams and refuses hidden HR uploads',async()=>{
+ const h=harness();await h.login();const watch=device('a','47FD');
+ h.select(watch);await h.get('quickR01').click();
+ watch.emit([6,72]);await drain();const sent=h.fetches.filter(x=>x.url==='/api/ingest').length;
+ assert.equal(h.api.live.get('R01').bpm,72);
+ h.hide();await drain();
+ assert.equal(h.api.live.size,0,'no experimental background BLE subscription survives');
+ assert.equal(watch.gatt.connected,false);
+ assert.equal(h.get('gatewayDevices').textContent,'0 เรือน');
+ watch.emit([6,99]);await drain();
+ const after=h.fetches.filter(x=>x.url==='/api/ingest').map(x=>JSON.parse(x.options.body).readings[0]);
+ assert.equal(after.filter(x=>x.hr===99).length,0,'hidden sample never uploaded as LIVE');
+ assert.ok(after.length>=sent,'disconnect marker may be uploaded');
+ assert.equal(h.get('connectAll').disabled,true);
 });
-test('opt-in lock screen without fresh data stays NO DATA; dim fallback restores normal background stop',async()=>{
- const h=harness();await h.login();const band=device();await h.connect(band);
- band.emit();await flush();h.get('lockTrial').click();h.hide();await flush();
- h.tick(16000);await flush();
- assert.equal(h.api.live.get('R01').bpm,null);
- h.document.hidden=false;h.document.listeners.visibilitychange();await flush();
- assert.match(h.get('lockTrialStatus').textContent,/BPM ระหว่างซ่อน 0 ครั้ง/);
- assert.match(h.get('lockTrialStatus').textContent,/Server ACK ระหว่างซ่อน 0 ครั้ง/);
- let dimRequested=false;
- h.context.navigator.bluetooth.setScreenDimEnabled=async enabled=>{dimRequested=enabled;};
- await h.get('dimScreen').click();
- assert.equal(dimRequested,true);
- h.hide();await flush();
- assert.equal(h.api.live.size,0,'normal foreground-only safeguard restored by fallback');
- assert.equal(band.gatt.connected,false);
+test('returning to foreground reconnects only previously verified band and requires new BPM',async()=>{
+ const h=harness();await h.login();const watch=device('original','47FD');
+ h.select(watch);await h.get('quickR01').click();watch.emit();await drain();
+ h.hide();await drain();h.document.hidden=false;h.document.listeners.visibilitychange();await drain();
+ assert.equal(h.calls.length,1,'resume uses in-page verified handle, no new chooser');
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ assert.equal(h.api.live.get('R01')?.bpm,null,'stale BPM must never become LIVE on resume');
+ watch.emit([6,69]);await drain();
+ assert.equal(h.api.live.get('R01')?.bpm,69);
+ assert.equal(h.api.live.get('R01')?.ack,'Server acknowledged');
 });
-
 test('G01 can provision R03 and R04 on one Bluefy page and keep four physical sessions separate',async()=>{
  const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},
   {id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}]);
