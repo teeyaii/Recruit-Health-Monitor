@@ -716,3 +716,16 @@ test('native chooser pagehide does not tear down other live verified watch conne
  assert.equal(h.api.live.get('R01')?.bpm,71);
  assert.equal(h.api.live.get('R02')?.bpm,72);
 });
+
+
+test('foreground watch with temporary HR silence is not forcibly disconnected after 20 seconds',async()=>{
+ const h=harness();await h.login();const watch=device('watch','47FD');
+ h.select(watch);await h.get('quickR01').click();watch.emit([6,73]);await flush();
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ h.tick(21000);await flush();
+ assert.equal(watch.gatt.connected,true,'temporary silence must not trigger forced BLE disconnect');
+ assert.equal(h.api.live.get('R01')?.lifecycle,'STALE','safety status remains NO DATA');
+ watch.emit([6,74]);await flush();
+ assert.equal(h.api.live.get('R01')?.bpm,74,'stream resumes without re-pairing');
+ assert.equal(h.calls.length,1,'no native chooser reopened');
+});
