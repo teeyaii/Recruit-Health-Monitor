@@ -1,5 +1,7 @@
 # Issue #71 — Independent Backend Reliability & Safety QA
 
+> รายงานนี้เก็บผล baseline ของ PR #73 ไว้เป็นหลักฐานย้อนหลัง บน branch แก้ Issue #74 เทสต์ P1 ถูกเปลี่ยนเป็น mandatory แล้ว ดูผลปัจจุบันและ rollback plan ใน `ISSUE_74_WEARER_CUTOFF_FIX.md`
+
 หลักฐานทั้งหมดเป็น **SIMULATED / CODE REVIEW**; **REAL HARDWARE: NOT PERFORMED**.
 ไม่ใช่การรับรองทางคลินิกหรือหลักฐานผ่าน soak 60 นาที
 

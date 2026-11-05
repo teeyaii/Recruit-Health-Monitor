@@ -3,7 +3,7 @@ import { GatewaySessions, gatewayBrowserRequest } from './gateway-session.js';
 import { CommanderAccess } from "./commander-access.js";
 import { randomUUID, randomBytes } from "node:crypto";
 import { gatewayForBearer, viewerRoleForToken, slotIsAuthorized, strictMode, provisionedGateway, provisionedDevicesForGateway } from "./contract.js";
-import { RosterStore } from "./roster.js";
+import { RosterStore, slotIDs } from "./roster.js";
 import { PulseHistory, WINDOW_MS } from "./pulse-history.js";
 import { DurableState } from "./durable-state.js";
 import { RollingArchive, HISTORY_HOURS } from "./rolling-archive.js";
@@ -34,7 +34,8 @@ const commander=new CommanderAccess();
 let commanderLinkBusy=false;
 let writeQueue=Promise.resolve(),historyDirty=false;
 function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
- profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions,commanderLink:commander.export()};}
+ profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions,commanderLink:commander.export(),
+ reassignmentCutoffs:Object.fromEntries(reassignmentCutoff)};}
 function persistState(){
  if(!durable.enabled)return Promise.resolve();
  writeQueue=writeQueue.catch(()=>{}).then(()=>durable.save(stateSnapshot()));
@@ -42,6 +43,85 @@ function persistState(){
 }
 // Reject queued measurements recorded before a wearer changed.
 const reassignmentCutoff=new Map();
+// Separate transient locks from durable timestamp cutoffs: never persist an
+// infinite/sentinel cutoff. Only the affected slot stops while a save is pending.
+const rosterWrites=new Set(),uncertainRosterWrites=new Set();
+const slotWriteBlocked=slot=>rosterWrites.has(slot)||uncertainRosterWrites.has(slot);
+function restoreReassignmentCutoffs(raw){
+ if(raw!==undefined&&(!raw||typeof raw!=="object"||Array.isArray(raw)))throw Error("Invalid wearer cutoffs");
+ for(const [slot,at] of Object.entries(raw||{})){
+  if(!slotIDs.includes(slot)||!Number.isSafeInteger(at)||at<0||at===Number.MAX_SAFE_INTEGER)
+   throw Error("Invalid wearer cutoff");
+  reassignmentCutoff.set(slot,at);
+ }
+ // Older snapshots lack this field. Reject all pre-boot timestamps, including
+ // the existing 1 s allowed client clock lead. Fresh streams recover naturally.
+ let migrated=false;
+ for(const slot of slotIDs)if(roster.get(slot).code&&!reassignmentCutoff.has(slot)){
+  reassignmentCutoff.set(slot,Date.now()+1000);migrated=true;
+ }
+ return migrated;
+}
+function withRosterSlot(data,slot,current,event){
+ data.slots[slot]=current;data.audit.push(event);
+ if(data.audit.length>250)data.audit.splice(0,data.audit.length-250);
+ return data;
+}
+async function updateRosterSafely(slot,action,body,actor){
+ if(rosterWrites.has(slot))throw Object.assign(Error("wearer update in progress"),{status:409});
+ // Validate on a copy; HTTP readers must never see an uncommitted new wearer.
+ const draft=new RosterStore();draft.loadData(roster.exportData());
+ const previous=draft.get(slot);
+ const current=action==="replace"?draft.replace(slot,body,actor):
+  action==="resume"?draft.resume(slot,body,actor):
+  action==="acknowledge"?draft.acknowledge(slot,body,actor):draft.update(slot,body,actor);
+ const changed=action==="replace"||previous.code?.toUpperCase()!==current.code?.toUpperCase();
+ const event=draft.getAudit().at(-1);
+ rosterWrites.add(slot);
+ const job=async()=>{
+  // A different slot can have reserved the same code while this job waited.
+  if(slotIDs.some(id=>id!==slot&&roster.get(id).code?.toUpperCase()===current.code?.toUpperCase()))
+   throw Object.assign(Error("anonymous code already active on another slot"),{status:409});
+  // Existing archive deletion semantics, before changing the visible wearer.
+  // Failure leaves the roster/profile/review/history untouched and returns 503.
+  if(changed)await archive.forget(slot);
+  const cutoff=changed?Math.max(Date.now(),recruits.get(slot)?.eventAt||0,reassignmentCutoff.get(slot)||0):null;
+  const next=stateSnapshot();
+  next.roster=withRosterSlot(next.roster,slot,current,event);
+  if(changed){
+   next.reassignmentCutoffs[slot]=cutoff;
+   delete next.history[slot];delete next.profiles[slot];delete next.medicReviews[slot];
+  }
+  if(durable.enabled){
+   try{await durable.save(next);}
+   catch(error){
+    // The remote commit may have succeeded before a transport failure. Compensate
+    // within the SAME queue before another save can run. If confirmation also
+    // fails, quarantine this slot until an explicit roster retry succeeds.
+    try{await durable.save(stateSnapshot());}
+    catch{uncertainRosterWrites.add(slot);}
+    throw error;
+   }
+  }
+  // Other slots / group phase may have changed while awaiting storage. Merge
+  // only this validated slot and its audit event, never restore a whole roster.
+  const before=roster.exportData();
+  roster.loadData(withRosterSlot(roster.exportData(),slot,current,event));
+  try{if(!durable.enabled)roster.persist();}
+  catch(error){roster.loadData(before);throw error;}
+  if(changed){
+   reassignmentCutoff.set(slot,cutoff);
+   recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);autoHR.reset(slot);
+  }
+  uncertainRosterWrites.delete(slot);
+ };
+ // All durable writes share this queue, including the synchronous commit after
+ // save. No later writer can save a new wearer with an old cutoff/profile.
+ writeQueue=writeQueue.catch(()=>{}).then(job);
+ try{await writeQueue;return current;}
+ catch(error){if(error.status===409)throw error;throw Object.assign(Error("roster update not confirmed; reload and retry"),{status:503});}
+ finally{rosterWrites.delete(slot);publish();}
+}
 const clients=new Map();
 const sessions=new Map();
 const gatewaySessions=new GatewaySessions();
@@ -93,7 +173,7 @@ async function readBody(req,max=2048){
 function send(res,code,data){res.writeHead(code,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"});res.end(JSON.stringify(data));}
 function snapshot(){const now=Date.now();
  return Array.from({length:15},(_,i)=>{
-  const id="R"+String(i+1).padStart(2,"0"),r=recruits.get(id),gateway=r?.gateway??provisionedGateway(id),paused=!roster.canIngest(id);
+  const id="R"+String(i+1).padStart(2,"0"),r=recruits.get(id),gateway=r?.gateway??provisionedGateway(id),paused=slotWriteBlocked(id)||!roster.canIngest(id);
   const gatewayOnline=gateway!=null && now-(lastByGateway.get(gateway)??0)<=TTL_MS;
   const state=paused?"PAUSED":r?.state==="DISCONNECTED"?"DISCONNECTED":!r?.timestamp?"NO DATA":
     (!gatewayOnline||now-r.timestamp>TTL_MS)?"STALE":"CONNECTED";
@@ -131,7 +211,7 @@ function demoTick(){
  for(let i=0;i<15;i++){
   const id="R"+String(i+1).padStart(2,"0");
   if(demoDropR03&&id==="R03")continue;
-  if(!roster.canIngest(id))continue;
+  if(slotWriteBlocked(id)||!roster.canIngest(id))continue;
   if(demoDropG03&&Math.floor(i/3)===2)continue;
   const gateway="G0"+(Math.floor(i/3)+1);
   const hr=72+((i*11+demoRound*3)%41);
@@ -311,7 +391,7 @@ const server=http.createServer(async(req,res)=>{
     const phase=roster.getGroupPhase();
     let archiveUnavailable=false,points=pulseHistory.get(slot,Date.now());
     if(archive.enabled){try{points=await archive.get(slot,code,4);}catch{archiveUnavailable=true;}}
-    if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+    if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
     // Comparison is descriptive only; rest phase must be recorded by a human.
     const baseline=profile.baselineConfirmed&&phase.phase==="hourly_rest"?
      profile.restingBaselineBpm:null;
@@ -339,12 +419,12 @@ const server=http.createServer(async(req,res)=>{
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{
    const body=await readBody(req,900);
-   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    const backup=medicReviews.export()[slot];
    const review=medicReviews.update(slot,code,body,isViewer);
    try{await persistState();}
    catch{if(roster.get(slot).version===rosterVersion)medicReviews.rollback(slot,review,backup);historyDirty=true;send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
-   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{review});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"review request unavailable"});}
   return;
@@ -361,12 +441,12 @@ const server=http.createServer(async(req,res)=>{
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{
    const body=await readBody(req,1024);
-   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    const backup=privateProfiles.export()[slot];
    const profile=privateProfiles.update(slot,code,body);
    try{await persistState();}
    catch{if(roster.get(slot).version===rosterVersion)privateProfiles.rollback(slot,profile,backup);historyDirty=true;send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
-   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{profile,sensitive:true});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"private profile unavailable"});}
   return;
@@ -383,7 +463,7 @@ const server=http.createServer(async(req,res)=>{
    const compact=url.searchParams.get("compact")==="1";
    const now=Date.now(),start=now-hours*3600000;
    const points=await archive.get(slot,code,hours,now,compact);
-   if(roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
+   if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    const phases=roster.getTrainingTimeline(start,now);
    send(res,200,{slot,windowStart:start,windowEnd:now,phases,phaseScope:"cohort",windowHours:hours,retentionDays:7,sampleIntervalSeconds:7,points,compacted:compact&&(hours===8||hours===168),source:"actual accepted HR only"});
   }catch{send(res,503,{error:"encrypted archive unavailable"});}
@@ -427,22 +507,8 @@ const server=http.createServer(async(req,res)=>{
   if((action && req.method!=="POST")||(!action && req.method!=="PUT")){send(res,405,{error:"method not allowed"});return;}
   try{
    const body=await readBody(req);
-   const previous=roster.get(slot);
-   const current=action==="replace"?roster.replace(slot,body,isViewer):
-      action==="resume"?roster.resume(slot,body,isViewer):
-      action==="acknowledge"?roster.acknowledge(slot,body,isViewer):
-      roster.update(slot,body,isViewer);
-   const wearerChanged=previous.code!==null&&current.code!==null&&
-     previous.code.toUpperCase()!==current.code.toUpperCase();
-   const firstAssignment=previous.code===null&&current.code!==null;
-   if(action==="replace"||wearerChanged||firstAssignment){
-    // Never attribute a previously measured BPM to a new wearer.
-    recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);autoHR.reset(slot);
-    reassignmentCutoff.set(slot,Number.MAX_SAFE_INTEGER);
-    try{await archive.forget(slot);}
-    finally{if(roster.get(slot).version===current.version)reassignmentCutoff.set(slot,Date.now());publish();}
-   }else if(action==="resume")publish();
-   await persistState();send(res,200,{ok:true,slot:current});
+   const current=await updateRosterSafely(slot,action,body,isViewer);
+   send(res,200,{ok:true,slot:current});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"roster update unavailable"});}
   return;
  }
@@ -498,7 +564,7 @@ const server=http.createServer(async(req,res)=>{
    // An explicit non-live/unknown state must never be promoted to CONNECTED.
    // Omitted state remains compatible with existing Gateway HR packets.
    if(item.state!==undefined&&!["CONNECTED","DISCONNECTED"].includes(item.state))continue;
-   if(!slotIsAuthorized(body.gateway,item)||!roster.canIngest(item.id))continue;
+   if(!slotIsAuthorized(body.gateway,item)||slotWriteBlocked(item.id)||!roster.canIngest(item.id))continue;
    if(item.timestamp<=(reassignmentCutoff.get(item.id)??0))continue;
    if(seen.has(item.id))continue;
    seen.add(item.id);
@@ -566,8 +632,10 @@ async function boot(){
    if(state.medicReviews)medicReviews.load(state.medicReviews);
    if(state.conditions&&typeof state.conditions==="object")conditions=state.conditions;
    if(state.commanderLink)commander.load(state.commanderLink);
+   if(restoreReassignmentCutoffs(state.reassignmentCutoffs))await durable.save(stateSnapshot());
   }
  }
+ if(!durable.enabled)restoreReassignmentCutoffs(undefined);
  server.listen(PORT,"0.0.0.0",()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
 }
 boot().catch(()=>{console.error("STEVE secure storage startup failed; check remote store configuration");process.exitCode=1;});
