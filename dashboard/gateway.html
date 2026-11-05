@@ -75,7 +75,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 </section>
 <section class="card">
 <h2>เชื่อมต่อสายรัด</h2>
-<p class="muted">เปิด Share HR บน Band แล้วเลือกเรือนที่ต้องการเชื่อมต่อ</p>
+<p class="muted">เปิด Share HR บนเรือนที่ต้องการก่อน กด R01–R04 ตามรหัสบนเรือนจริง แล้วเลือกชื่อ Band ที่ลงท้ายรหัสเดียวกันในหน้าต่าง Bluetooth • เรือนที่เชื่อมและยืนยันแล้วจะลองกลับเข้าต่อโดยไม่สแกนซ้ำในหน้านี้</p>
 <div class="quick"><button id="quickR01" disabled>เชื่อม R01 · 47FD</button><button id="quickR02" disabled>เชื่อม R02 · A746</button></div>
 <div class="quick" id="extraBandControls" aria-label="เพิ่มนาฬิกาเรือนที่ 3 ถึง 5"></div>
 <p class="muted" id="extraBandHelp">สำหรับเรือนที่ 3–5 ต้องได้รับสิทธิ์ R03–R05 จากเซิร์ฟเวอร์ก่อน</p>
@@ -102,6 +102,13 @@ const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 // These are human-visible device hints, not Gateway tokens or server slot IDs.
 // Keep name matching mandatory: the native chooser does not attest physical ownership.
 const OPTIONAL_BAND_SUFFIXES=Object.freeze({R03:"1121",R04:"CD42"});
+// Web Bluetooth cannot filter native chooser entries by the LAST four characters;
+// check the selected advertised name before any HR upload. Never trust row order.
+function quickConnect(slot,expected){
+ const current=live.get(slot);
+ if(current?.lifecycle==="STALE")stopped(current,"ผู้ควบคุมขอเชื่อมใหม่ / NO DATA");
+ return connectBand(slot,expected,bindings.get(slot)?.verified?"auto":"broad");
+}
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
 let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null;
 let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
@@ -159,13 +166,13 @@ function paintOptionalBands(){
  const extras=$("extraBandControls");extras.replaceChildren();
  for(const item of permitted){
   const slot=item.id,knownSuffix=auth?.gateway==="G01"&&OPTIONAL_BAND_SUFFIXES[slot];
-  const button=element("button","secondary",knownSuffix?"เชื่อม "+slot+" · "+knownSuffix:
+  const button=element("button","secondary",knownSuffix?(live.get(slot)?.lifecycle==="STALE"?"เชื่อมใหม่ ":"เชื่อม ")+slot+" · "+knownSuffix:
    sessions.has(slot)?slot+" • ดูสถานะ":"เพิ่ม "+slot);
-  button.type="button";button.disabled=connecting||chooserPending||document.hidden||!auth||live.has(slot);
+  button.type="button";button.disabled=connecting||chooserPending||document.hidden||!auth||(live.has(slot)&&live.get(slot)?.lifecycle!=="STALE");
   button.addEventListener("click",()=>{
    // Use the same user-gesture BLE chooser as R01/R02, not a saved Bluetooth
    // handle or automatic background connection. Wrong physical bands are rejected.
-   if(knownSuffix){connectBand(slot,knownSuffix,bindings.get(slot)?.verified?"auto":"broad");return;}
+   if(knownSuffix)return quickConnect(slot,knownSuffix);
    $("advancedPair").open=true;$("slot").value=slot;
    $("expected").value=bindings.get(slot)?.expected||"";
    $("scanMode").value="standard";
@@ -175,7 +182,7 @@ function paintOptionalBands(){
   extras.append(button);
  }
  $("extraBandHelp").textContent=!auth?"เข้าใช้งาน G01 ก่อนเพิ่มเรือนที่ 3–5":
-  permitted.length?"R03/R04 กดเชื่อมได้เลย • ตรวจชื่อ Band ที่เลือกให้ตรงรหัส • R05 ตั้งค่ารหัสในเมนูเพิ่มเติม (ทุกเรือนต้อง Share HR)":
+  permitted.length?"R03/R04 กดตามรหัสบนเรือนจริง • ชื่อผิดรหัสจะไม่รับข้อมูล • ถ้าแสดงเพียง Xiaomi/รหัสยาวให้ใช้ D ในเมนูเพิ่มเติม และเปิด Share HR ทีละเรือน":
   "R03–R05 ยังไม่ได้รับสิทธิ์จากเซิร์ฟเวอร์ • ตรวจ STEVE_SLOT_MAP_JSON ของ G01 ใน Render ก่อน";
  const cards=$("reservedSlotCards");cards.replaceChildren();
  const pending=["R03","R04","R05"].filter(slot=>!sessions.has(slot));
@@ -193,7 +200,7 @@ function paintOptionalBands(){
 }
 function controls(){
  paintGatewayOverview();paintOptionalBands();
- for(const slot of ["R01","R02"])$("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||live.has(slot)||connecting||chooserPending||document.hidden;
+ for(const slot of ["R01","R02"])$("quick"+slot).disabled=!auth||auth.gateway!=="G01"||!provision.some(p=>p.id===slot)||(live.has(slot)&&live.get(slot)?.lifecycle!=="STALE")||connecting||chooserPending||document.hidden;
  $("connect").disabled=!auth||!provision.length||connecting||chooserPending||document.hidden;
  $("load").disabled=loginPending||connecting||live.size>0;
  for(const session of sessions.values())paint(session);
@@ -314,11 +321,10 @@ function addTile(slot,expected,mode){
   // Tile is constructed before the session exists. Resolve the live owner
   // at click time to avoid stale closures and wrong-slot recovery.
   const current=live.get(slot);
-  if(current&&!current.closed&&current.lifecycle==="STALE"){
-   stopped(current,"MANUAL RECONNECT / NO DATA");
-   return connectBand(slot,expected,"auto");
-  }
-  return connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"broad":mode);
+  if(current&&!current.closed&&current.lifecycle==="STALE")stopped(current,"MANUAL RECONNECT / NO DATA");
+  // Prefer the same verified handle: avoid a new chooser that may interrupt peers.
+  // Unverified generic-name enrollment must stay in supervised mode.
+  return connectBand(slot,expected,bindings.get(slot)?.verified?"auto":mode==="supervised"?"supervised":"broad");
  });
  broadRetry.addEventListener("click",()=>{
   const current=live.get(slot);
@@ -541,7 +547,7 @@ $("load").addEventListener("click",async()=>{
  finally{loginPending=false;pendingSession=null;$("token").value="";controls();}
 });
 for(const [slot,suffix] of [["R01","47FD"],["R02","A746"]]){
- $("quick"+slot).addEventListener("click",()=>connectBand(slot,suffix,bindings.get(slot)?.verified?"auto":"broad"));
+ $("quick"+slot).addEventListener("click",()=>quickConnect(slot,suffix));
 }
 $("presentation").addEventListener("click",()=>{document.body.classList.toggle("presentation");$("presentation").textContent=document.body.classList.contains("presentation")?"ออกจากโหมดนำเสนอ":"โหมดนำเสนอ";});
 // Reload restores authorization only, never invents BLE handles or fresh readings.
@@ -642,8 +648,12 @@ document.addEventListener("visibilitychange",()=>{
 window.addEventListener("pagehide",()=>{if(lockTrialEnabled)beginLockProbe();else suspend();});
 setInterval(()=>{
  if(auth && Date.now()>=auth.expiresAt)expireSession();
+ let newlyStale=false;
  for(const s of live.values()){
-  if(s.ready && Date.now()-(s.lastAt??s.readyAt)>15000){s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";}
+  if(s.ready && Date.now()-(s.lastAt??s.readyAt)>15000){
+   if(s.lifecycle!=="STALE")newlyStale=true;
+   s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";
+  }
   paint(s);
   const binding=bindings.get(s.slot);
   // Only repair missing BLE notifications. Fresh BLE with an HTTP failure must
@@ -658,7 +668,7 @@ setInterval(()=>{
    break;
   }
  }
- paintGatewayOverview();
+ if(newlyStale)controls();else paintGatewayOverview();
 },1000);
 if(!navigator.bluetooth)status("เบราว์เซอร์นี้ไม่มี Web Bluetooth — เปิดลิงก์นี้ใน Bluefy");
 </script></body></html>
