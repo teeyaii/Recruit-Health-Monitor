@@ -160,6 +160,58 @@ test('failed R01 GATT retry leaves R02 data live',async()=>{
  assert.equal(h.api.live.get('R02').bpm,57);assert.equal(b.gatt.connected,true);
 });
 const drain=async()=>{for(let i=0;i<150;i++)await Promise.resolve();};
+
+test('G01 extra buttons prefill owner-confirmed R03/R04 suffixes without operator re-entry',async()=>{
+ const slots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},
+  {id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}];
+ const h=harness(slots);await h.login();
+ assert.equal(h.get('expected').value,'',"manual input starts empty");
+ const find=(slot)=>h.get('extraBandControls').children.find(x=>x.textContent.startsWith('เชื่อม '+slot));
+ const r03=find('R03'),r04=find('R04');
+ assert.ok(r03&&r04,'optional authorized slots must be visible as direct buttons');
+ assert.match(r03.textContent,/1121/);assert.match(r04.textContent,/CD42/);
+ h.select(device('physical-three','1121'));r03.click();await drain();
+ assert.equal(h.api.live.get('R03')?.device.name,'Xiaomi Smart Band 10 1121');
+ assert.equal(h.api.live.get('R03')?.assignment,'opaque-three');
+ assert.equal(h.get('expected').value,'',"one-tap does not require advanced input");
+ h.select(device('physical-four','CD42'));find('R04').click();await drain();
+ assert.equal(h.api.live.get('R04')?.device.name,'Xiaomi Smart Band 10 CD42');
+ assert.equal(h.api.live.get('R04')?.assignment,'opaque-four');
+ assert.equal(h.calls.length,2,'each authorized button requires its own chooser tap');
+ assert.equal(h.api.bindings.get('R03')?.expected,'1121');
+ assert.equal(h.api.bindings.get('R04')?.expected,'CD42');
+});
+
+test('a fresh browser page retains configured R03/R04 button suffixes but not BLE handles',async()=>{
+ const slots=[{id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}];
+ for(const [slot,suffix] of [['R03','1121'],['R04','CD42']]){
+  const h=harness(slots);await h.login();
+  assert.equal(h.api.bindings.size,0,'BLE handles must never be persisted');
+  const button=h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม '+slot+' · '+suffix);
+  assert.ok(button,'correct suffix offered after reload without entering it');
+  h.select(device('physical-'+slot,suffix));button.click();await drain();
+  assert.equal(h.api.live.get(slot)?.expected,suffix);
+  assert.equal(h.api.live.get(slot)?.ready,true);
+ }
+});
+
+test('R03/R04 direct buttons reject wrong Band, unauthorised slot and duplicate watch',async()=>{
+ const slots=[{id:'R01',device_id:'opaque-one'},
+  {id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}];
+ const h=harness(slots);await h.login();
+ const button=slot=>h.get('extraBandControls').children.find(x=>x.textContent.includes(slot));
+ h.select(device('wrong-four','CD42'));button('R03').click();await drain();
+ assert.equal(h.api.live.has('R03'),false);
+ assert.match(h.get('bleStatus').textContent,/ไม่ตรงรหัส/);
+ h.select(device('real-three','1121'));button('R03').click();await drain();
+ assert.equal(h.api.live.get('R03')?.ready,true);
+ h.select(device('real-three','1121'));button('R04').click();await drain();
+ assert.equal(h.api.live.has('R04'),false);
+ assert.equal(h.get('expected').value,'');
+ const unauthorized=harness([{id:'R01',device_id:'opaque-one'}]);await unauthorized.login();
+ assert.equal(unauthorized.get('extraBandControls').children.length,0);
+});
+
 test('slow HTTPS failure remains visible after newer notifications and isolates the other band',async()=>{
  for(const failure of ['network','timeout','http','rejected']){
   const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');
