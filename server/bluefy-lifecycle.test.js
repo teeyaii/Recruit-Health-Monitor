@@ -358,7 +358,7 @@ test('four LIVE watches: stale R03 can be reconnected alone without disturbing o
  for(const [slot,suffix] of bands){
   const band=device('band-'+slot,suffix);devices.set(slot,band);h.select(band);
   if(slot==='R01'||slot==='R02')await h.get('quick'+slot).click();
-  else await h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม '+slot+' · '+suffix).click();
+  else {h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม '+slot+' · '+suffix).click();await drain();}
  }
  assert.equal(h.api.live.size,4);
  for(const [slot,,bpm] of bands)devices.get(slot).emit([6,bpm]);
