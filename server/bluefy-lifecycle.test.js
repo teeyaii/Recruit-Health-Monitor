@@ -537,3 +537,40 @@ test('silent verified stream recovers automatically twice, preserves peers, and 
  b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
  assert.notEqual(h.api.live.get('R01'),silent);assert.equal(h.calls.length,2);
 });
+
+
+test('one-tap R01 stale reconnect reuses verified handle without another picker or disturbing R02',async()=>{
+ const h=harness();await h.login();
+ const a=device('band-one','47FD'),b=device('band-two','A746');
+ h.select(a);await h.get('quickR01').click();
+ h.select(b);await h.get('quickR02').click();
+ a.emit();b.emit();await drain();
+ assert.equal(h.api.bindings.get('R01').verified,true);
+ const peer=h.api.live.get('R02'),choices=h.calls.length;
+ h.tick(14000);b.emit();await drain();h.tick(1001);
+ assert.equal(h.api.live.get('R01').lifecycle,'STALE');
+ assert.equal(h.get('quickR01').disabled,false);
+ h.select(()=>{throw Error('native picker must not re-open for verified watch');});
+ await h.get('quickR01').click();await drain();
+ assert.equal(h.calls.length,choices);
+ assert.equal(h.api.live.get('R01').ready,true);
+ assert.equal(h.api.live.get('R02'),peer);
+ assert.equal(b.gatt.connected,true);
+ b.emit();await drain();assert.equal(peer.bpm,66);
+});
+test('R03 stale quick button keeps assigned suffix and retries only its verified BLE handle',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},{id:'R03',device_id:'opaque-three'}]);
+ await h.login();const d=device('band-three','1121');h.select(d);
+ const button=()=>h.get('extraBandControls').children.find(x=>x.textContent.includes('R03 · 1121'));
+ await button().click();d.emit();await drain();
+ assert.equal(h.api.bindings.get('R03').verified,true);
+ const choices=h.calls.length;
+ h.tick(15001);
+ assert.match(button().textContent,/เชื่อมใหม่/);
+ assert.equal(button().disabled,false);
+ h.select(()=>{throw Error('R03 should reuse its verified handle');});
+ await button().click();await drain();
+ assert.equal(h.calls.length,choices);
+ assert.equal(h.api.live.get('R03').ready,true);
+ assert.equal(h.api.live.get('R03').expected,'1121');
+});
