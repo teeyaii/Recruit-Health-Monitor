@@ -38,6 +38,20 @@ const assert=require('assert/strict');
   assert.equal(await page.locator('#reservedSlots button').count(),0);
   assert.equal(await page.locator('#reservedSlots').innerText().then(t=>(t.match(/NO DATA/g)||[]).length),3);
   assert.equal(await page.evaluate(()=>live.size),2,'presentation slots must not create BLE sessions');
+  // Issue #70: technical readiness + anonymous session logger (SIMULATED, mocked BLE).
+  assert.equal(await page.locator('#readiness').isVisible(),true);
+  assert.equal(await page.locator('#readinessList li').count(),5,'G01 readiness lists R01–R05');
+  await page.waitForFunction(()=>/พร้อมส่งข้อมูล 2\/4/.test(document.getElementById('readinessSummary').textContent));
+  assert.match(await page.locator('#readiness').innerText(),/ไม่ใช่ผลประเมินทางการแพทย์/);
+  await page.locator('#sessionLogPanel summary').click();
+  assert.equal(await page.locator('#sessionStart').isDisabled(),true,'no label, no recording');
+  await page.locator('#sessionLabel').selectOption('SIMULATED');await page.locator('#sessionStart').click();
+  await page.evaluate(()=>window.bands.forEach(d=>d.emit()));await page.waitForTimeout(2200);
+  await page.locator('#sessionStop').click();await page.locator('#sessionExportJson').click();
+  const exported=JSON.parse(await page.locator('#sessionExportText').inputValue());
+  assert.equal(exported.label,'SIMULATED');assert.equal(exported.hardwareSixtyMinuteValidation,'PENDING');
+  assert.deepEqual(exported.slots.map(r=>r.slot),['R01','R02','R03','R04']);
+  assert.ok(!/opaque-|47FD|A746|"hr"|"bpm"|token/i.test(JSON.stringify(exported)),'export is anonymous');
   for(const width of [390,1440]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);fs.mkdirSync('ui-artifacts',{recursive:true});await page.screenshot({path:'ui-artifacts/gateway-'+width+'.png',fullPage:true});}
   const text=await page.locator('body').innerText();assert.ok(!/Notifications:|Backend:|GATT|BATTERY/i.test(text));
   await page.locator('#presentation').click();assert.equal(await page.locator('#loginFields').isVisible(),false);assert.equal(await page.locator('.warning').count(),0,'prototype warning banner should no longer clutter the Gateway');

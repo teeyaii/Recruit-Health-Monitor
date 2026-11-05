@@ -70,6 +70,17 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 #simpleStatus,#serverStatus{padding:10px 12px;border-radius:9px;background:rgba(107,149,111,.12);border:1px solid rgba(143,181,151,.23)}
 @media(max-width:540px){.overview{grid-template-columns:repeat(2,minmax(0,1fr))}.overview .metric:last-child{grid-column:1/-1}.hero{align-items:center}.hero button{min-width:120px}}
 @media(prefers-reduced-motion:reduce){button{transition:none}}
+.readiness{margin:10px 0 14px;padding:12px 14px;border:1px solid #4f6d56;border-radius:12px;background:#17281e}
+.readiness-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.readiness-head strong{font-size:1rem;color:#e0f3df}.readiness-head small{color:#a9c2b0;font-size:.74rem}
+.readiness ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.readiness li{display:grid;grid-template-columns:3.2em minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;background:rgba(255,255,255,.035)}
+.readiness li b{font-variant-numeric:tabular-nums}.readiness .chip{font-size:.8rem;overflow-wrap:anywhere}.readiness .chip small{display:block;color:#a9c2b0;font-size:.72rem}
+.readiness li[data-state="LIVE_ACK"]{box-shadow:inset 3px 0 #79d2a7}.readiness li[data-state="LIVE_NO_ACK"],.readiness li[data-state="BLE_NO_DATA"]{box-shadow:inset 3px 0 #d6b45a}
+.readiness li[data-state="DISCONNECTED"]{box-shadow:inset 3px 0 #c9776f}.readiness li[data-state="UNCONFIGURED"]{opacity:.7}
+.readiness li button{margin:0;min-height:40px;padding:7px 12px;font-size:.82rem}
+#sessionLogPanel textarea{width:100%;box-sizing:border-box;background:#101a13;color:#dfeee2;border:1px solid #4f6d56;border-radius:9px;font:12px/1.4 ui-monospace,Menlo,monospace}
+#sessionLogPanel .session-actions{display:flex;flex-wrap:wrap;gap:8px}#sessionLogPanel .session-actions button{margin:0}
 .pair-guide{padding:12px 14px;margin:10px 0;border:1px solid #55715b;background:#1b3025;border-radius:12px}
 .pair-guide strong{display:block;font-size:.95rem;color:#e0f3df}
 .pair-guide p{margin:5px 0 0;color:#c1d7c7;font-size:.88rem;line-height:1.55}
@@ -95,6 +106,10 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 <p id="browserNotice" class="browser-notice" role="alert" hidden>เบราว์เซอร์นี้ไม่รองรับ Bluetooth • เปิดลิงก์นี้ในแอป Bluefy บน iPhone แทน Chrome/Safari</p>
 <button id="connectAll" class="connect-all" type="button" disabled>เชื่อมทุกเรือนที่จำไว้</button>
 <p id="connectAllStatus" class="muted" role="status" aria-live="polite">ครั้งแรกจับคู่ทีละเรือนด้านล่าง • ครั้งต่อไปกดปุ่มนี้ปุ่มเดียว</p>
+<div id="readiness" class="readiness" aria-label="ความพร้อมด้านการเชื่อมต่อของ Gateway" hidden>
+ <div class="readiness-head"><strong id="readinessSummary">พร้อมส่งข้อมูล 0/0</strong><small>ความพร้อมด้านการเชื่อมต่อเท่านั้น • ไม่ใช่ผลประเมินทางการแพทย์หรือความพร้อมฝึก</small></div>
+ <ul id="readinessList"></ul>
+</div>
 <div class="quick"><button id="quickR01" disabled>เชื่อม R01 · 47FD</button><button id="quickR02" disabled>เชื่อม R02 · A746</button></div>
 <div class="quick" id="extraBandControls" aria-label="เพิ่มนาฬิกาเรือนที่ 3 ถึง 5"></div>
 <div class="pair-guide" id="pairGuide" role="status" aria-live="polite" hidden><strong id="pairGuideTitle">จับคู่ทีละเรือน ไม่ต้องจำ UUID</strong><p id="pairGuideText">ถ้า Bluefy แสดง UUID หลายรายการ ให้แยกเรือนเป้าหมายออกจากเรือนอื่นก่อนสแกน เว็บเปลี่ยนชื่อรายการนี้ไม่ได้ หลังเลือกต้องตรวจด้วยการปิด/เปิด Share HR ของเรือนจริงก่อนอนุญาตให้ส่งข้อมูล ห้ามเดาจากลำดับรหัส</p></div>
@@ -113,6 +128,14 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 <div class="reserved-slots" id="reservedSlotCards"></div>
 </section>
 </section>
+<details class="card advanced" id="sessionLogPanel"><summary>บันทึกความเสถียรของรอบทดสอบ (ส่งออกได้)</summary>
+<p class="muted">บันทึกเฉพาะเวลาและสถานะการเชื่อมต่อของแต่ละช่อง • ไม่บันทึกค่า BPM ชื่อ รหัสผู้สวม รหัสนาฬิกา หรือรหัสผ่าน • เก็บในเครื่องนี้เท่านั้น</p>
+<label for="sessionLabel">ประเภทรอบ<select id="sessionLabel"><option value="">เลือกประเภทก่อนเริ่ม</option><option value="SIMULATED">SIMULATED — ทดสอบจำลอง / ไม่ได้เฝ้านาฬิกาจริง</option><option value="HARDWARE_OBSERVED">HARDWARE_OBSERVED — มีผู้เฝ้าสังเกตนาฬิกาจริงตลอดรอบ</option></select></label>
+<label id="sessionObservedConfirmRow" hidden><input id="sessionObservedConfirm" type="checkbox" style="width:auto;min-height:0"> ข้าพเจ้าอยู่กับนาฬิกาจริงและจะเฝ้าสังเกตตลอดรอบนี้</label>
+<div class="session-actions"><button id="sessionStart" type="button" disabled>เริ่มบันทึก</button><button id="sessionStop" type="button" class="secondary" disabled>หยุดบันทึก</button><button id="sessionExportJson" type="button" class="secondary" disabled>ส่งออก JSON</button><button id="sessionExportCsv" type="button" class="secondary" disabled>ส่งออก CSV</button></div>
+<p id="sessionStatus" class="status" role="status">ยังไม่เริ่มบันทึก</p>
+<textarea id="sessionExportText" rows="8" readonly hidden aria-label="ข้อมูลส่งออก (คัดลอกได้)"></textarea>
+</details>
 <p id="gatewaySessionNote" class="muted">Gateway G01–G03 ใช้งานได้สูงสุด 10 ชั่วโมง, G04–G05 สูงสุด 2 ชั่วโมง • ข้อมูลเกิน 15 วินาทีเป็น NO DATA</p>
 <script>
 "use strict";
@@ -234,8 +257,200 @@ function paintGatewayOverview(){
  $("gatewayBadge").textContent=auth?.gateway||"ยังไม่เข้าสู่ระบบ";
  $("gatewayDevices").textContent=fresh.length+" เรือน";
  const acknowledged=fresh.filter(x=>x.ack==="Server acknowledged"&&x.ackAt===x.lastAt).length;
+ updateReadiness();
  $("gatewayUpload").textContent=!auth?"ยังไม่เชื่อมต่อ":
   acknowledged?"รับแล้ว "+acknowledged+" เรือน":fresh.length?"กำลังส่งข้อมูล":"รอ BPM จริง";
+}
+
+// ===== Technical readiness + anonymous session reliability logger =====
+// Readiness is CONNECTIVITY / DATA QUALITY only. It is never medical clearance
+// or "safe to train". The logger stores only timestamps, slot IDs (R01–R15),
+// the Gateway ID and connection categories: no BPM, wearer, device or token.
+const FRESH_MS=15000;
+// Categories, worst-to-best. NOT_OBSERVED is time the page could not observe
+// (hidden, suspended, tick gap); it is excluded from coverage and failures.
+const SLOT_CATEGORIES=["DISCONNECTED","BLE_NO_DATA","LIVE_NO_ACK","LIVE_ACK"];
+function slotCategory(s,now){
+ if(!s||s.closed||!s.ready||s.probe)return "DISCONNECTED";
+ // A server rejection clears the displayed BPM (ERROR) although BLE is still
+ // delivering; count that as a missing ACK, not as a BLE failure. Contact-lost
+ // packets (bpm null, RECOVERABLE) remain "no data".
+ const recent=Number.isSafeInteger(s.lastAt)&&now-s.lastAt<=FRESH_MS;
+ if(recent&&s.bpm===null&&s.lifecycle==="ERROR"&&s.error)return "LIVE_NO_ACK";
+ if(!recent||s.bpm===null)return "BLE_NO_DATA";
+ // An ACK counts only if it is for a measurement taken within FRESH_MS, the
+ // latest upload did not fail, and it is not newer than the latest BLE sample.
+ const acked=s.ack==="Server acknowledged"&&!s.error&&Number.isSafeInteger(s.ackAt)
+  &&s.ackAt<=s.lastAt&&now-s.ackAt<=FRESH_MS;
+ return acked?"LIVE_ACK":"LIVE_NO_ACK";
+}
+const SESSION_SCHEMA="steve.gateway.session-metrics.v1", SESSION_STORE="steve.gateway.session-log.v1";
+const MAX_TICK_MS=2500;
+const SESSION_DEFINITIONS={
+ LIVE_ACK:"BLE heart-rate notification within 15 s AND a server acknowledgement for a measurement within 15 s, with no newer upload failure",
+ LIVE_NO_ACK:"BLE notification within 15 s but no fresh server acknowledgement (server/network/ACK failure or pending)",
+ BLE_NO_DATA:"BLE link subscribed but no heart-rate notification within 15 s",
+ DISCONNECTED:"no subscribed BLE link (not paired, connecting, pairing check, dropped or stopped)",
+ NOT_OBSERVED:"page hidden/suspended or no observation tick for over 2.5 s; excluded from coverage and never counted as success or failure",
+ coveragePct:"LIVE_ACK seconds / observed seconds x 100; null when nothing was observed",
+ drop:"observed change from LIVE_ACK or LIVE_NO_ACK to BLE_NO_DATA or DISCONNECTED (1 s sampling: a sub-second reconnect may not appear as a drop)",
+ bleDisconnectEvents:"BLE disconnect events reported by the browser for this slot, counted even when reconnect was faster than the 1 s sampling",
+ recovery:"observed return to LIVE_ACK after a drop; duration from the drop observation"
+};
+const SESSION_BOUNDARIES=[
+ "Metrics come only from this browser page's own observations, once per second while the page is visible.",
+ "Time while Bluefy is backgrounded, the screen is locked or the page is reloading is NOT_OBSERVED, not a failure and not a success.",
+ "A recovery that spans NOT_OBSERVED time is flagged crossedGap.",
+ "Connectivity metrics only: no heart-rate values, wearer, device or credential data are recorded; not a medical or training-readiness assessment.",
+ "SIMULATED sessions are not hardware evidence. 60-minute real-hardware validation remains PENDING until a human field session labelled HARDWARE_OBSERVED is reviewed."
+];
+function newSlotMetrics(){return {observedMs:0,ms:{DISCONNECTED:0,BLE_NO_DATA:0,LIVE_NO_ACK:0,LIVE_ACK:0},last:null,
+ drops:0,dropAt:null,dropCrossedGap:false,recoveries:[],firstLiveAckMs:null,linkDrops:0,autoReconnects:0,manualConnects:0,ackFailures:0,ackConflicts:0};}
+function sessionCreate(label,gateway,slots,now){
+ if(label!=="SIMULATED"&&label!=="HARDWARE_OBSERVED")throw Error("Session label required");
+ const log={schema:SESSION_SCHEMA,label,gateway:gateway||null,startedAt:now,endedAt:null,lastTick:now,active:true,
+  observedMs:0,notObservedMs:0,gatewayAuthMs:0,gatewayNoAuthMs:0,gaps:0,slots:{}};
+ for(const slot of slots)if(/^R(0[1-9]|1[0-5])$/.test(slot))log.slots[slot]=newSlotMetrics();
+ return log;
+}
+function sessionTick(log,now,categories,{visible=true,authorized=true}={}){
+ if(!log?.active)return log;
+ const dt=Math.max(0,now-log.lastTick);log.lastTick=now;
+ const observed=visible?Math.min(dt,MAX_TICK_MS):0, unobserved=dt-observed;
+ if(unobserved>0){log.notObservedMs+=unobserved;log.gaps++;}
+ if(!observed)return log;
+ log.observedMs+=observed;
+ if(authorized)log.gatewayAuthMs+=observed;else log.gatewayNoAuthMs+=observed;
+ for(const [slot,m] of Object.entries(log.slots)){
+  const cat=SLOT_CATEGORIES.includes(categories[slot])?categories[slot]:"DISCONNECTED";
+  m.observedMs+=observed;m.ms[cat]+=observed;
+  const wasLive=m.last==="LIVE_ACK"||m.last==="LIVE_NO_ACK", isLive=cat==="LIVE_ACK"||cat==="LIVE_NO_ACK";
+  if(wasLive&&!isLive){m.drops++;m.dropAt=now;m.dropCrossedGap=unobserved>0;}
+  else if(m.dropAt!==null&&unobserved>0)m.dropCrossedGap=true;
+  if(cat==="LIVE_ACK"){
+   if(m.firstLiveAckMs===null)m.firstLiveAckMs=now-log.startedAt;
+   if(m.dropAt!==null){m.recoveries.push({ms:now-m.dropAt,crossedGap:m.dropCrossedGap});m.dropAt=null;m.dropCrossedGap=false;}
+  }
+  m.last=cat;
+ }
+ return log;
+}
+function sessionEvent(log,slot,kind){
+ const m=log?.active&&log.slots[slot];if(!m)return;
+ if(kind==="auto_reconnect")m.autoReconnects++;
+ else if(kind==="manual_connect")m.manualConnects++;
+ else if(kind==="ack_failure")m.ackFailures++;
+ else if(kind==="link_drop")m.linkDrops++;
+ else if(kind==="ack_conflict")m.ackConflicts++;
+}
+// The few hundred ms since the last tick are counted as NOT_OBSERVED, so
+// observed + notObserved always equals elapsed.
+function sessionStop(log,now){
+ if(log?.active){const tail=Math.max(0,now-log.lastTick);log.notObservedMs+=tail;log.lastTick=now;log.active=false;log.endedAt=now;}
+ return log;
+}
+const secs=ms=>Math.round(ms/100)/10;
+function sessionSummary(log){
+ const end=log.endedAt??log.lastTick;
+ return {schema:log.schema,label:log.label,hardwareSixtyMinuteValidation:"PENDING",gateway:log.gateway,
+  startedAt:new Date(log.startedAt).toISOString(),endedAt:log.endedAt?new Date(log.endedAt).toISOString():null,
+  running:log.active,elapsedSeconds:secs(end-log.startedAt),observedSeconds:secs(log.observedMs),notObservedSeconds:secs(log.notObservedMs),
+  observationGaps:log.gaps,gatewayAuthorizedSeconds:secs(log.gatewayAuthMs),gatewayUnauthorizedSeconds:secs(log.gatewayNoAuthMs),
+  definitions:SESSION_DEFINITIONS,observationBoundaries:SESSION_BOUNDARIES,
+  slots:Object.entries(log.slots).sort().map(([slot,m])=>{
+   const rec=m.recoveries.map(r=>r.ms).sort((a,b)=>a-b);
+   return {slot,observedSeconds:secs(m.observedMs),
+    seconds:Object.fromEntries(SLOT_CATEGORIES.map(c=>[c,secs(m.ms[c])])),
+    coveragePct:m.observedMs?Math.round(m.ms.LIVE_ACK/m.observedMs*1000)/10:null,
+    drops:m.drops,recoveries:rec.length,recoveryMedianSeconds:rec.length?secs(rec[Math.floor((rec.length-1)/2)]):null,
+    recoveryMaxSeconds:rec.length?secs(rec.at(-1)):null,recoveriesCrossingGap:m.recoveries.filter(r=>r.crossedGap).length,
+    unrecoveredAtEnd:m.dropAt!==null,bleDisconnectEvents:m.linkDrops||0,firstLiveAckSeconds:m.firstLiveAckMs===null?null:secs(m.firstLiveAckMs),
+    autoReconnectAttempts:m.autoReconnects,manualConnectAttempts:m.manualConnects,
+    serverAckFailures:m.ackFailures,slotOwnershipConflicts:m.ackConflicts};
+  })};
+}
+function sessionCsv(summary){
+ const cols=["slot","observedSeconds","LIVE_ACK","LIVE_NO_ACK","BLE_NO_DATA","DISCONNECTED","coveragePct","drops","recoveries",
+  "recoveryMedianSeconds","recoveryMaxSeconds","recoveriesCrossingGap","unrecoveredAtEnd","bleDisconnectEvents","firstLiveAckSeconds",
+  "autoReconnectAttempts","manualConnectAttempts","serverAckFailures","slotOwnershipConflicts"];
+ const v=x=>x===null||x===undefined?"":String(x);
+ const head=["# "+summary.schema,"# label="+summary.label,"# hardwareSixtyMinuteValidation="+summary.hardwareSixtyMinuteValidation,
+  "# gateway="+v(summary.gateway)+" startedAt="+summary.startedAt+" endedAt="+v(summary.endedAt),
+  "# elapsedSeconds="+summary.elapsedSeconds+" observedSeconds="+summary.observedSeconds+" notObservedSeconds="+summary.notObservedSeconds,
+  "# connectivity metrics only; NOT_OBSERVED excluded; not a medical assessment"];
+ return [...head,cols.join(","),...summary.slots.map(r=>cols.map(c=>v(c in r.seconds?r.seconds[c]:r[c])).join(","))].join("\n");
+}
+
+let sessionLog=null;
+function persistSession(){try{if(sessionLog)window.localStorage?.setItem(SESSION_STORE,JSON.stringify(sessionLog));}catch{}}
+function restoreSession(){
+ try{const v=JSON.parse(window.localStorage?.getItem(SESSION_STORE)||"null");
+  if(v?.schema===SESSION_SCHEMA&&v.slots&&typeof v.startedAt==="number")sessionLog=v;}catch{}
+}
+function observeSlots(now){return Object.fromEntries(Object.keys(sessionLog?.slots||{}).map(slot=>[slot,slotCategory(live.get(slot),now)]));}
+function sessionHeartbeat(){
+ if(!sessionLog?.active)return;
+ const now=Date.now();
+ for(const p of provision)if(!sessionLog.slots[p.id])sessionLog.slots[p.id]=newSlotMetrics();
+ sessionTick(sessionLog,now,observeSlots(now),{visible:!document.hidden,authorized:!!auth});
+ persistSession();paintSession();
+}
+function logEvent(slot,kind){sessionEvent(sessionLog,slot,kind);}
+function paintSession(){
+ const active=!!sessionLog?.active,label=$("sessionLabel").value;
+ $("sessionObservedConfirmRow").hidden=label!=="HARDWARE_OBSERVED";
+ $("sessionStart").disabled=active||!auth||!label||(label==="HARDWARE_OBSERVED"&&!$("sessionObservedConfirm").checked);
+ $("sessionStop").disabled=!active;
+ $("sessionExportJson").disabled=$("sessionExportCsv").disabled=!sessionLog;
+ $("sessionLabel").disabled=active;
+ if(!sessionLog){$("sessionStatus").textContent="ยังไม่เริ่มบันทึก";return;}
+ const sum=sessionSummary(sessionLog),cov=sum.slots.map(r=>r.slot+" "+(r.coveragePct===null?"—":r.coveragePct+"%")).join(" • ");
+ $("sessionStatus").textContent=(active?"กำลังบันทึก ":"หยุดแล้ว ")+sum.label+" • "+sum.gateway+" • สังเกตได้ "+Math.round(sum.observedSeconds)+" วิ / ไม่ได้สังเกต "
+  +Math.round(sum.notObservedSeconds)+" วิ • LIVE+ACK: "+cov;
+}
+// Readiness: rows are built once per slot set and only updated in place, so a
+// tap on a row button is never lost to a re-render.
+const readinessRows=new Map();let readinessKey="";
+const READY_TEXT={LIVE_ACK:"LIVE • Server ACK",LIVE_NO_ACK:"LIVE จากนาฬิกา • รอ/ไม่มี Server ACK",BLE_NO_DATA:"เชื่อมอยู่ แต่ไม่มีข้อมูลใหม่ (NO DATA)",DISCONNECTED:"ยังไม่เชื่อม / หลุด (NO DATA)",UNCONFIGURED:"ยังไม่ได้ตั้งค่าในเซิร์ฟเวอร์"};
+function readinessSlots(){
+ if(!auth)return [];
+ const ids=new Set([...(GATEWAY_PLAN[auth.gateway]||[]),...provision.map(p=>p.id)]);
+ return [...ids].sort();
+}
+function retrySlot(slot){
+ if(!provision.some(p=>p.id===slot))return;
+ const suffix=bandSuffix(slot);
+ if(suffix)return quickConnect(slot,suffix);
+ // Unknown suffix: same enrollment flow as the "เพิ่ม Rxx" button.
+ $("advancedPair").open=true;$("slot").value=slot;$("expected").value="";$("scanMode").value="supervised";
+ $("simpleStatus").textContent=slot+" • อ่านรหัส 4 ตัวท้ายจากนาฬิกาจริง กรอก แล้วกด เชื่อมต่อ Band 10";
+}
+function buildReadiness(){
+ const slots=readinessSlots(),key=(auth?.gateway||"")+":"+slots.join(",");
+ $("readiness").hidden=!slots.length;
+ if(key===readinessKey)return;
+ readinessKey=key;readinessRows.clear();$("readinessList").replaceChildren();
+ for(const slot of slots){
+  const row=element("li"),name=element("b","",slot),chip=element("span","chip"),btn=element("button","secondary","เชื่อมใหม่");
+  btn.type="button";btn.addEventListener("click",()=>retrySlot(slot));
+  row.append(name,chip,btn);$("readinessList").append(row);readinessRows.set(slot,{row,chip,btn});
+ }
+}
+function updateReadiness(){
+ if(!auth){$("readiness").hidden=true;return;}
+ buildReadiness();
+ const now=Date.now();let ready=0;const authorized=provision.length;
+ for(const [slot,r] of readinessRows){
+  const provisioned=provision.some(p=>p.id===slot),s=live.get(slot);
+  const state=provisioned?slotCategory(s,now):"UNCONFIGURED";
+  if(state==="LIVE_ACK")ready++;
+  if(r.row.dataset)r.row.dataset.state=state;
+  r.chip.textContent=READY_TEXT[state]+(s?.ackAt&&provisioned?" • ACK "+Math.round((now-s.ackAt)/1000)+" วิที่แล้ว":"");
+  r.btn.hidden=!provisioned||state==="LIVE_ACK"||state==="LIVE_NO_ACK";
+  r.btn.disabled=connecting||chooserPending||document.hidden||bulkConnecting;
+  r.btn.textContent=bandSuffix(slot)?"เชื่อมใหม่":"เพิ่ม "+slot;
+ }
+ $("readinessSummary").textContent="พร้อมส่งข้อมูล "+ready+"/"+authorized+(auth?" • "+auth.gateway:"");
 }
 function paintOptionalBands(){
  // Every slot the server authorizes for THIS Gateway gets a button (G01: R03–R05,
@@ -304,6 +519,7 @@ function controls(){
 }
  $("connect").disabled=!auth||!provision.length||connecting||chooserPending||document.hidden;
  $("load").disabled=loginPending||connecting||(live.size>0&&!heldGateway);
+ paintSession();
  for(const session of sessions.values())paint(session);
 }
 // Native bridge errors may be strings, objects, DOMExceptions, or null. Never render
@@ -508,6 +724,7 @@ async function connectBand(slot,expected,mode){
  if(!auth||!provision.some(p=>p.id===slot)||live.has(slot)){status("ช่องนี้เชื่อมต่ออยู่แล้ว หรือไม่ได้รับอนุญาต");return;}
  if(!/^[A-F0-9]{4}$/.test(expected)){status("กรอกรหัสท้ายชื่อ Band 4 ตัวที่ตรวจจากเรือนจริงก่อนเลือกอุปกรณ์");return;}
  connecting=true;controls();
+ logEvent(slot,automatic?"auto_reconnect":"manual_connect");
  const s={slot,expected,mode,generation,lifecycle:"IDLE",assignment:provision.find(p=>p.id===slot).device_id,closed:false,ownsDevice:false,bpm:null,lastAt:null,ackAt:null,ack:"ยังไม่ส่ง",notifications:"ยังไม่สมัคร",error:"",busy:false,sentAt:0,sequence:0,...addTile(slot,expected,mode)};
  live.set(slot,s);sessions.set(slot,s);attemptOwner=s;
  try{
@@ -556,6 +773,7 @@ async function connectBand(slot,expected,mode){
   }
   s.ownsDevice=true;pairedDevices.add(s.device.id);
   s.onDisconnect=()=>{
+   if(s.ready&&!s.closed)logEvent(slot,"link_drop");
    stopped(s,"BLE DISCONNECTED / NO DATA");
    const b=bindings.get(slot);
    // A link that drops soon after connecting (flapping / edge of range) backs off;
@@ -612,6 +830,7 @@ async function connectBand(slot,expected,mode){
     // A newer BLE notification cannot erase an HTTPS failure. Only successful
     // acknowledgements belong to one measurement and must pass the freshness guard.
     if(result.ok&&(s.sequence!==sequence||Date.now()-now>15000))return;
+    if(!result.ok)logEvent(slot,result.conflict?"ack_conflict":"ack_failure");
     if(result.conflict){
      s.error=result.detail;s.ownsDevice=false;pairedDevices.delete(s.device.id);
      s.device.removeEventListener("gattserverdisconnected",s.onDisconnect);
@@ -787,6 +1006,28 @@ async function connectAllRemembered(){
  }
 }
 $("connectAll").addEventListener("click",connectAllRemembered);
+$("sessionLabel").addEventListener("change",paintSession);
+$("sessionObservedConfirm").addEventListener("change",paintSession);
+$("sessionStart").addEventListener("click",()=>{
+ const label=$("sessionLabel").value;
+ if(!auth||sessionLog?.active||!label||(label==="HARDWARE_OBSERVED"&&!$("sessionObservedConfirm").checked))return;
+ sessionLog=sessionCreate(label,auth.gateway,provision.map(p=>p.id),Date.now());
+ $("sessionExportText").hidden=true;$("sessionExportText").value="";persistSession();paintSession();
+});
+$("sessionStop").addEventListener("click",()=>{sessionStop(sessionLog,Date.now());persistSession();paintSession();});
+function exportSession(format){
+ if(!sessionLog)return;
+ const summary=sessionSummary(sessionLog),text=format==="csv"?sessionCsv(summary):JSON.stringify(summary,null,2);
+ $("sessionExportText").value=text;$("sessionExportText").hidden=false;
+ try{
+  const blob=new Blob([text],{type:format==="csv"?"text/csv":"application/json"}),a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);a.download="steve-session-"+summary.gateway+"-"+summary.label+"."+format;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+ }catch{} // Bluefy may block downloads: the text box above can be copied instead.
+}
+$("sessionExportJson").addEventListener("click",()=>exportSession("json"));
+$("sessionExportCsv").addEventListener("click",()=>exportSession("csv"));
+restoreSession();
 $("resetBle").addEventListener("click",()=>{
  suspend();
  // Keep auth and bindings in this page; a native chooser cannot be cancelled by JS.
@@ -949,6 +1190,7 @@ setInterval(()=>{
   }
  }
  if(newlyStale)controls();else paintGatewayOverview();
+ sessionHeartbeat();
  scheduleDueRecovery();
 },1000);
 if(!navigator.bluetooth)status("เบราว์เซอร์นี้ไม่มี Web Bluetooth — เปิดลิงก์นี้ใน Bluefy");
