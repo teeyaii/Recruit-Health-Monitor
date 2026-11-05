@@ -574,3 +574,36 @@ test('R03 stale quick button keeps assigned suffix and retries only its verified
  assert.equal(h.api.live.get('R03').ready,true);
  assert.equal(h.api.live.get('R03').expected,'1121');
 });
+
+
+test('R04 UUID-only quick pairing is quarantined with Thai guidance until physical off/on confirmation',async()=>{
+ const h=harness([{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'},{id:'R03',device_id:'opaque-three'},{id:'R04',device_id:'opaque-four'}]);await h.login();
+ const d=device('scan-four','CD42');d.name='F204BBBD-F29B-755D-5727-B8D5D88FF111';
+ h.select(d);
+ const button=h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม R04 · CD42');
+ assert.ok(button);
+ await button.click();
+ assert.equal(h.calls.at(-1).acceptAllDevices,true);
+ const s=h.api.live.get('R04');assert.equal(s.mode,'supervised');
+ assert.equal(s.probe.phase,'baseline');assert.match(h.get('pairGuideText').textContent,/ไม่ส่ง/);
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,0);
+ d.emit();assert.equal(s.probe.phase,'off');
+ assert.match(h.get('pairGuideText').textContent,/ขั้น 1\/3/);
+ s.verify.click();assert.equal(s.probe.phase,'quiet');assert.match(h.get('pairGuideText').textContent,/15 วินาที/);
+ h.tick(16000);s.verify.click();assert.equal(s.probe.phase,'resume');
+ d.emit();assert.equal(s.probe.phase,'confirm');
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,0,'unverified UUID must not produce a server ingest');
+ s.verify.click();assert.equal(s.probe,null);
+ d.emit();await drain();
+ assert.equal(h.api.bindings.get('R04').verified,true);
+ assert.equal(h.fetches.filter(x=>x.url==='/api/ingest').length,1);
+});
+test('R01 named quick button still connects immediately without supervised steps',async()=>{
+ const h=harness();await h.login();const d=device('named-one','47FD');h.select(d);
+ await h.get('quickR01').click();
+ assert.equal(h.api.live.get('R01').mode,'supervised');
+ assert.equal(h.api.live.get('R01').probe,undefined);
+ d.emit();await drain();
+ assert.equal(h.api.bindings.get('R01').verified,true);
+ assert.equal(h.get('quickR01').textContent,'เชื่อม R01 · 47FD');
+});
