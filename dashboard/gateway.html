@@ -691,7 +691,7 @@ $("clear").addEventListener("click",async()=>{
 function finishChooser(existing){
  const interrupted=existing.filter(s=>Date.now()-(s.lastAt??s.readyAt)>15000);
  chooserPending=false;
- if(document.hidden){suspend();return;}
+ if(document.hidden){controls();return;}
  controls();
  // Allow resumed notifications to arrive before recovering interrupted streams.
  const epoch=generation;
@@ -741,7 +741,7 @@ document.addEventListener("visibilitychange",()=>{
  if(document.hidden){if(chooserPending){controls();return;}suspend();}
  else{controls();if(!chooserPending)Promise.resolve().then(recoverKnown);}
 });
-window.addEventListener("pagehide",()=>suspend());
+window.addEventListener("pagehide",()=>{if(chooserPending)return;suspend();});
 setInterval(()=>{
  if(auth && Date.now()>=auth.expiresAt)expireSession();
  let newlyStale=false;
