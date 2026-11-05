@@ -98,6 +98,10 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 "use strict";
 const $=id=>document.getElementById(id);
 const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
+// Owner-confirmed physical Band 10 name suffixes for optional G01 watches.
+// These are human-visible device hints, not Gateway tokens or server slot IDs.
+// Keep name matching mandatory: the native chooser does not attest physical ownership.
+const OPTIONAL_BAND_SUFFIXES=Object.freeze({R03:"1121",R04:"CD42"});
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
 let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null;
 let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
@@ -148,9 +152,14 @@ function paintOptionalBands(){
  const permitted=provision.filter(p=>["R03","R04","R05"].includes(p.id));
  const extras=$("extraBandControls");extras.replaceChildren();
  for(const item of permitted){
-  const slot=item.id,button=element("button","secondary",sessions.has(slot)?slot+" • ดูสถานะ":"เพิ่ม "+slot);
+  const slot=item.id,knownSuffix=OPTIONAL_BAND_SUFFIXES[slot];
+  const button=element("button","secondary",knownSuffix?"เชื่อม "+slot+" · "+knownSuffix:
+   sessions.has(slot)?slot+" • ดูสถานะ":"เพิ่ม "+slot);
   button.type="button";button.disabled=connecting||chooserPending||document.hidden||!auth||live.has(slot);
   button.addEventListener("click",()=>{
+   // Use the same user-gesture BLE chooser as R01/R02, not a saved Bluetooth
+   // handle or automatic background connection. Wrong physical bands are rejected.
+   if(knownSuffix){connectBand(slot,knownSuffix,"standard");return;}
    $("advancedPair").open=true;$("slot").value=slot;
    $("expected").value=bindings.get(slot)?.expected||"";
    $("scanMode").value="standard";
@@ -160,7 +169,7 @@ function paintOptionalBands(){
   extras.append(button);
  }
  $("extraBandHelp").textContent=!auth?"เข้าใช้งาน G01 ก่อนเพิ่มเรือนที่ 3–5":
-  permitted.length?"เพิ่มทีละเรือน: เลือก R03/R04 → ใส่รหัสท้าย Band จริง → เชื่อมต่อ Band 10 (แต่ละเรือนต้อง Share HR)":
+  permitted.length?"R03/R04 กดเชื่อมได้เลย • ตรวจชื่อ Band ที่เลือกให้ตรงรหัส • R05 ตั้งค่ารหัสในเมนูเพิ่มเติม (ทุกเรือนต้อง Share HR)":
   "R03–R05 ยังไม่ได้รับสิทธิ์จากเซิร์ฟเวอร์ • ตรวจ STEVE_SLOT_MAP_JSON ของ G01 ใน Render ก่อน";
  const cards=$("reservedSlotCards");cards.replaceChildren();
  const pending=["R03","R04","R05"].filter(slot=>!sessions.has(slot));
