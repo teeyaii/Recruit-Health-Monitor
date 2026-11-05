@@ -55,3 +55,16 @@ No change to real profiles, roster, historical measurements or clinical alerting
 รอให้แต่ละช่องแสดง BPM สดและ Server ACK จนครบสี่ช่อง หยุดเฉพาะ R03 ตรวจว่าอีกสามช่องยังส่งข้อมูลต่อ จากนั้นเชื่อม R03 และรอ ACK ใหม่ ทดสอบยกเลิก chooser, ขาดเครือข่าย, กลับจากพื้นหลังและโหลดหน้าใหม่แยกกัน หลังโหลดใหม่ให้แตะเลือกชื่อเรือนอีกครั้ง เมื่อขาดข้อมูลต้องเห็น NO DATA
 
 ทดลองต่อเนื่อง 10 นาที แล้ว 60 นาที บันทึกเวอร์ชัน iOS/Bluefy จำนวนช่องที่ได้ ACK และระยะขาดข้อมูลแยกรายช่อง หยุดทดสอบเมื่อมีการผูกผิดช่องหรือแสดงข้อมูลเก่าเป็น LIVE ห้ามบันทึกรหัสอุปกรณ์หรือข้อมูลผู้สวมใส่ในรายงาน
+
+
+## UUID-only Bluefy native picker — guided safe flow (5 November 2026)
+
+When Bluefy lists UUID-shaped entries rather than the physical suffix, the web page **cannot change the native chooser's labels or expose the full list to JavaScript**. The R01–R04 quick buttons now automatically select supervised Broad enrollment for new devices, so the operator does not have to find Scan D in advanced settings.
+
+1. **Before tapping the quick button**, isolate the physical target band, reduce competing nearby BLE advertisements, and keep other bands out of range when practical. Merely turning off Share HR on other bands may not remove them from Bluefy's chooser. Never identify a watch by UUID order or by an unrelated heartbeat.
+2. Tap R01=47FD, R02=A746, R03=1121, or R04=CD42. If a specific advertised device name visibly matches the suffix, it is checked as before. If the selected JavaScript name is empty, `Xiaomi`, or UUID-shaped, STEVE enters a **quarantined physical off/on check**. The selected watch is not yet authorized for ingestion.
+3. To complete quarantine, observe a fresh local HR notification, **turn off Share HR on that exact physical band**, tap the on-screen check button, and wait at least 15 seconds without notifications. Tap to continue, **turn Share HR on for the same band**, wait for a fresh notification, and explicitly confirm the physical identity. Only subsequent readings may upload; require fresh `Server acknowledged`.
+4. If the operator cannot confidently isolate which physical watch matches the selected entry, **cancel/stop the session; do not confirm**. Off/on signal correspondence is a useful operational check, not cryptographic proof of hardware identity.
+5. For a verified same-page band, the quick reconnect first reuses the saved in-memory handle, preventing unnecessary rescans. Reload/new phone requires independent identity verification and native user-gesture pairing. Foreground, unlocked iPhone remains required in ordinary use.
+
+Test wrong-device choices, cancelled chooser, GATT disconnect during quarantine, other active bands' independent live streams, and 10-minute/60-minute uninterrupted field operation before any production merge. Do not use this as a validated medical safety alarm.
