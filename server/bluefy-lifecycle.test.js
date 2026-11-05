@@ -521,3 +521,19 @@ test('top R01 uses Broad scan and cancelled picker keeps fresh R02 connected',as
  h.hide();assert.equal(b.gatt.connected,true);foreground(h);reject({name:'NotFoundError'});await p;
  h.tick(3001);await drain();assert.equal(b.gatt.connected,true);assert.equal(h.api.live.get('R02').device,b);
 });
+
+test('silent verified stream recovers automatically twice, preserves peers, and rearms after fresh ACK',async()=>{
+ const h=harness();await h.login();const a=device(),b=device('two','CD34');
+ await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();
+ const peer=h.api.live.get('R02');
+ for(let i=0;i<2;i++){
+  b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
+  assert.equal(h.api.live.get('R02'),peer);assert.equal(h.api.live.get('R01').ready,true);
+ }
+ const silent=h.api.live.get('R01');
+ b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
+ assert.equal(h.api.live.get('R01'),silent);assert.equal(silent.bpm,null);
+ a.emit();await drain();assert.equal(h.api.bindings.get('R01').staleRetries,0);
+ b.emit();await drain();h.tick(14000);b.emit();await drain();h.tick(7001);await drain();
+ assert.notEqual(h.api.live.get('R01'),silent);assert.equal(h.calls.length,2);
+});

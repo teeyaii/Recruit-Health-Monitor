@@ -463,7 +463,7 @@ async function connectBand(slot,expected,mode){
     }
     s.ack=result.detail;
     if(result.ok){
-     if(bpm!==null)bindings.get(slot).verified=true;
+     if(bpm!==null){bindings.get(slot).verified=true;bindings.get(slot).staleRetries=0;}
      s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";
      if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenAcks++;
     }
@@ -495,7 +495,7 @@ async function connectBand(slot,expected,mode){
    status(slot+" • JavaScript เห็น "+(/^xiaomi$/i.test(s.device.name?.trim())?"Xiaomi":"ชื่อว่างหรือรหัสยาว")+" • แยกเรือน "+expected+" ตรวจรหัสบนเรือนจริง หากแยกไม่ได้ให้กดตัดการเชื่อมต่อ");
    return;
   }
-  bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,autoEnabled:true});
+  bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,staleRetries:bound?.staleRetries||0,autoEnabled:true});
   s.readyAt=Date.now();s.ready=true;$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
@@ -645,6 +645,18 @@ setInterval(()=>{
  for(const s of live.values()){
   if(s.ready && Date.now()-(s.lastAt??s.readyAt)>15000){s.bpm=null;transition(s,"STALE");s.state="STALE / NO DATA";s.ack="ข้อมูลเก่า / NO DATA";}
   paint(s);
+  const binding=bindings.get(s.slot);
+  // Only repair missing BLE notifications. Fresh BLE with an HTTP failure must
+  // keep its subscription and retry uploads on subsequent samples.
+  if(!document.hidden&&!chooserPending&&!connecting&&!recoveryRunning&&s.ready&&!s.probe&&
+     Date.now()-(s.lastAt??s.readyAt)>20000&&binding?.verified&&binding.autoEnabled&&
+     (binding.staleRetries||0)<2){
+   binding.staleRetries=(binding.staleRetries||0)+1;
+   stopped(s,"สัญญาณค้าง • กำลังเชื่อมกลับ / NO DATA");
+   recoveryRequested=true;
+   Promise.resolve().then(recoverKnown);
+   break;
+  }
  }
  paintGatewayOverview();
 },1000);
