@@ -46,11 +46,16 @@ const clients=new Map();
 const sessions=new Map();
 const gatewaySessions=new GatewaySessions();
 // This server holds sessions and live readings in the same process. A browser
-// keeps its slot across brief BLE outages until logout, renewal or expiry.
+// keeps its slot across brief BLE outages (lease refreshed by every accepted
+// packet, including DISCONNECTED). If the owning phone goes silent for longer
+// than the lease (battery, crash, Bluefy killed) a replacement phone of the
+// same Gateway may take over without waiting up to 10 hours for expiry.
+const MIN_SLOT_LEASE_MS=process.env.NODE_ENV==="test"?500:15000;
+const SLOT_LEASE_MS=Number(process.env.STEVE_SLOT_LEASE_MS)>=MIN_SLOT_LEASE_MS?Number(process.env.STEVE_SLOT_LEASE_MS):120000;
 const slotOwners=new Map();
 function releaseBrowserSlots(session){
  if(!session)return;
- for(const [slot,owner] of slotOwners)if(owner===session)slotOwners.delete(slot);
+ for(const [slot,owner] of slotOwners)if(owner.session===session)slotOwners.delete(slot);
 }
 const failedLogins=new Map();
 const roster=new RosterStore(durable.enabled?"":process.env.STEVE_ROSTER_FILE||"");
@@ -501,11 +506,11 @@ const server=http.createServer(async(req,res)=>{
    if(prior && prior.gateway!==body.gateway && now-prior.timestamp<=TTL_MS)continue;
    const disconnected=item.state==="DISCONNECTED";
    const owner=slotOwners.get(item.id);
-   if(owner&&owner.expiry>now&&owner!==browserGateway){
+   if(owner&&owner.session.expiry>now&&now-owner.lastAt<=SLOT_LEASE_MS&&owner.session!==browserGateway){
     if(body.readings.length===1){send(res,409,{error:"slot owned by another Gateway session"});return;}
     continue;
    }
-   if(browserGateway&&!disconnected)slotOwners.set(item.id,browserGateway);
+   if(browserGateway&&(!disconnected||owner?.session===browserGateway))slotOwners.set(item.id,{session:browserGateway,lastAt:now});
    recruits.set(item.id,{device_id:item.device_id,hr:disconnected?null:item.hr,timestamp:disconnected?(prior?.timestamp??null):item.timestamp,
     eventAt:item.timestamp,state:disconnected?"DISCONNECTED":"CONNECTED",gateway:body.gateway,source:SYNTHETIC?"SIMULATED":"GATEWAY"});
    // Only enrolled recruits with genuine accepted HR measurements create history.
