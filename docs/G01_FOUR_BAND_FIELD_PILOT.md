@@ -68,3 +68,16 @@ When Bluefy lists UUID-shaped entries rather than the physical suffix, the web p
 5. For a verified same-page band, the quick reconnect first reuses the saved in-memory handle, preventing unnecessary rescans. Reload/new phone requires independent identity verification and native user-gesture pairing. Foreground, unlocked iPhone remains required in ordinary use.
 
 Test wrong-device choices, cancelled chooser, GATT disconnect during quarantine, other active bands' independent live streams, and 10-minute/60-minute uninterrupted field operation before any production merge. Do not use this as a validated medical safety alarm.
+
+
+## One-tap connect all remembered watches (5 November 2026)
+
+The Gateway now shows **เชื่อมทุกเรือนที่จำไว้ (N/M)**. For G01, owner-confirmed physical suffixes are R01=47FD, R02=A746, R03=1121, R04=CD42. R05 has no assumed suffix; it must be entered and physically verified on first enrollment, and the server must provision R05.
+
+**First enrollment:** Tap each R-slot once, select the correct device in Bluefy, and finish the named-suffix check or supervised physical Share HR off/on verification when the native chooser shows only UUIDs. Wait for new BPM and Server acknowledged. Only verified browser handle IDs, suffix and matching server-side anonymous slot alias are recorded in origin-local browser storage. No Gateway secrets, HR samples or patient identifiers are saved. Records persist after Gateway logout but are not synced to another phone.
+
+**Subsequent uses:** While the Bluefy page stays open, press **เชื่อมทุกเรือนที่จำไว้** to reconnect verified watches using in-memory handles. After page reload, the Gateway restores slot aliases and uses navigator.bluetooth.getDevices() to retrieve previously permitted exact handles. If the browser supports it and permissions persist, the button connects all available verified watches *sequentially*, then they stream concurrently. Missing watches are reported by R-slot and others remain connected. Require fresh BPM + server ACK for LIVE.
+
+**Platform limitation:** Some Bluefy releases / iOS permission situations do not support getDevices() or may revoke permissions. The page cannot silently grant Bluetooth access or infer which UUID belongs to which watch. If a handle is missing or changed, report that the one R-slot requires manual pairing; never choose another by row order. The user may need to update Bluefy to a release supporting getDevices. Only the same HTTPS origin and phone can reuse permissions.
+
+**Acceptance:** Validate (a) 4-watch reconnect from one button in a single page, (b) reload with granted devices where getDevices exists, (c) R05 only if provisioned and physically verified, (d) 10/60-min continuous HR + ACK, (e) no false LIVE or cross-slot identity, (f) single-slot dropout leaves healthy peers live. Keep Bluefy foreground and iPhone awake.
