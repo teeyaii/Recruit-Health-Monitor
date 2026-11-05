@@ -32,6 +32,14 @@ test("Bluefy pilot uses native Web BLE notifications and strictly same-origin Ga
  assert.match(match[1],/localStorage\?\.setItem\(REMEMBERED_KEY,JSON\.stringify\(saved\)\)/);
  assert.doesNotMatch(match[1],/localStorage\?\.setItem\([^\n]*(?:token|bpm|auth|credential)/i);
 });
+test("Gateway shows unsupported-browser warning and compact watch recovery controls",()=>{
+ assert.match(html,/id="browserNotice"/);
+ assert.match(html,/navigator\.bluetooth\?\.requestDevice/);
+ assert.match(html,/class","band-actions"/);
+ assert.match(html,/#slots \.card>\.band-actions/);
+ assert.match(html,/s\.stop\.hidden=s\.closed/);
+ assert.match(html,/s\.broadRetry\.textContent="สแกน B"/);
+});
 test("Gateway removes unsupported lock-screen and dimming experiment completely",()=>{
  for(const removed of ["screenExperiment","lockTrial","dimScreen","lockTrialStatus","setScreenDimEnabled","LOCK TEST","hiddenNotifications"]){
   assert.doesNotMatch(html,new RegExp(removed,"i"),"unavailable experimental controls and code must not remain: "+removed);
