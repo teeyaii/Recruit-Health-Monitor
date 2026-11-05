@@ -291,7 +291,7 @@ const SESSION_DEFINITIONS={
  LIVE_NO_ACK:"BLE notification within 15 s but no fresh server acknowledgement (server/network/ACK failure or pending)",
  BLE_NO_DATA:"BLE link subscribed but no heart-rate notification within 15 s",
  DISCONNECTED:"no subscribed BLE link (not paired, connecting, pairing check, dropped or stopped)",
- NOT_OBSERVED:"page hidden/suspended or no observation tick for over 2.5 s; excluded from coverage and never counted as success or failure",
+ NOT_OBSERVED:"page hidden/suspended, or any interval longer than 2.5 s between two observations (e.g. reload); the whole interval is excluded from coverage and never counted as success or failure",
  coveragePct:"LIVE_ACK seconds / observed seconds x 100; null when nothing was observed",
  drop:"observed change from LIVE_ACK or LIVE_NO_ACK to BLE_NO_DATA or DISCONNECTED (1 s sampling: a sub-second reconnect may not appear as a drop)",
  bleDisconnectEvents:"BLE disconnect events reported by the browser for this slot, counted even when reconnect was faster than the 1 s sampling",
@@ -313,20 +313,31 @@ function sessionCreate(label,gateway,slots,now){
  for(const slot of slots)if(/^R(0[1-9]|1[0-5])$/.test(slot))log.slots[slot]=newSlotMetrics();
  return log;
 }
+// Time is credited to a category only for a CONTINUOUS visible interval
+// (<= MAX_TICK_MS between two observations). Any longer interval, or any hidden
+// interval, is wholly NOT_OBSERVED: no partial credit to either side.
 function sessionTick(log,now,categories,{visible=true,authorized=true}={}){
  if(!log?.active)return log;
  const dt=Math.max(0,now-log.lastTick);log.lastTick=now;
- const observed=visible?Math.min(dt,MAX_TICK_MS):0, unobserved=dt-observed;
- if(unobserved>0){log.notObservedMs+=unobserved;log.gaps++;}
- if(!observed)return log;
+ const continuous=visible&&dt<=MAX_TICK_MS;
+ if(!continuous&&dt>0){
+  log.notObservedMs+=dt;
+  if(!log.inGap){log.gaps++;log.inGap=true;}
+  // An outstanding drop now spans unobserved time, whatever happens next.
+  for(const m of Object.values(log.slots))if(m.dropAt!==null)m.dropCrossedGap=true;
+ }
+ if(!visible)return log;
+ const gapBefore=!continuous;
+ log.inGap=false;
+ const observed=continuous?dt:0;
  log.observedMs+=observed;
  if(authorized)log.gatewayAuthMs+=observed;else log.gatewayNoAuthMs+=observed;
  for(const [slot,m] of Object.entries(log.slots)){
   const cat=SLOT_CATEGORIES.includes(categories[slot])?categories[slot]:"DISCONNECTED";
   m.observedMs+=observed;m.ms[cat]+=observed;
   const wasLive=m.last==="LIVE_ACK"||m.last==="LIVE_NO_ACK", isLive=cat==="LIVE_ACK"||cat==="LIVE_NO_ACK";
-  if(wasLive&&!isLive){m.drops++;m.dropAt=now;m.dropCrossedGap=unobserved>0;}
-  else if(m.dropAt!==null&&unobserved>0)m.dropCrossedGap=true;
+  // A drop first seen after a gap happened at an unknown time inside it.
+  if(wasLive&&!isLive){m.drops++;m.dropAt=now;m.dropCrossedGap=gapBefore;}
   if(cat==="LIVE_ACK"){
    if(m.firstLiveAckMs===null)m.firstLiveAckMs=now-log.startedAt;
    if(m.dropAt!==null){m.recoveries.push({ms:now-m.dropAt,crossedGap:m.dropCrossedGap});m.dropAt=null;m.dropCrossedGap=false;}
@@ -377,7 +388,9 @@ function sessionCsv(summary){
  const head=["# "+summary.schema,"# label="+summary.label,"# hardwareSixtyMinuteValidation="+summary.hardwareSixtyMinuteValidation,
   "# gateway="+v(summary.gateway)+" startedAt="+summary.startedAt+" endedAt="+v(summary.endedAt),
   "# elapsedSeconds="+summary.elapsedSeconds+" observedSeconds="+summary.observedSeconds+" notObservedSeconds="+summary.notObservedSeconds,
-  "# connectivity metrics only; NOT_OBSERVED excluded; not a medical assessment"];
+  "# connectivity metrics only; NOT_OBSERVED excluded; not a medical assessment",
+  ...Object.entries(summary.definitions).map(([k,d])=>"# definition "+k+": "+d),
+  ...summary.observationBoundaries.map(b=>"# boundary: "+b)];
  return [...head,cols.join(","),...summary.slots.map(r=>cols.map(c=>v(c in r.seconds?r.seconds[c]:r[c])).join(","))].join("\n");
 }
 

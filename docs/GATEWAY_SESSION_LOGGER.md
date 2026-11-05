@@ -28,7 +28,7 @@ The logger lives in the folded panel **บันทึกความเสถ�
   - HARDWARE_OBSERVED also requires ticking a box confirming that a person is with the real watches for the whole session.
   - The label is locked while recording.
 - **Sampling:** once per second, while the page is visible, each slot is classified as `LIVE_ACK`, `LIVE_NO_ACK`, `BLE_NO_DATA` or `DISCONNECTED`.
-- **NOT_OBSERVED time** (page hidden, suspended, reloading, or more than 2.5 s between ticks) is excluded and counted separately. It is never treated as success or failure.
+- **NOT_OBSERVED time** (page hidden, suspended, reloading, or more than 2.5 s between two observations) is excluded and counted separately. The **whole** interval is excluded, with no partial credit, and it is never treated as success or failure. A drop or recovery that spans such an interval is flagged `crossedGap`.
 - **Per slot, the logger records:**
   - seconds in each state and `coveragePct` (`null` if the slot was never observed);
   - observed drops, recoveries with median and max duration, and recoveries spanning a gap (`crossedGap`);
@@ -38,7 +38,7 @@ The logger lives in the folded panel **บันทึกความเสถ�
 - **Per session:** label, Gateway ID, start/end time, elapsed / observed / not-observed seconds, gaps, and authorized vs unauthorized Gateway seconds.
 - **Export:**
   - JSON or CSV, through a download, plus a read-only text box to copy from, because Bluefy may block downloads.
-  - Every export carries `hardwareSixtyMinuteValidation: "PENDING"`, the definitions and the observation boundaries.
+  - Every export, JSON and CSV (as `# definition` / `# boundary` lines), carries `hardwareSixtyMinuteValidation: "PENDING"`, the definitions and the observation boundaries.
 - **Persistence:**
   - The running log is kept in this browser's localStorage (`steve.gateway.session-log.v1`) so a reload does not lose it.
   - The reload gap is recorded as NOT_OBSERVED.

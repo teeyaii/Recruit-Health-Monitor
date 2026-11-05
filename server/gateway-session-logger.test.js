@@ -104,7 +104,7 @@ test('session requires an explicit label; gaps and hidden time are NOT_OBSERVED,
  api.sessionStop(log,t+=400);
  const sum=api.sessionSummary(log);
  assert.equal(sum.elapsedSeconds,sum.observedSeconds+sum.notObservedSeconds);
- assert.equal(sum.observedSeconds,12.5);assert.equal(sum.notObservedSeconds,32.9); // 27.5 gap + 5 hidden + 0.4 stop tail
+ assert.equal(sum.observedSeconds,10);assert.equal(sum.notObservedSeconds,35.4); // whole 30 s gap + 5 hidden + 0.4 stop tail
  assert.equal(row(sum,'R01').coveragePct,100,'unobserved time does not dilute coverage');
  assert.equal(row(sum,'R01').drops,0,'a gap is not a drop');
  assert.equal(row(sum,'R02').coveragePct,0);
@@ -146,6 +146,8 @@ test('export JSON/CSV: label, PENDING hardware validation, definitions; no BPM, 
  const csv=h.get('sessionExportText').value;
  assert.match(csv,/^# steve\.gateway\.session-metrics\.v1\n# label=SIMULATED\n# hardwareSixtyMinuteValidation=PENDING/);
  assert.match(csv,/\nslot,observedSeconds,LIVE_ACK,LIVE_NO_ACK,BLE_NO_DATA,DISCONNECTED,coveragePct/);
+ for(const key of ['LIVE_ACK','NOT_OBSERVED','coveragePct','drop','recovery','bleDisconnectEvents'])assert.match(csv,new RegExp('\n# definition '+key+': '),'CSV carries definition '+key);
+ assert.match(csv,/\n# boundary: .*NOT_OBSERVED/);
  assert.equal(csv.split('\n').filter(l=>/^R0[1-5],/.test(l)).length,5);
  for(const re of forbidden)assert.doesNotMatch(csv,re);
  const stored=h.storage.get('steve.gateway.session-log.v1');
@@ -272,4 +274,41 @@ test('a drop that lasts several seconds is an observed drop with a measured reco
  assert.equal(r.drops,1);assert.equal(r.recoveries,1);assert.ok(r.recoveryMaxSeconds>=8,'recovery '+r.recoveryMaxSeconds);
  assert.ok(r.seconds.DISCONNECTED>=8);assert.ok(r.autoReconnectAttempts>=2);assert.equal(r.bleDisconnectEvents,1);
  assert.equal(row(h.api.sessionSummary(h.api.log()),'R01').drops,0);
+});
+
+// Review #72 (Codex, Issue #71) regressions — exact reproductions.
+test('review P2: a 60 s observation gap earns no credit; coverage stays unknown until continuous observation',()=>{
+ const {api}=harness(G01);
+ const log=api.sessionCreate('SIMULATED','G01',['R01'],100000);
+ api.sessionTick(log,160000,{R01:'LIVE_ACK'});
+ let sum=api.sessionSummary(log);
+ assert.equal(sum.observedSeconds,0);assert.equal(sum.notObservedSeconds,60);
+ assert.equal(row(sum,'R01').coveragePct,null,'no partial 2.5 s credit inside the gap');
+ api.sessionTick(log,161000,{R01:'LIVE_ACK'});
+ sum=api.sessionSummary(log);
+ assert.equal(sum.observedSeconds,1);assert.equal(row(sum,'R01').coveragePct,100);
+ assert.equal(sum.observationGaps,1);
+});
+test('review P2: a hidden-only gap between drop and recovery is flagged crossedGap',()=>{
+ const {api}=harness(G01);
+ const log=api.sessionCreate('SIMULATED','G01',['R01'],100000);
+ api.sessionTick(log,101000,{R01:'LIVE_ACK'});
+ api.sessionTick(log,102000,{R01:'DISCONNECTED'});
+ api.sessionTick(log,112000,{R01:'DISCONNECTED'},{visible:false});
+ api.sessionTick(log,113000,{R01:'LIVE_ACK'});
+ const r=row(api.sessionSummary(log),'R01');
+ assert.equal(r.recoveries,1);assert.equal(r.recoveryMaxSeconds,11);
+ assert.equal(r.recoveriesCrossingGap,1,'10 s hidden interval inside the drop');
+ const s=api.sessionSummary(log);
+ assert.equal(s.observedSeconds,3);assert.equal(s.notObservedSeconds,10);
+});
+test('a drop first seen after a gap is counted but flagged as crossing the gap',()=>{
+ const {api}=harness(G01);
+ const log=api.sessionCreate('SIMULATED','G01',['R01'],0);
+ api.sessionTick(log,1000,{R01:'LIVE_ACK'});
+ api.sessionTick(log,20000,{R01:'DISCONNECTED'});   // reload gap, then seen down
+ api.sessionTick(log,21000,{R01:'LIVE_ACK'});
+ const r=row(api.sessionSummary(log),'R01');
+ assert.equal(r.drops,1);assert.equal(r.recoveriesCrossingGap,1);
+ assert.equal(r.seconds.DISCONNECTED,0,'the gap itself is not credited as DISCONNECTED');
 });
