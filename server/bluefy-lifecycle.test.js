@@ -362,7 +362,7 @@ test('four LIVE watches: stale R03 can be reconnected alone without disturbing o
  }
  assert.equal(h.api.live.size,4);
  for(const [slot,,bpm] of bands)devices.get(slot).emit([6,bpm]);
- await drain();
+ await drain();h.tick(1); // Overview is refreshed by the one-second UI interval.
  assert.equal(h.get('gatewayDevices').textContent,'4 เรือน');
  const oldR03=h.api.live.get('R03');
  h.tick(16001);await drain(); // All initial measurements expire, none may be mislabeled LIVE.
@@ -371,7 +371,7 @@ test('four LIVE watches: stale R03 can be reconnected alone without disturbing o
  assert.equal(oldR03.retry.disabled,false,'stale watch must offer single-slot recovery');
  assert.match(oldR03.indicator.textContent,/NO DATA/);
  for(const [slot,,bpm] of bands.filter(x=>x[0]!=='R03'))devices.get(slot).emit([6,bpm]);
- await drain();
+ await drain();h.tick(1);
  assert.equal(h.get('gatewayDevices').textContent,'3 เรือน');
  const before=h.calls.length;
  await oldR03.retry.click();await drain();
@@ -384,7 +384,7 @@ test('four LIVE watches: stale R03 can be reconnected alone without disturbing o
   assert.equal(h.api.live.get(slot).ready,true,'R03 restart must not stop '+slot);
   assert.equal(h.api.live.get(slot).device.gatt.connected,true);
  }
- devices.get('R03').emit([6,79]);await drain();
+ devices.get('R03').emit([6,79]);await drain();h.tick(1);
  assert.equal(h.api.live.get('R03').bpm,79);
  assert.equal(h.get('gatewayDevices').textContent,'4 เรือน');
  assert.equal(h.get('gatewayUpload').textContent,'รับแล้ว 4 เรือน');
@@ -419,6 +419,7 @@ test('gateway distinguishes received BLE pulse from acknowledged latest pulse',a
  a.emit([6,65]);await drain();
  const s=h.api.live.get('R01');
  assert.match(s.indicator.textContent,/รอ Server ACK/);
+ h.tick(1); // Overview updates periodically rather than on each BLE notification.
  assert.equal(h.get('gatewayUpload').textContent,'กำลังส่งข้อมูล');
  respond({ok:true,json:async()=>({accepted:1})});await drain();
  assert.match(s.indicator.textContent,/Server acknowledged/);
