@@ -110,6 +110,44 @@ const HR_SERVICE="heart_rate", HR_MEASUREMENT="heart_rate_measurement";
 // These are human-visible device hints, not Gateway tokens or server slot IDs.
 // Keep name matching mandatory: the native chooser does not attest physical ownership.
 const OPTIONAL_BAND_SUFFIXES=Object.freeze({R03:"1121",R04:"CD42"});
+const FIXED_BAND_SUFFIXES=Object.freeze({R01:"47FD",R02:"A746",...OPTIONAL_BAND_SUFFIXES});
+// Save only origin-scoped, previously verified Web Bluetooth handles on this
+// device. Never store Gateway tokens, medical readings or browser IDs on server.
+const REMEMBERED_KEY="steve.gateway.verified-devices.v1";
+function rememberedRead(){
+ try{
+  const parsed=JSON.parse(window.localStorage?.getItem(REMEMBERED_KEY)||"{}");
+  return parsed&&typeof parsed==="object"&&!Array.isArray(parsed)?parsed:{};
+ }catch{return {};}
+}
+function rememberVerified(slot,binding){
+ if(!auth||!binding?.verified||!binding.id)return;
+ const pair=provision.find(p=>p.id===slot);
+ const expected=auth.gateway==="G01"?(FIXED_BAND_SUFFIXES[slot]||binding.expected):binding.expected;
+ if(!pair||!/^[A-F0-9]{4}$/.test(expected)||typeof binding.id!=="string"||binding.id.length>256)return;
+ try{
+  const saved=rememberedRead(),key=auth.gateway+":"+slot;
+  // A browser handle must never be reused by a different R-slot.
+  if(Object.entries(saved).some(([other,v])=>other!==key&&v?.id===binding.id))return;
+  saved[key]={id:binding.id,expected,assignment:pair.device_id};
+  window.localStorage?.setItem(REMEMBERED_KEY,JSON.stringify(saved));
+ }catch{} // Private browsing or unsupported local storage: same-page use still works.
+}
+function restoreRemembered(){
+ const saved=rememberedRead();
+ for(const pair of provision){
+  const slot=pair.id,entry=saved[auth.gateway+":"+slot];
+  const expected=auth.gateway==="G01"?(FIXED_BAND_SUFFIXES[slot]||entry?.expected):entry?.expected;
+  if(!entry||typeof entry.id!=="string"||!entry.id||entry.id.length>256
+   ||entry.assignment!==pair.device_id||!/^[A-F0-9]{4}$/.test(expected)
+   ||entry.expected!==expected
+   ||Object.entries(saved).some(([other,v])=>other!==auth.gateway+":"+slot&&v?.id===entry.id))continue;
+  bindings.set(slot,{id:entry.id,expected,device:null,verified:true,autoEnabled:true,remembered:true,staleRetries:0});
+ }
+}
+function bandSuffix(slot){
+ return auth?.gateway==="G01"?(FIXED_BAND_SUFFIXES[slot]||bindings.get(slot)?.expected):bindings.get(slot)?.expected;
+}
 function guidePair(slot,expected,message){
  $("pairGuideTitle").textContent=slot+" · "+expected+" — ตรวจเรือนจริง";
  $("pairGuideText").textContent=message;
