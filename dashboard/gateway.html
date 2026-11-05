@@ -174,12 +174,18 @@ function quickConnect(slot,expected){
  const verified=bindings.get(slot)?.verified===true;
  guidePair(slot,expected,verified?"ลองเชื่อมกลับอุปกรณ์ที่ยืนยันแล้วในหน้านี้ก่อน":"เตรียม Share HR ของเรือน "+expected+" และแยกจากเรือนอื่น หาก Bluefy แสดง UUID หลายตัว ห้ามเดา ขั้นตอนต่อไปจะตรวจด้วยการปิด/เปิด Share HR และไม่ส่ง BPM จนยืนยัน");
  // Generic/UUID names enter quarantined supervised pairing; named suffixes continue normally.
- return connectBand(slot,expected,verified?"auto":"supervised");
+ // A verified watch whose remembered handle is healthy reconnects without the
+ // chooser. If automatic reconnect has been failing (e.g. after leaving range,
+ // Bluefy's old handle may no longer connect), this tap opens the Broad chooser
+ // so the operator re-selects the same watch; identity is still checked.
+ const b=bindings.get(slot);
+ const handleSuspect=verified&&(!b?.device||(b.failures||0)>0||!!b.lastError||!Number.isFinite(b.nextRetryAt??0));
+ return connectBand(slot,expected,!verified?"supervised":handleSuspect?"broad":"auto");
 }
 const live=new Map(), pairedDevices=new Set(), bindings=new Map(), tiles=new Map(), sessions=new Map();
 let chooserPending=false, recoveryRunning=false, recoveryRequested=false, loginPending=false, pendingSession=null, bulkConnecting=false;
 let auth=null, provision=[], connecting=false, generation=0, attemptOwner=null;
-const stages={capability:"1/9 ตรวจ Web Bluetooth",chooser:"2/9 เปิดหน้าต่างเลือกอุปกรณ์",selected:"3/9 ตรวจอุปกรณ์และช่อง",gatt:"4/9 เชื่อม GATT",service:"5/9 ค้นหา Heart Rate Service 180D",characteristic:"6/9 ค้นหา Characteristic 2A37",subscribe:"7/9 สมัครรับ Notifications",receiving:"8/9 รับข้อมูลหัวใจ",upload:"9/9 ส่ง HTTPS และรอ Server"};
+const stages={advert:"4/9 รอสัญญาณจากนาฬิกา (อยู่ในระยะ?)",capability:"1/9 ตรวจ Web Bluetooth",chooser:"2/9 เปิดหน้าต่างเลือกอุปกรณ์",selected:"3/9 ตรวจอุปกรณ์และช่อง",gatt:"4/9 เชื่อม GATT",service:"5/9 ค้นหา Heart Rate Service 180D",characteristic:"6/9 ค้นหา Characteristic 2A37",subscribe:"7/9 สมัครรับ Notifications",receiving:"8/9 รับข้อมูลหัวใจ",upload:"9/9 ส่ง HTTPS และรอ Server"};
 function status(message){$("bleStatus").textContent=message;}
 function serverStatus(message){$("serverStatus").textContent=message;}
 function clearSlotCards(){
@@ -346,7 +352,11 @@ function paint(s){
   s.error?"ส่งข้อมูลไม่สำเร็จ":
   confirmed?"LIVE • Server acknowledged":
   fresh?"LIVE จาก Band • รอ Server ACK":"NO DATA • รอสัญญาณใหม่";
- s.diagnostics.textContent=s.lifecycle+" • "+s.state;
+ const rb=bindings.get(s.slot);
+ s.diagnostics.textContent=s.lifecycle+" • "+s.state+(rb?" • ลองเชื่อมเองล้ม "+(rb.failures||0)+" ครั้ง"
+  +(Number.isFinite(rb.nextRetryAt)&&rb.nextRetryAt>Date.now()?" • ครั้งถัดไป "+Math.ceil((rb.nextRetryAt-Date.now())/1000)+" วิ":"")
+  +(rb.advert?" • สัญญาณโฆษณา: "+({seen:"เห็น",none:"ไม่เห็น",unsupported:"ไม่รองรับ"})[rb.advert]:"")
+  +(rb.lastError?" • ล่าสุด: "+rb.lastError:""):"");
  s.measure.textContent=fresh?String(s.bpm)+" BPM":"NO DATA";
  s.age.textContent=s.lastAt?"วัดล่าสุด "+new Date(s.lastAt).toLocaleTimeString("th-TH")+" • "+Math.round((Date.now()-s.lastAt)/1000)+" วินาที":"ยังไม่มีข้อมูล";
  s.notify.textContent="Notifications: "+s.notifications;
@@ -424,6 +434,27 @@ function bounded(s,promise,ms=GATT_STEP_MS){
   const timer=setTimeout(()=>finish(reject,{name:"TimeoutError"}),ms);
   s.cancelWait=()=>finish(reject,{name:"AbortError"});
   Promise.resolve(promise).then(value=>finish(resolve,value),error=>finish(reject,error));
+ });
+}
+// Web Bluetooth guidance for handles from getDevices(): wait for the device to
+// advertise (proves it is in range and refreshes the OS peripheral) before
+// connect(). Best effort only: unsupported or silent -> connect anyway, so the
+// previously working reload path is never made worse.
+const ADVERT_WAIT_MS=6000;
+function waitForAdvertisement(s,ms){
+ return new Promise(resolve=>{
+  const device=s.device,ctrl=typeof AbortController==="function"?new AbortController():null;
+  let done=false;
+  const finish=result=>{if(done)return;done=true;clearTimeout(timer);
+   try{device.removeEventListener("advertisementreceived",onAdvert)}catch{}
+   try{ctrl?.abort()}catch{}
+   try{if(!ctrl&&typeof device.unwatchAdvertisements==="function")device.unwatchAdvertisements()}catch{}
+   resolve(result);};
+  const onAdvert=()=>finish("seen");
+  const timer=setTimeout(()=>finish("none"),ms);
+  try{device.addEventListener("advertisementreceived",onAdvert);
+   Promise.resolve(device.watchAdvertisements(ctrl?{signal:ctrl.signal}:undefined)).catch(()=>finish("unsupported"));
+  }catch{finish("unsupported");}
  });
 }
 function validAttempt(s){
@@ -507,6 +538,12 @@ async function connectBand(slot,expected,mode){
    if(!document.hidden && s.ready){recoveryRequested=true;Promise.resolve().then(recoverKnown);}
   };
   s.device.addEventListener("gattserverdisconnected",s.onDisconnect);
+  if(automatic&&!s.device.gatt?.connected&&typeof s.device.watchAdvertisements==="function"){
+   step(s,"advert");
+   const seen=await waitForAdvertisement(s,ADVERT_WAIT_MS);
+   validAttempt(s);
+   const b=bindings.get(slot);if(b)b.advert=seen;
+  }
   step(s,"gatt");
   const connection=s.device.gatt.connect();
   Promise.resolve(connection).then(()=>{
@@ -594,7 +631,7 @@ async function connectBand(slot,expected,mode){
    status(slot+" • JavaScript เห็น "+(/^xiaomi$/i.test(s.device.name?.trim())?"Xiaomi":"ชื่อว่างหรือรหัสยาว")+" • แยกเรือน "+expected+" ตรวจรหัสบนเรือนจริง หากแยกไม่ได้ให้กดตัดการเชื่อมต่อ");
    return;
   }
-  bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,staleRetries:bound?.staleRetries||0,autoLog:bound?.autoLog||[],failures:bound?.failures||0,nextRetryAt:bound?.nextRetryAt||0,autoEnabled:true});
+  bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,staleRetries:bound?.staleRetries||0,autoLog:bound?.autoLog||[],failures:bound?.failures||0,nextRetryAt:bound?.nextRetryAt||0,advert:bound?.advert,lastError:bound?.lastError||"",autoEnabled:true});
   s.readyAt=Date.now();s.ready=true;guidePair(slot,expected,"ชื่อ Band ตรงกับรหัสแล้ว • รอ BPM ใหม่และ Server acknowledged ก่อนเชื่อมเรือนถัดไป");$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
@@ -712,7 +749,7 @@ async function connectAllRemembered(){
   const pending=[...missing,...failed];
   $("connectAllStatus").textContent="เชื่อม BLE แล้ว "+connected+"/"+targets.length+" เรือน • รอ BPM และ Server ACK"
    +(missing.length?" • ต้องจับคู่ครั้งแรก: "+missing.join(", "):"")
-   +(failed.length?" • กดเชื่อมรายเรือน: "+failed.join(", "):"")
+   +(failed.length?" • เรือนที่เชื่อมด้วยการจำไม่ได้: "+failed.join(", ")+" → กด 'สแกน B' ที่การ์ดของเรือนนั้น":"")
    +(failed.length&&typeof navigator.bluetooth?.getDevices!=="function"?" • Bluefy นี้ไม่รองรับเรียกอุปกรณ์ที่เคยอนุญาตหลังโหลดหน้าใหม่":"");
   if(pending.length)guidePair(pending[0],bandSuffix(pending[0])||"----","เชื่อมได้เฉพาะเรือนที่ยืนยันแล้ว และ Bluefy ยังให้สิทธิ์เข้าถึง • ถ้าสิทธิ์หาย ต้องแตะเลือกเรือนจริงใหม่ ห้ามเดา UUID");
  }finally{
@@ -815,11 +852,12 @@ async function recoverKnown(){
     // error would hide the real cause. Back off and retry later instead.
     if(attempt===0&&binding.device&&/TimeoutError|NetworkError/.test(sessions.get(slot)?.error||""))break;
    }
-   if(live.get(slot)?.ready){binding.failures=0;binding.nextRetryAt=0;}
+   if(live.get(slot)?.ready){binding.failures=0;binding.nextRetryAt=0;binding.lastError="";}
    else if(epoch===generation&&!document.hidden){
     // Usually out of range: keep retrying in the foreground with backoff so the
     // watch reconnects by itself when the wearer walks back.
     const session=sessions.get(slot);
+    binding.lastError=(session?.error||"").slice(0,120);
     // Lost Bluetooth permission/handle cannot be fixed by waiting: stop and ask.
     if(/NotAllowedError|SecurityError|ไม่พบอุปกรณ์ที่เคยจับคู่|ไม่รองรับอุปกรณ์ที่เคยอนุญาต/.test(session?.error||"")){
      binding.nextRetryAt=Infinity;
@@ -869,8 +907,12 @@ setInterval(()=>{
   // briefly; a forced disconnect is far more disruptive on iOS than a resubscribe.
   if(repairable&&silentFor>SOFT_REPAIR_MS&&!s.softRepaired){s.softRepaired=true;resubscribe(s);continue;}
   // Tier 2: bounded full reconnect of this slot only.
-  if(repairable&&silentFor>HARD_REPAIR_MS&&(binding.staleRetries||0)<2){
+  // After two quick repairs the slot is handed to the backoff scheduler instead
+  // of staying parked as a STALE "live" session that no retry ever reaches
+  // (seen when Bluefy reports no disconnect for a watch carried out of range).
+  if(repairable&&silentFor>HARD_REPAIR_MS&&(binding.nextRetryAt||0)<=Date.now()){
    binding.staleRetries=(binding.staleRetries||0)+1;
+   if(binding.staleRetries>2){noteRetryFailure(binding);binding.lastError="สัญญาณเงียบนาน • อาจอยู่นอกระยะ";}
    stopped(s,"สัญญาณค้าง • กำลังเชื่อมกลับ / NO DATA");
    recoveryRequested=true;
    Promise.resolve().then(recoverKnown);
@@ -881,4 +923,6 @@ setInterval(()=>{
  scheduleDueRecovery();
 },1000);
 if(!navigator.bluetooth)status("เบราว์เซอร์นี้ไม่มี Web Bluetooth — เปิดลิงก์นี้ใน Bluefy");
+else status("ความสามารถเบราว์เซอร์: getDevices "+(typeof navigator.bluetooth.getDevices==="function"?"✓":"✗")
+ +" • watchAdvertisements "+(typeof globalThis.BluetoothDevice?.prototype?.watchAdvertisements==="function"?"✓":"?"));
 </script></body></html>

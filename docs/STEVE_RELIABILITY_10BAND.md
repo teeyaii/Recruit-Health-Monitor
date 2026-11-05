@@ -26,6 +26,16 @@ Cause: recovery made one attempt at disconnect time (while still out of range) a
 
 Fix: a foreground scheduler retries verified, operator-enabled watches with backoff of 5/10/20/40/60 s, capped at one attempt per minute. It never opens the chooser and never touches unverified devices. Lost permission (NotAllowed or handle not granted) still stops and asks the operator. After login or reload, remembered watches reconnect automatically.
 
+## Owner hardware result, second test (after #66 deploy)
+
+Render restart followed by re-login reconnected the watches by themselves. A watch carried out of range still did not return by itself. After that, reload followed by "connect remembered" also failed, and only a per-watch Broad scan B re-selection worked.
+
+Likely causes, addressed in the next PR:
+- If Bluefy does not report a disconnect, the silent-stream repair stopped after two attempts. The slot then stayed parked as a STALE "live" session, which the retry scheduler never reached. Repairs now continue, paced by backoff.
+- After leaving range, the remembered handle may not reconnect until the device is rediscovered. The recommended Web Bluetooth flow (`watchAdvertisements`, then `connect`) is now tried first. It is best effort and falls back to connecting directly. Support in Bluefy is **unverified**.
+- A tap on a verified watch whose automatic reconnect is failing now opens the Broad chooser directly (identity still checked), so the operator no longer has to dig into the advanced panel.
+- The card's "รายละเอียด" now shows the failure count, next retry, advertisement result and last error, and the BLE status line shows getDevices/watchAdvertisements support. Use these as field evidence.
+
 ## Automated evidence (simulated, not hardware)
 
 - `server/bluefy-lifecycle.test.js`: four independent sessions, failed-watch isolation, chooser interruption, scan-mode consistency (A/B/D), no listener accumulation over 5 reconnects, bounded flapping budget, 401 → re-login resume, G02 R06–R10 provisioning.
