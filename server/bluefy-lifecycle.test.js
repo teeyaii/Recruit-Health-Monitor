@@ -669,3 +669,35 @@ test('bulk connect falls back safely when getDevices is unsupported; same-page m
  assert.equal(fresh.api.live.size,0,'no chooser or false connection when getDevices unsupported after reload');
  assert.match(fresh.get('connectAllStatus').textContent,/ไม่รองรับ/);
 });
+
+
+test('authorized R05 learns its user-provided suffix and participates in reconnect-all after reload',async()=>{
+ const slots=['R01','R02','R03','R04','R05'].map((id,i)=>({id,device_id:'opaque-'+(i+1)}));
+ const storage=new Map(),h=harness(slots,storage);await h.login();
+ const e=device('real-five','BEEF');h.select(e);
+ h.get('slot').value='R05';h.get('expected').value='BEEF';h.get('scanMode').value='supervised';
+ await h.get('connect').click();e.emit();await drain();
+ assert.equal(h.api.bindings.get('R05')?.verified,true);
+ assert.match(h.get('extraBandControls').children.find(x=>x.textContent.includes('R05')).textContent,/BEEF/);
+ e.gatt.disconnect();
+ const second=harness(slots,storage);await second.login();
+ second.context.navigator.bluetooth.getDevices=async()=>[e];
+ await second.get('connectAll').click();await drain();
+ assert.equal(second.calls.length,0);
+ assert.equal(second.api.live.get('R05')?.ready,true);
+ assert.equal(second.api.live.get('R05')?.expected,'BEEF');
+ assert.match(second.get('connectAllStatus').textContent,/1\/5/);
+});
+test('changing the authorized R-slot assignment invalidates saved pairing and blocks one-tap reconnect',async()=>{
+ const storage=new Map(),initial=harness([{id:'R01',device_id:'old-opaque'}],storage);
+ await initial.login();const d=device('id-one','47FD');
+ initial.select(d);await initial.get('quickR01').click();d.emit();await drain();
+ d.gatt.disconnect();
+ const changed=harness([{id:'R01',device_id:'new-opaque'}],storage);await changed.login();
+ changed.context.navigator.bluetooth.getDevices=async()=>[d];
+ assert.equal(changed.api.bindings.size,0);
+ await changed.get('connectAll').click();await drain();
+ assert.equal(changed.api.live.size,0);
+ assert.equal(changed.calls.length,0);
+ assert.match(changed.get('connectAllStatus').textContent,/จับคู่/);
+});
