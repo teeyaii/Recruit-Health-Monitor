@@ -459,6 +459,7 @@ async function connectBand(slot,expected,mode){
      probe.phase=probe.phase==="baseline"?"off":"confirm";
      s.verify.textContent=probe.phase==="off"?"ปิด Share HR บนเรือน "+expected+" แล้วแตะ":"ยืนยันว่าได้ตรวจเรือน "+expected+" เพียงเรือนเดียวและสลับ Share HR ด้วยตนเอง";
      s.verify.hidden=false;
+     guidePair(slot,expected,probe.phase==="off"?"ขั้น 1/3: ปิด Share HR บนเรือน "+expected+" จริง แล้วกดปุ่มเริ่มตรวจช่วงหยุดสัญญาณในการ์ด (ยังไม่ส่งข้อมูล)":"ขั้น 3/3: ได้รับชีพจรกลับมา ตรวจว่าเปิด Share HR ของเรือน "+expected+" จริง จึงกดยืนยันในการ์ด");
     }
     return;
    }
@@ -503,13 +504,17 @@ async function connectBand(slot,expected,mode){
     const probe=s.probe;
     if(probe.phase==="off"){
      probe.phase="quiet";probe.last=Date.now();
-     s.verify.textContent="หลังสัญญาณหยุด 15 วินาที แตะก่อนเปิด Share HR";
+     s.verify.textContent="สัญญาณหยุดครบ 15 วินาที? แตะเพื่อเปิด Share HR อีกครั้ง";
+     guidePair(slot,expected,"ขั้น 2/3: คง Share HR เรือน "+expected+" เป็นปิด รออย่างน้อย 15 วินาทีโดยไม่มีการแจ้งชีพจรจากอุปกรณ์ที่เลือก แล้วกดปุ่มในการ์ด");
     }else if(probe.phase==="quiet"){
-     if(Date.now()-probe.last<15000){status("ยังยืนยันช่วงหยุดไม่ได้ • หากมีหลายเรือนให้ยกเลิก");return;}
+     if(Date.now()-probe.last<15000){status("ยังยืนยันช่วงหยุดไม่ได้ • หากมีหลายเรือนให้ยกเลิก");guidePair(slot,expected,"ยังไม่หยุดครบ 15 วินาที ถ้าสัญญาณมาจากเรือนอื่น ให้ยกเลิก แยกอุปกรณ์ใหม่ ห้ามยืนยันจาก UUID อย่างเดียว");return;}
      probe.phase="resume";s.verify.hidden=true;status("เปิด Share HR บนเรือนเดิม แล้วรอสัญญาณกลับ");
+     guidePair(slot,expected,"ขั้น 3/3: เปิด Share HR เฉพาะเรือน "+expected+" อีกครั้ง รอ BPM ใหม่ แล้วกดยืนยันเรือนจริง");
     }else if(probe.phase==="confirm"&&Date.now()-probe.last<=15000){
      s.probe=null;s.verify.hidden=true;s.readyAt=Date.now();
      bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:true,autoEnabled:true});
+     guidePair(slot,expected,"ยืนยันเรือนจริงแล้ว รอ BPM ใหม่พร้อม Server acknowledged ก่อนถือว่าเชื่อมสำเร็จ การผูกนี้ใช้ได้เฉพาะหน้า Gateway ที่เปิดอยู่");
+     $("simpleStatus").textContent=slot+" ผ่านการตรวจเรือนจริง • รอ BPM ใหม่";
      status("ยืนยันแล้ว • รอ BPM ใหม่");
     }
    });
@@ -517,13 +522,13 @@ async function connectBand(slot,expected,mode){
    return;
   }
   bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,staleRetries:bound?.staleRetries||0,autoEnabled:true});
-  s.readyAt=Date.now();s.ready=true;$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
+  s.readyAt=Date.now();s.ready=true;guidePair(slot,expected,"ชื่อ Band ตรงกับรหัสแล้ว • รอ BPM ใหม่และ Server acknowledged ก่อนเชื่อมเรือนถัดไป");$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
   s.error=(stages[s.stage]||stages.capability)+" • "+(s.error||safeError(e));
   await stopped(s,"เชื่อมต่อไม่สำเร็จ / NO DATA");
   if(sessions.get(slot)!==s)return;
-  $("simpleStatus").textContent=slot+" • "+(s.hint||"ตรวจ Share HR แล้วลองอีกครั้ง หากไม่พบให้กดสแกน B และเลือกเฉพาะชื่อที่ตรงรหัสท้าย");paint(s);status(slot+" • "+s.error+" • กดลองใหม่ หรือเลือกโหมดสแกน BLE ทั้งหมด");
+  $("simpleStatus").textContent=slot+" • "+(s.hint||"ตรวจ Share HR แล้วลองอีกครั้ง หาก UUID หลายตัวให้แยกเรือนก่อนสแกน");guidePair(slot,expected,"ยังไม่ยืนยัน ไม่ส่งข้อมูลจากอุปกรณ์นี้ • แยกเรือนที่ต้องการ ไม่เดา UUID แล้วกดเชื่อม "+slot+" อีกครั้ง");paint(s);status(slot+" • "+s.error+" • กดลองใหม่ หรือเลือกโหมดสแกน BLE ทั้งหมด");
  }finally{if(attemptOwner===s){attemptOwner=null;connecting=false;controls();if(recoveryRequested&&!recoveryRunning&&!document.hidden)Promise.resolve().then(recoverKnown);}}
 }
 
