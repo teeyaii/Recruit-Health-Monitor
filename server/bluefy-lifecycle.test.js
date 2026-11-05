@@ -78,7 +78,7 @@ test('two sessions upload independently; duplicate and wrong slot cannot steal c
 });
 test('disconnect clears BPM and stale data never remains LIVE',async()=>{
  const h=harness();await h.login();const d=device();await h.connect(d);const s=h.api.live.get('R01');d.emit();await flush();h.tick(15001);
- assert.equal(s.bpm,null);assert.match(s.state,/STALE.*NO DATA/);d.gatt.disconnect();await flush();assert.equal(h.calls.length,1);assert.match(s.state,/DISCONNECTED/);assert.equal(s.measure.textContent,'NO DATA');assert.equal(h.api.live.get('R01').bpm,null);
+ assert.equal(s.bpm,null);assert.match(s.state,/STALE.*NO DATA/);d.gatt.disconnect();await flush();assert.equal(h.calls.length,1);assert.match(s.state,/DISCONNECTED/);assert.equal(s.measure.textContent,'NO DATA');assert.equal(h.api.live.get('R01')?.bpm??null,null);
 });
 test('background stops both connections and prevents further uploads',async()=>{
  const h=harness();await h.login();const a=device(),b=device('two','CD34');await h.connect(a);await h.connect(b,'R02','CD34');h.hide();await flush();
@@ -792,6 +792,8 @@ test('repeated reconnect cycles never accumulate BLE listeners',async()=>{
  const h=harness();await h.login();const d=countingDevice('band-one','47FD');
  h.select(d);await h.get('quickR01').click();d.emit();await drain();
  for(let i=0;i<5;i++){
+  // Healthy link for over a minute, then a drop: immediate reconnect.
+  for(let t=0;t<62000;t+=4000){h.tick(4000);d.emit();await drain();}
   d.gatt.connected=false;d.listeners.gattserverdisconnected?.();await drain();
   assert.equal(h.api.live.get('R01')?.ready,true,'cycle '+i+' reconnected');
   d.emit();await drain();
@@ -800,23 +802,55 @@ test('repeated reconnect cycles never accumulate BLE listeners',async()=>{
  }
  assert.equal(h.calls.length,1,'no chooser during reconnect');
 });
-test('flapping watch hits a bounded per-slot reconnect budget; peers unaffected; manual tap rearms',async()=>{
+test('flapping watch backs off (5,10,20,40,60 s); peers unaffected; manual tap rearms',async()=>{
  const h=harness();await h.login();
  const a=device('band-one','47FD'),b=device('band-two','A746');
  h.select(a);await h.get('quickR01').click();h.select(b);await h.get('quickR02').click();a.emit();b.emit();await drain();
  const peer=h.api.live.get('R02');
+ // Drops right after every connect, for 5 simulated minutes.
  let reconnects=0;
- for(let i=0;i<12;i++){
-  if(!h.api.live.get('R01')?.ready)break;
-  reconnects++;a.gatt.connected=false;a.listeners.gattserverdisconnected?.();await drain();
+ for(let t=0;t<300000;t+=1000){
+  if(h.api.live.get('R01')?.ready){reconnects++;a.gatt.connected=false;a.listeners.gattserverdisconnected?.();}
+  h.tick(1000);b.emit();await drain();
  }
- assert.ok(reconnects>=6&&reconnects<=8,'reconnect loop is bounded, got '+reconnects);
- assert.equal(h.api.live.has('R01'),false,'budget exhausted: waits for operator');
- assert.equal(h.api.live.get('R02'),peer);assert.equal(b.gatt.connected,true);
- b.emit([6,77]);await drain();assert.equal(peer.bpm,77);
+ assert.ok(reconnects>=4&&reconnects<=10,'backoff bounds a flapping link to a few attempts in 5 min, got '+reconnects);
+ assert.equal(h.api.live.get('R02'),peer);assert.equal(b.gatt.connected,true);assert.equal(peer.bpm,66);
  h.select(()=>{throw Error('verified watch should reconnect without chooser');});
  await h.get('quickR01').click();await drain();
- assert.equal(h.api.live.get('R01')?.ready,true,'manual tap resets the budget');
+ assert.equal(h.api.live.get('R01')?.ready,true,'manual tap resets backoff');
+ assert.equal(h.calls.length,2);
+});
+test('watch carried out of range for 3 minutes reconnects by itself when it returns, without chooser',async()=>{
+ const h=harness();await h.login();
+ const a=device('band-one','47FD'),b=device('band-two','A746');
+ h.select(a);await h.get('quickR01').click();h.select(b);await h.get('quickR02').click();
+ for(let t=0;t<70000;t+=5000){h.tick(5000);a.emit();b.emit();await drain();}
+ // Out of range: link drops and every connect attempt times out.
+ const realConnect=a.gatt.connect;a.gatt.connect=()=>new Promise(()=>{});
+ a.gatt.connected=false;a.listeners.gattserverdisconnected?.();await drain();
+ for(let t=0;t<180000;t+=1000){h.tick(1000);b.emit();await drain();}
+ assert.equal(h.api.live.has('R01'),false,'still NO DATA while away');
+ assert.ok(Number.isFinite(h.api.bindings.get('R01').nextRetryAt),'out of range keeps retrying, never parked as manual');
+ // Wearer walks back.
+ a.gatt.connect=realConnect;
+ for(let t=0;t<65000&&!h.api.live.get('R01')?.ready;t+=1000){h.tick(1000);b.emit();await drain();}
+ assert.equal(h.api.live.get('R01')?.ready,true,'reconnected automatically');
+ a.emit([6,81]);await drain();assert.equal(h.api.live.get('R01').bpm,81);
+ assert.equal(h.calls.length,2,'no native chooser');
+ assert.equal(b.gatt.connected,true);
+});
+test('after page reload and login, remembered verified watches reconnect automatically (no button, no chooser)',async()=>{
+ const storage=new Map(),slots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}];
+ const first=harness(slots,storage);await first.login();
+ const a=device('band-one','47FD'),b=device('band-two','A746');
+ first.select(a);await first.get('quickR01').click();first.select(b);await first.get('quickR02').click();a.emit();b.emit();await drain();
+ const page=harness(slots,storage);
+ page.context.navigator.bluetooth.getDevices=async()=>[a,b];
+ await page.login();
+ for(let t=0;t<5000;t+=1000){page.tick(1000);await drain();}
+ assert.equal(page.api.live.get('R01')?.ready,true);assert.equal(page.api.live.get('R02')?.ready,true);
+ assert.equal(page.calls.length,0,'no native chooser');
+ a.emit([6,70]);await drain();assert.equal(page.api.live.get('R01').bpm,70);
 });
 test('G02 lists R06–R10 from provisioning without inventing suffixes and hides G01 fixed buttons',async()=>{
  const slots=['R06','R07','R08','R09','R10'].map((id,i)=>({id,device_id:'opaque-g02-'+i}));

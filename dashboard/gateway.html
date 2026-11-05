@@ -154,7 +154,7 @@ function restoreRemembered(){
    ||entry.assignment!==pair.device_id||!/^[A-F0-9]{4}$/.test(expected)
    ||entry.expected!==expected
    ||Object.entries(saved).some(([other,v])=>other!==auth.gateway+":"+slot&&v?.id===entry.id))continue;
-  bindings.set(slot,{id:entry.id,expected,device:null,verified:true,autoEnabled:true,remembered:true,staleRetries:0});
+  bindings.set(slot,{id:entry.id,expected,device:null,verified:true,autoEnabled:true,remembered:true,staleRetries:0,failures:0,nextRetryAt:Date.now()+AUTO_START_DELAY_MS});
  }
 }
 function bandSuffix(slot){
@@ -498,7 +498,14 @@ async function connectBand(slot,expected,mode){
    s.error="อุปกรณ์ไม่ตรงกับการจับคู่เดิมของช่องนี้ — หยุดและล้างรหัสก่อนเปลี่ยนคู่";throw {name:"InvalidStateError"};
   }
   s.ownsDevice=true;pairedDevices.add(s.device.id);
-  s.onDisconnect=()=>{stopped(s,"BLE DISCONNECTED / NO DATA");if(!document.hidden && s.ready){recoveryRequested=true;Promise.resolve().then(recoverKnown);}};
+  s.onDisconnect=()=>{
+   stopped(s,"BLE DISCONNECTED / NO DATA");
+   const b=bindings.get(slot);
+   // A link that drops soon after connecting (flapping / edge of range) backs off;
+   // a long healthy link retries immediately.
+   if(b&&s.ready){if(Date.now()-(s.readyAt||0)<STABLE_LINK_MS)noteRetryFailure(b);else{b.failures=0;b.nextRetryAt=0;}}
+   if(!document.hidden && s.ready){recoveryRequested=true;Promise.resolve().then(recoverKnown);}
+  };
   s.device.addEventListener("gattserverdisconnected",s.onDisconnect);
   step(s,"gatt");
   const connection=s.device.gatt.connect();
@@ -587,7 +594,7 @@ async function connectBand(slot,expected,mode){
    status(slot+" • JavaScript เห็น "+(/^xiaomi$/i.test(s.device.name?.trim())?"Xiaomi":"ชื่อว่างหรือรหัสยาว")+" • แยกเรือน "+expected+" ตรวจรหัสบนเรือนจริง หากแยกไม่ได้ให้กดตัดการเชื่อมต่อ");
    return;
   }
-  bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,staleRetries:bound?.staleRetries||0,autoLog:bound?.autoLog||[],autoEnabled:true});
+  bindings.set(slot,{id:s.device.id,expected,device:s.device,verified:bound?.verified===true,staleRetries:bound?.staleRetries||0,autoLog:bound?.autoLog||[],failures:bound?.failures||0,nextRetryAt:bound?.nextRetryAt||0,autoEnabled:true});
   s.readyAt=Date.now();s.ready=true;guidePair(slot,expected,"ชื่อ Band ตรงกับรหัสแล้ว • รอ BPM ใหม่และ Server acknowledged ก่อนเชื่อมเรือนถัดไป");$("simpleStatus").textContent=slot+" เชื่อมแล้ว • รอสัญญาณหัวใจใหม่";s.notifications="รับ Notify แล้ว";s.state="BLE CONNECTED • รอ BPM / NO DATA";paint(s);
   status(slot+" รับ Notify แล้ว • ทดลองเชื่อมต่อช่องที่สองได้");
  }catch(e){
@@ -696,7 +703,7 @@ async function connectAllRemembered(){
     failed.push(slot);continue;
    }
    used.add(device.id);
-   binding.device=device;binding.autoEnabled=true;binding.autoLog=[];binding.staleRetries=0;
+   binding.device=device;binding.autoEnabled=true;binding.autoLog=[];binding.staleRetries=0;binding.failures=0;binding.nextRetryAt=0;
    $("connectAllStatus").textContent="กำลังเชื่อม "+slot+" • "+(started+already)+"/"+targets.length+" เรือน";
    await connectBand(slot,binding.expected,"auto");
    if(live.get(slot)?.ready)started++;else failed.push(slot);
@@ -758,14 +765,32 @@ function suspend(){
 }
 // Per-slot sliding-window budget: a flapping or absent watch can never trigger
 // an unbounded reconnect loop that keeps the shared BLE stack busy for peers.
-const AUTO_RECONNECT_LIMIT=6, AUTO_RECONNECT_WINDOW_MS=600000;
+// Backoff does the pacing (at most one attempt per minute per watch at steady
+// state); the window limit is a hard safety cap.
+const AUTO_RECONNECT_LIMIT=20, AUTO_RECONNECT_WINDOW_MS=600000;
+const AUTO_START_DELAY_MS=1500, STABLE_LINK_MS=60000;
+const retryDelay=n=>n<=0?0:Math.min(60000,5000*2**(n-1));
+function noteRetryFailure(binding){binding.failures=(binding.failures||0)+1;binding.nextRetryAt=Date.now()+retryDelay(binding.failures);}
+function budgetLeft(binding){const now=Date.now();return (binding.autoLog||[]).filter(t=>now-t<AUTO_RECONNECT_WINDOW_MS).length<AUTO_RECONNECT_LIMIT;}
+// Foreground-only scheduler: verified, operator-enabled watches that are not
+// connected are retried when their backoff expires. Never opens the chooser and
+// never touches unverified devices.
+function scheduleDueRecovery(){
+ if(!auth||document.hidden||chooserPending||connecting||recoveryRunning||bulkConnecting)return;
+ const now=Date.now();
+ for(const [slot,b] of bindings){
+  if(b.verified&&b.autoEnabled&&!live.has(slot)&&(b.nextRetryAt||0)<=now&&budgetLeft(b)){
+   recoveryRequested=true;Promise.resolve().then(recoverKnown);return;
+  }
+ }
+}
 function reconnectBudget(binding){
  const now=Date.now();
  binding.autoLog=(binding.autoLog||[]).filter(t=>now-t<AUTO_RECONNECT_WINDOW_MS);
  if(binding.autoLog.length>=AUTO_RECONNECT_LIMIT)return false;
  binding.autoLog.push(now);return true;
 }
-function manualRecoveryRequested(slot){const b=bindings.get(slot);if(b){b.autoLog=[];b.staleRetries=0;}}
+function manualRecoveryRequested(slot){const b=bindings.get(slot);if(b){b.autoLog=[];b.staleRetries=0;b.failures=0;b.nextRetryAt=0;}}
 async function recoverKnown(){
  if(!recoveryRequested||recoveryRunning||connecting||bulkConnecting||document.hidden||!auth)return;
  if(chooserPending){status("NO DATA • Manual action required: ปิดหน้าต่างเลือกที่ค้างก่อน แล้วกด Soft BLE Reset");return;}
@@ -775,6 +800,7 @@ async function recoverKnown(){
   for(const [slot,binding] of bindings){
    if(epoch!==generation||document.hidden||!auth)break;
    if(!binding.autoEnabled||live.has(slot))continue;
+   if((binding.nextRetryAt||0)>Date.now())continue;
    if(!reconnectBudget(binding)){
     const session=sessions.get(slot);
     if(session){session.state="NO DATA • เชื่อมกลับอัตโนมัติครบจำนวนแล้ว — กดเชื่อมต่อใหม่";paint(session);}
@@ -785,10 +811,23 @@ async function recoverKnown(){
     if(epoch!==generation||document.hidden||!auth||!bindings.get(slot)?.autoEnabled)break;
     await connectBand(slot,binding.expected,attempt===0?"auto":"autoLookup");
     if(live.get(slot)?.ready)break;
+    // Out of range with a valid handle: a permission lookup cannot help and its
+    // error would hide the real cause. Back off and retry later instead.
+    if(attempt===0&&binding.device&&/TimeoutError|NetworkError/.test(sessions.get(slot)?.error||""))break;
    }
-   if(epoch===generation&&!document.hidden&&!live.get(slot)?.ready){
+   if(live.get(slot)?.ready){binding.failures=0;binding.nextRetryAt=0;}
+   else if(epoch===generation&&!document.hidden){
+    // Usually out of range: keep retrying in the foreground with backoff so the
+    // watch reconnects by itself when the wearer walks back.
     const session=sessions.get(slot);
-    if(session){session.state="NO DATA • Manual action required — กดเชื่อมต่อใหม่";paint(session);}
+    // Lost Bluetooth permission/handle cannot be fixed by waiting: stop and ask.
+    if(/NotAllowedError|SecurityError|ไม่พบอุปกรณ์ที่เคยจับคู่|ไม่รองรับอุปกรณ์ที่เคยอนุญาต/.test(session?.error||"")){
+     binding.nextRetryAt=Infinity;
+     if(session){session.state="NO DATA • Manual action required — สิทธิ์ Bluetooth หาย กดเชื่อมต่อใหม่";paint(session);}
+    }else{
+     noteRetryFailure(binding);
+     if(session){session.state="NO DATA • อยู่นอกระยะ? จะลองเชื่อมเองอีกครั้งใน "+Math.round((binding.nextRetryAt-Date.now())/1000)+" วินาที";paint(session);}
+    }
    }
   }
  }finally{
@@ -839,6 +878,7 @@ setInterval(()=>{
   }
  }
  if(newlyStale)controls();else paintGatewayOverview();
+ scheduleDueRecovery();
 },1000);
 if(!navigator.bluetooth)status("เบราว์เซอร์นี้ไม่มี Web Bluetooth — เปิดลิงก์นี้ใน Bluefy");
 </script></body></html>

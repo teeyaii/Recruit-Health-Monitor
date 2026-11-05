@@ -18,6 +18,14 @@ Baseline audited: `main` = Render live = `3d470236b9659e78b4f9e6177a7c0991379b76
 
 Verified unchanged: EMERGENCY stays shown while stale/disconnected (`dashboard-status.test.js`), and missing BPM gives `unavailable`, never `normal`. Clinical thresholds, Medic Review, the archive and recovery shadow are not modified. The lock-screen/dim experiment remains removed (`web-gateway.test.js`).
 
+## Owner hardware result, 5 Nov 2026 (after #65 deploy)
+
+4 watches connected on one iPhone/Bluefy. Share HR off/on for 30 s recovered by itself. A watch carried out of range for about 3 min did **not** reconnect by itself. After Render restart and re-login the watches did not reconnect by themselves; reload followed by "connect all" restored all 4.
+
+Cause: recovery made one attempt at disconnect time (while still out of range) and had no later retry. After login/reload nothing started recovery, although `getDevices()` works in Bluefy (connect-all proved it).
+
+Fix: a foreground scheduler retries verified, operator-enabled watches with backoff of 5/10/20/40/60 s, capped at one attempt per minute. It never opens the chooser and never touches unverified devices. Lost permission (NotAllowed or handle not granted) still stops and asks the operator. After login or reload, remembered watches reconnect automatically.
+
 ## Automated evidence (simulated, not hardware)
 
 - `server/bluefy-lifecycle.test.js`: four independent sessions, failed-watch isolation, chooser interruption, scan-mode consistency (A/B/D), no listener accumulation over 5 reconnects, bounded flapping budget, 401 → re-login resume, G02 R06–R10 provisioning.
