@@ -391,7 +391,7 @@ test('failed A scan exposes one-tap B scan without entering suffix or affecting 
  const b=h.get('extraBandControls').children.find(x=>x.textContent==='เชื่อม R03 · 1121');
  await b.click();await drain();
  const failed=h.get('slots').children.at(-1);
- const broad=failed.children[7];
+ const broad=failed.children.at(-1).children[1];
  assert.match(broad.textContent,/สแกน B/);
  assert.equal(broad.hidden,false);
  assert.equal(broad.disabled,false);
