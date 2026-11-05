@@ -165,7 +165,7 @@ function paintOptionalBands(){
   button.addEventListener("click",()=>{
    // Use the same user-gesture BLE chooser as R01/R02, not a saved Bluetooth
    // handle or automatic background connection. Wrong physical bands are rejected.
-   if(knownSuffix){connectBand(slot,knownSuffix,bindings.get(slot)?.verified?"auto":"standard");return;}
+   if(knownSuffix){connectBand(slot,knownSuffix,bindings.get(slot)?.verified?"auto":"broad");return;}
    $("advancedPair").open=true;$("slot").value=slot;
    $("expected").value=bindings.get(slot)?.expected||"";
    $("scanMode").value="standard";
@@ -318,7 +318,7 @@ function addTile(slot,expected,mode){
    stopped(current,"MANUAL RECONNECT / NO DATA");
    return connectBand(slot,expected,"auto");
   }
-  return connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"standard":mode);
+  return connectBand(slot,expected,mode==="auto"||mode==="autoLookup"?"broad":mode);
  });
  broadRetry.addEventListener("click",()=>{
   const current=live.get(slot);
@@ -387,10 +387,11 @@ async function connectBand(slot,expected,mode){
    s.device=allowed.find(d=>previous&&d.id===previous.id&&acceptsDevice(d,expected,previous));
    if(!s.device){s.error="ไม่พบอุปกรณ์ที่เคยจับคู่ช่องนี้ • เลือก A หรือ B แล้วกดเชื่อมต่ออีกครั้ง";throw {name:"NotFoundError"};}
   }else{
+   const existing=Array.from(live.values()).filter(other=>other!==s);
    chooserPending=true;
    let choice;
    try{choice=navigator.bluetooth.requestDevice(options);}catch(e){chooserPending=false;throw e;}
-   Promise.resolve(choice).then(()=>{chooserPending=false;controls();},()=>{chooserPending=false;controls();});
+   Promise.resolve(choice).then(()=>finishChooser(existing),()=>finishChooser(existing));
    s.device=await bounded(s,choice);
   }
   validAttempt(s);step(s,"selected");
@@ -540,7 +541,7 @@ $("load").addEventListener("click",async()=>{
  finally{loginPending=false;pendingSession=null;$("token").value="";controls();}
 });
 for(const [slot,suffix] of [["R01","47FD"],["R02","A746"]]){
- $("quick"+slot).addEventListener("click",()=>connectBand(slot,suffix,bindings.get(slot)?.verified?"auto":"standard"));
+ $("quick"+slot).addEventListener("click",()=>connectBand(slot,suffix,bindings.get(slot)?.verified?"auto":"broad"));
 }
 $("presentation").addEventListener("click",()=>{document.body.classList.toggle("presentation");$("presentation").textContent=document.body.classList.contains("presentation")?"ออกจากโหมดนำเสนอ":"โหมดนำเสนอ";});
 // Reload restores authorization only, never invents BLE handles or fresh readings.
@@ -570,6 +571,24 @@ $("clear").addEventListener("click",async()=>{
  try{await fetch("/api/gateway/session",{method:"DELETE",headers:{"X-STEVE-Gateway":"1"},credentials:"same-origin"});serverStatus("ออกจากระบบแล้ว");}catch{serverStatus("ติดต่อเซิร์ฟเวอร์ไม่ได้ • กดออกจากระบบอีกครั้งเพื่อยกเลิก session");}
  $("loginFields").hidden=false;controls();
 });
+function finishChooser(existing){
+ const interrupted=existing.filter(s=>Date.now()-(s.lastAt??s.readyAt)>15000);
+ chooserPending=false;
+ if(document.hidden){suspend();return;}
+ controls();
+ // Allow resumed notifications to arrive before recovering interrupted streams.
+ const epoch=generation;
+ setTimeout(()=>{
+  if(epoch!==generation||document.hidden||chooserPending||!auth)return;
+  for(const s of interrupted){
+   if(live.get(s.slot)!==s||!s.ready||s.probe||!bindings.get(s.slot)?.verified)continue;
+   if(Date.now()-(s.lastAt??s.readyAt)<=15000)continue;
+   stopped(s,"SCAN INTERRUPTED / NO DATA");
+   recoveryRequested=true;
+  }
+  Promise.resolve().then(recoverKnown);
+ },3000);
+}
 function suspend(){
  recoveryRequested=true;
  generation++;
@@ -617,8 +636,8 @@ $("dimScreen").addEventListener("click",async()=>{
  catch{lockMessage("กลับโหมดปกติแล้ว • หรี่แสงด้วยมือและเปิดหน้า Gateway ค้างไว้");}
 });
 document.addEventListener("visibilitychange",()=>{
- if(document.hidden){if(lockTrialEnabled)beginLockProbe();else suspend();}
- else{if(lockTrialEnabled)finishLockProbe();controls();Promise.resolve().then(recoverKnown);}
+ if(document.hidden){if(chooserPending){controls();return;}if(lockTrialEnabled)beginLockProbe();else suspend();}
+ else{if(lockTrialEnabled)finishLockProbe();controls();if(!chooserPending)Promise.resolve().then(recoverKnown);}
 });
 window.addEventListener("pagehide",()=>{if(lockTrialEnabled)beginLockProbe();else suspend();});
 setInterval(()=>{

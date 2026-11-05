@@ -138,7 +138,7 @@ test('getDevices reconnect matches only previously bound ID; unsupported require
 test('rapid taps and unresolved chooser never launch overlapping native prompts',async()=>{
  const h=harness();await h.login();let resolve;h.select(()=>new Promise(r=>resolve=r));
  const pending=h.api.connectBand('R01','AB12','standard');await h.api.connectBand('R02','CD34','broad');assert.equal(h.calls.length,1);
- h.hide();await pending;h.document.hidden=false;h.document.listeners.visibilitychange();
+ h.hide();h.tick(20001);await pending;h.document.hidden=false;h.document.listeners.visibilitychange();
  await h.api.connectBand('R01','AB12','standard');assert.equal(h.calls.length,1);
  resolve(device());await flush();await h.connect(device());assert.equal(h.calls.length,2);
 });
@@ -498,4 +498,26 @@ test('supervised scan rejects conflicting named band and cancels provisional dis
  const d=device();d.name='Xiaomi';await h.connect(d,'R01','AB12','supervised');d.emit();
  await h.api.stopped(h.api.live.get('R01'));assert.equal(h.api.bindings.size,0);
  assert.equal(h.fetches.some(x=>x.url==='/api/ingest'),false);
+});
+
+test('Broad picker visibility pause preserves other bands and recovers only stale streams',async()=>{
+ const h=harness();await h.login();const a=device('one','47FD');await h.connect(a,'R01','47FD');a.emit();await drain();
+ const original=h.api.live.get('R01');let resolve;
+ h.select(()=>new Promise(r=>resolve=r));
+ const pending=h.api.connectBand('R02','A746','broad');
+ h.hide();assert.equal(a.gatt.connected,true);assert.equal(h.api.live.get('R01'),original);
+ h.tick(16000);foreground(h);const b=device('two','A746');resolve(b);await pending;
+ assert.equal(h.api.live.get('R01'),original);assert.equal(original.bpm,null);
+ b.emit();await drain();h.tick(3001);await drain();
+ assert.notEqual(h.api.live.get('R01'),original);assert.equal(b.gatt.connected,true);
+ assert.equal(h.calls.length,2);
+ a.emit();await drain();assert.equal(h.api.live.get('R01').bpm,66);
+});
+
+test('top R01 uses Broad scan and cancelled picker keeps fresh R02 connected',async()=>{
+ const h=harness();await h.login();const b=device('two','A746');await h.connect(b,'R02','A746');b.emit();await drain();
+ let reject;h.select(()=>new Promise((r,j)=>reject=j));const p=h.get('quickR01').click();
+ assert.equal(h.calls.at(-1).acceptAllDevices,true);
+ h.hide();assert.equal(b.gatt.connected,true);foreground(h);reject({name:'NotFoundError'});await p;
+ h.tick(3001);await drain();assert.equal(b.gatt.connected,true);assert.equal(h.api.live.get('R02').device,b);
 });
