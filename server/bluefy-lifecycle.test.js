@@ -15,10 +15,10 @@ class Element {
  remove(){}
  click(){return this.listeners.click?.();}
 }
-function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}]){
+function harness(provisionedSlots=[{id:'R01',device_id:'opaque-one'},{id:'R02',device_id:'opaque-two'}],sharedStorage=new Map()){
  const nodes=new Map(), intervals=[], timers=new Map();let timerId=0;let clock=100000;
  const document={hidden:false,listeners:{},getElementById(id){if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);},createElement(){return new Element();},addEventListener(n,f){this.listeners[n]=f;}};
- const window={isSecureContext:true,addEventListener(){}};
+ const window={isSecureContext:true,addEventListener(){},localStorage:{getItem:k=>sharedStorage.get(k)??null,setItem:(k,v)=>sharedStorage.set(k,String(v)),removeItem:k=>sharedStorage.delete(k)}};
  const calls=[],fetches=[];let selection=null, uploadResponse={ok:true,status:200,json:async()=>({accepted:1})};
  const bluetooth={requestDevice(options){calls.push(options);return typeof selection==='function'?selection():Promise.resolve(selection);}};
  class Clock extends Date {static now(){return clock;}}
