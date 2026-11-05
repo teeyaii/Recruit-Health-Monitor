@@ -132,9 +132,14 @@ function finishLockProbe(){
 const stages={capability:"1/9 ตรวจ Web Bluetooth",chooser:"2/9 เปิดหน้าต่างเลือกอุปกรณ์",selected:"3/9 ตรวจอุปกรณ์และช่อง",gatt:"4/9 เชื่อม GATT",service:"5/9 ค้นหา Heart Rate Service 180D",characteristic:"6/9 ค้นหา Characteristic 2A37",subscribe:"7/9 สมัครรับ Notifications",receiving:"8/9 รับข้อมูลหัวใจ",upload:"9/9 ส่ง HTTPS และรอ Server"};
 function status(message){$("bleStatus").textContent=message;}
 function serverStatus(message){$("serverStatus").textContent=message;}
+function clearSlotCards(){
+ sessions.clear();tiles.clear();$("slots").replaceChildren();
+ $("expected").value="";$("simpleStatus").textContent="เปิด Share HR แล้วเลือกช่องของเรือนที่ต้องการเชื่อม";
+}
 function expireSession(){
  auth=null;generation++;recoveryRequested=false;bindings.clear();provision=[];
  for(const s of Array.from(live.values()))stopped(s,"SESSION EXPIRED / NO DATA");
+ clearSlotCards();$("slot").replaceChildren();$("slot").disabled=true;
  $("loginFields").hidden=false;$("gateway").disabled=false;
  serverStatus("หมดเวลาเข้าใช้งาน • กรอกรหัสเพื่อเข้าใหม่");controls();
 }
@@ -427,7 +432,11 @@ async function connectBand(slot,expected,mode){
     // acknowledgements belong to one measurement and must pass the freshness guard.
     if(result.ok&&(s.sequence!==sequence||Date.now()-now>15000))return;
     s.ack=result.detail;
-    if(result.ok){if(bpm!==null)bindings.get(slot).verified=true;s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenAcks++;}
+    if(result.ok){
+     if(bpm!==null)bindings.get(slot).verified=true;
+     s.ackAt=now;s.error="";s.state=bpm===null?"NO DATA • Server acknowledged":"LIVE • Server acknowledged";
+     if(document.hidden&&lockTrialEnabled&&bpm!==null)hiddenAcks++;
+    }
     else{s.bpm=null;transition(s,"ERROR");s.state="SERVER REJECTED / OFFLINE";s.error=stages.upload+" • "+result.detail;$("simpleStatus").textContent="ส่งข้อมูลไม่สำเร็จ • ตรวจเครือข่ายหรือเข้าใช้งานใหม่";}
     paint(s);
    }).finally(()=>{s.busy=false;});
@@ -449,7 +458,7 @@ async function connectBand(slot,expected,mode){
 
 function applyProvision(payload){
  if(!/^G0[1-5]$/.test(payload.gateway)||!Array.isArray(payload.slots)||!payload.slots.every(s=>/^R(0[1-9]|1[0-5])$/.test(s.id)&&/^[a-zA-Z0-9_-]{4,64}$/.test(s.device_id)))throw Error("Invalid provision");
- bindings.clear();auth={gateway:payload.gateway,expiresAt:payload.expiresAt||Date.now()+(["G01","G02","G03"].includes(payload.gateway)?36000000:7200000)};provision=payload.slots;
+ clearSlotCards();bindings.clear();auth={gateway:payload.gateway,expiresAt:payload.expiresAt||Date.now()+(["G01","G02","G03"].includes(payload.gateway)?36000000:7200000)};provision=payload.slots;
  $("token").value="";$("gateway").value=payload.gateway;$("gateway").disabled=true;$("loginFields").hidden=true;
  $("slot").replaceChildren();
  for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}
@@ -504,7 +513,7 @@ $("clear").addEventListener("click",async()=>{
  recoveryRequested=false;
  generation++;
  const stops=Array.from(live.values(),s=>stopped(s,"STOPPED / NO DATA"));
- auth=null;provision=[];bindings.clear();$("token").value="";$("slot").replaceChildren();
+ auth=null;provision=[];bindings.clear();clearSlotCards();$("token").value="";$("slot").replaceChildren();
  $("slot").disabled=true;$("connect").disabled=true;$("gateway").disabled=false;
  $("expected").value="";serverStatus("ล้างข้อมูล Gateway จากหน้าเว็บแล้ว");status("หยุดทั้งหมด");
  await Promise.all(stops);

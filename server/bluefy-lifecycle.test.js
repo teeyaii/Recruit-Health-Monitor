@@ -458,3 +458,17 @@ test('only accepted heart rate enables unnamed same-page recovery',async()=>{
  await h.connect(null,'R01','AB12','known');
  assert.equal(h.api.live.get('R01')?.device,d);
 });
+test('logout removes prior slot controls and stale device references',async()=>{
+ const h=harness();await h.login();await h.connect(device());
+ await h.get('clear').click();
+ assert.equal(h.get('slots').children.length,0);
+ assert.equal(h.api.bindings.size,0);
+});
+
+test('subscription without first notification offers a single-slot retry',async()=>{
+ const h=harness();await h.login();await h.connect(device());
+ h.tick(15001);
+ const s=h.api.live.get('R01');
+ assert.equal(s.retry.disabled,false);
+ assert.equal(s.measure.textContent,'NO DATA');
+});
