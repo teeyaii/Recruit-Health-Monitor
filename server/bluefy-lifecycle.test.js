@@ -533,7 +533,7 @@ test('top R01 uses Broad scan and cancelled picker keeps fresh R02 connected',as
  h.tick(3001);await drain();assert.equal(b.gatt.connected,true);assert.equal(h.api.live.get('R02').device,b);
 });
 
-test('silent verified stream: resubscribes on same link first, then bounded reconnect twice, preserves peers, rearms after fresh ACK',async()=>{
+test('silent verified stream: resubscribes on same link first, two quick reconnects, then backoff-paced retries (never parked); peers preserved',async()=>{
  const h=harness();await h.login();const a=device(),b=device('two','CD34');
  await h.connect(a);await h.connect(b,'R02','CD34');a.emit();b.emit();await drain();
  const peer=h.api.live.get('R02');
@@ -548,15 +548,66 @@ test('silent verified stream: resubscribes on same link first, then bounded reco
  await advance(20000);
  assert.notEqual(h.api.live.get('R01'),first,'tier 2 reconnects the silent slot only');
  assert.equal(h.api.live.get('R02'),peer);assert.equal(peer.bpm,66);
- await advance(50000);
- const third=h.api.live.get('R01');
- await advance(50000);
- assert.equal(h.api.live.get('R01'),third,'automatic full reconnect is bounded to two per silence');
- assert.equal(third.bpm,null);
- a.emit();await drain();assert.equal(h.api.bindings.get('R01').staleRetries,0,'fresh ACK rearms recovery');
- await advance(50000);
- assert.notEqual(h.api.live.get('R01'),third);
+ // Keep silent for 5 more minutes: retries continue but are paced by backoff.
+ const sessionsSeen=new Set();
+ for(let t=0;t<300000;t+=5000){h.tick(5000);b.emit();await drain();const s=h.api.live.get('R01');if(s)sessionsSeen.add(s);}
+ assert.ok(sessionsSeen.size>=3&&sessionsSeen.size<=12,'silent watch keeps being retried, paced; got '+sessionsSeen.size);
+ assert.ok([...sessionsSeen].every(s=>s.bpm===null),'never LIVE without new BPM');
+ // HR resumes: reaches the current session or the next paced retry.
+ for(let t=0;t<70000&&h.api.live.get('R01')?.bpm!==66;t+=1000){h.tick(1000);a.emit();b.emit();await drain();}
+ assert.equal(h.api.live.get('R01').bpm,66);
+ assert.equal(h.api.bindings.get('R01').staleRetries,0,'fresh ACK rearms recovery');
+ assert.equal(h.api.live.get('R02'),peer);
  assert.equal(h.calls.length,2,'no native chooser during automatic recovery');
+});
+test('Bluefy reports no disconnect for an out-of-range watch: it is not parked STALE forever and reconnects when back',async()=>{
+ const h=harness();await h.login();
+ const a=device('band-one','47FD'),b=device('band-two','A746');
+ h.select(a);await h.get('quickR01').click();h.select(b);await h.get('quickR02').click();
+ for(let t=0;t<70000;t+=5000){h.tick(5000);a.emit();b.emit();await drain();}
+ // Away 3 min: no gattserverdisconnected, reconnects "succeed" but stay silent.
+ for(let t=0;t<180000;t+=5000){h.tick(5000);b.emit();await drain();}
+ assert.equal(h.api.live.get('R01')?.bpm??null,null);
+ // Back in range: HR resumes on whichever session is current, or the next retry.
+ let ok=false;
+ for(let t=0;t<70000&&!ok;t+=1000){h.tick(1000);a.emit([6,82]);b.emit();await drain();ok=h.api.live.get('R01')?.bpm===82;}
+ assert.ok(ok,'R01 LIVE again without operator');
+ assert.equal(h.calls.length,2,'no native chooser');
+});
+test('advertisement wait runs before reconnecting a remembered handle; silence or no support still connects',async()=>{
+ for(const mode of ['seen','none','unsupported']){
+  const storage=new Map(),slots=[{id:'R01',device_id:'opaque-one'}];
+  const first=harness(slots,storage);await first.login();const a=device('band-one','47FD');
+  first.select(a);await first.get('quickR01').click();a.emit();await drain();
+  const page=harness(slots,storage);
+  let watched=0;
+  if(mode!=='unsupported')a.watchAdvertisements=async()=>{watched++;if(mode==='seen')setTimeout?.(()=>{},0);if(mode==='seen')Promise.resolve().then(()=>a.listeners.advertisementreceived?.({}));};
+  else delete a.watchAdvertisements;
+  page.context.navigator.bluetooth.getDevices=async()=>[a];
+  a.gatt.connected=false;
+  await page.login();
+  for(let t=0;t<10000&&!page.api.live.get('R01')?.ready;t+=1000){page.tick(1000);await drain();}
+  assert.equal(page.api.live.get('R01')?.ready,true,mode+': connects');
+  assert.equal(page.api.bindings.get('R01').advert,mode==='unsupported'?undefined:mode);
+  if(mode!=='unsupported')assert.equal(watched,1);
+  assert.equal(a.listeners.advertisementreceived,undefined,mode+': advertisement listener removed');
+ }
+});
+test('tapping a verified watch whose automatic reconnect is failing opens the Broad chooser to re-select it',async()=>{
+ const h=harness();await h.login();const a=device('band-one','47FD');
+ h.select(a);await h.get('quickR01').click();a.emit();await drain();
+ for(let t=0;t<62000;t+=4000){h.tick(4000);a.emit();await drain();}
+ a.gatt.connect=async()=>{throw {name:'NetworkError'};};
+ a.gatt.connected=false;a.listeners.gattserverdisconnected?.();await drain();
+ assert.equal(h.api.live.has('R01'),false);
+ assert.ok(h.api.bindings.get('R01').failures>0);
+ const fresh=device('band-one','47FD');h.select(fresh);
+ const choices=h.calls.length;
+ await h.get('quickR01').click();await drain();
+ assert.equal(h.calls.length,choices+1,'chooser opened from the tap');
+ assert.equal(h.calls.at(-1).acceptAllDevices,true,'Broad scan');
+ assert.equal(h.api.live.get('R01')?.ready,true);
+ fresh.emit([6,77]);await drain();assert.equal(h.api.live.get('R01').bpm,77);
 });
 
 
