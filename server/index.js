@@ -422,8 +422,21 @@ const server=http.createServer(async(req,res)=>{
    if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    const backup=medicReviews.export()[slot];
    const review=medicReviews.update(slot,code,body,isViewer);
-   try{await persistState();}
-   catch{if(roster.get(slot).version===rosterVersion)medicReviews.rollback(slot,review,backup);historyDirty=true;send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
+   // Keep rollback and compensation inside the writer queue. A failed HTTP
+   // acknowledgement may follow a successful remote commit (including close).
+   // Later queued writers must see the restored/current review, never save the
+   // failed optimistic close before rollback has run.
+   writeQueue=writeQueue.catch(()=>{}).then(async()=>{
+    try{await durable.save(stateSnapshot());}
+    catch(error){
+     if(roster.get(slot).version===rosterVersion)medicReviews.rollback(slot,review,backup);
+     historyDirty=true;
+     try{await durable.save(stateSnapshot());}catch{}
+     throw error;
+    }
+   });
+   try{await writeQueue;}
+   catch{send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
    if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
    send(res,200,{review});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"review request unavailable"});}

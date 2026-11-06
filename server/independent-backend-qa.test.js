@@ -389,3 +389,64 @@ test('SIMULATED: archived and pending old-wearer samples cannot enter the new ar
  await flush();
  assert.deepEqual((await h.req('/api/archive/R01?hours=4',{cookie:medic})).data.points,[[freshAt,75]]);
 });
+
+// Issue #76: a remote write may commit even though its acknowledgement is lost.
+test('SIMULATED #76: failed case close with lost ACK must preserve pending after restart',async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R06');
+ const path='/api/medic-reviews/R06';
+ assert.equal((await h.req(path,{method:'PUT',cookie:m,body:{version:0,action:'request',reason:'other',note:'synthetic pending'}})).status,200);
+ await h.controlSave('fail-after');
+ assert.equal((await h.req(path,{method:'PUT',cookie:m,body:{version:1,action:'close',note:'synthetic assessment'}})).status,503);
+ assert.equal((await h.req(path,{cookie:m})).data.review.status,'pending');
+ await h.restart();const again=await h.login('medic');
+ assert.equal((await h.req(path,{cookie:again})).data.review.status,'pending');
+});
+
+for(const action of ['request','close'])for(const failure of ['fail-before','fail-after'])
+test(`SIMULATED #76: ${action} ${failure} restores durable version and permits retry`,async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R06');
+ const path='/api/medic-reviews/R06';
+ if(action==='close')assert.equal((await h.req(path,{method:'PUT',cookie:m,body:{version:0,action:'request',reason:'other'}})).status,200);
+ const version=action==='close'?1:0,body={version,action,reason:'other',note:'synthetic assessment'};
+ await h.controlSave(failure);
+ assert.equal((await h.req(path,{method:'PUT',cookie:m,body})).status,503);
+ await h.restart();const again=await h.login('medic');
+ let review=(await h.req(path,{cookie:again})).data.review;
+ assert.equal(review.status,action==='close'?'pending':'none');assert.equal(review.version,version);
+ assert.equal((await h.req(path,{method:'PUT',cookie:again,body})).status,200);
+ assert.equal((await h.req(path,{method:'PUT',cookie:again,body})).status,409,'duplicate command cannot overwrite newer version');
+ await h.restart();const last=await h.login('medic');
+ review=(await h.req(path,{cookie:last})).data.review;
+ assert.equal(review.status,action==='close'?'closed':'pending');assert.equal(review.version,version+1);
+});
+
+test('SIMULATED #76: automatic case close, dedup, rearm, acknowledgement and EMERGENCY remain separate',async t=>{
+ const h=await lab(t),m=await h.login('medic'),a=await h.phone('G02');await h.enroll(m,'R06');
+ const path='/api/medic-reviews/R06';
+ assert.equal((await h.req('/api/private-profile/R06',{method:'PUT',cookie:m,body:{version:0,confirmed:true,weightKg:null,heightCm:null,conditions:'',reviewThresholdBpm:150,reviewThresholdConfirmed:true}})).status,200);
+ assert.equal((await h.req('/api/training',{method:'PUT',cookie:m,body:{version:0,phase:'training'}})).status,200);
+ const send=async(hr)=>{await h.advance(7000);assert.equal((await h.ingest('G02',a,[h.sample('R06',{hr})])).data.accepted,1);};
+ for(let i=0;i<6;i++)await send(160);
+ let review=(await h.req(path,{cookie:m})).data.review;
+ assert.equal(review.openedBy,'system');assert.equal(review.status,'pending');const firstVersion=review.version;
+ for(let i=0;i<3;i++)await send(160);
+ assert.equal((await h.req(path,{cookie:m})).data.review.version,firstVersion,'sustained signal does not duplicate case');
+ // Roster acknowledgement concerns the observed symptom; it cannot close the medical case.
+ assert.equal((await h.req('/api/roster/R06',{method:'PUT',cookie:m,body:{version:1,code:'QA_R06',restriction:'none',observation:'confusion_collapse_seizure'}})).status,200);
+ assert.equal((await h.req('/api/roster/R06/acknowledge',{method:'POST',cookie:m,body:{version:2}})).status,200);
+ assert.equal((await h.req(path,{cookie:m})).data.review.status,'pending');
+ assert.equal((await h.req(path,{method:'PUT',cookie:m,body:{version:firstVersion,action:'close'}})).status,200);
+ assert.equal((await h.req('/api/roster',{cookie:m})).data.slots[5].observation,'confusion_collapse_seizure','case close does not clear unresolved observed emergency');
+ for(let i=0;i<3;i++)await send(160);
+ assert.equal((await h.req(path,{cookie:m})).data.review.status,'closed','close does not reset monitor latch');
+ // Existing monitor contract: >=60 s below limit rearms; gradual changes avoid signal-jump filter.
+ await send(130);for(let i=0;i<10;i++)await send(120);
+ for(let i=0;i<6;i++)await send(160);
+ review=(await h.req(path,{cookie:m})).data.review;
+ assert.equal(review.status,'pending');assert.ok(review.version>firstVersion+1);
+ await h.ingest('G02',a,[h.sample('R06',{hr:null,state:'DISCONNECTED',timestamp:h.now()+1})]);
+ await h.advance(15001);assert.equal((await h.req(path,{cookie:m})).data.review.status,'pending');
+ await h.restart();const again=await h.login('medic');
+ assert.equal((await h.req(path,{cookie:again})).data.review.status,'pending');
+ assert.equal((await snapshot(h,again))[5].hr,null);
+});

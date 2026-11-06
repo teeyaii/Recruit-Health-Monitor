@@ -1,5 +1,8 @@
 # Handoff: STEVE 1.0 → next phase (for planning)
 
+> **Current update — 6 Nov 2026:** main/live baseline for this audit is `0169626` (#78/#79 included). Current owner test set is **5 watches R06–R10**, not a current ten-watch hardware validation. Earlier results below are historical. The owner skipped 60 minutes; do not restart that gate for offline development. See [Issue #76 audit](ISSUE_76_CASE_LIFECYCLE_QA.md) and [AI proposal awaiting approval](STEVE_AI_CLAUDE_PROPOSAL.md).
+
+
 Date: 5 Nov 2026 · Repository: `teeyaii/Recruit-Health-Monitor` · Render service `steve-1-0-live-gateway` (auto-deploy **off**, manual deploys only).
 
 Read this file first, then `docs/STEVE_RELIABILITY_10BAND.md` for root-cause detail and Issue #50 for the 10-band target.
