@@ -30,15 +30,53 @@ const archive=new RollingArchive(durable);
 const privateProfiles=new PrivateProfiles();
 const medicReviews=new MedicReviews();
 const autoHR=new AutoHRMonitor();
+// Durable receipts recognize writes whose acknowledgements were lost. They
+// describe one case revision, not an exactly-once or complete case-history log.
+let reviewReceipts={};
+const reviewPersistence=new Map();
+function reviewReceipt(slot){
+ const r=reviewReceipts[slot],record=medicReviews.export()[slot];
+ return r&&r.code===roster.get(slot).code&&r.version===(record?.version||0)&&
+  r.status===(record?.status||"none")?r:null;
+}
+function reviewPersistenceStatus(slot){
+ const state=reviewPersistence.get(slot);
+ return state&&(["saving","reconciliation_needed"].includes(state.state)||reviewReceipt(slot))?
+  state:{state:"untracked",operationId:null};
+}
+function restoreReviewReceipts(raw){
+ if(raw===undefined)return;
+ if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("Invalid review receipts");
+ reviewReceipts=structuredClone(raw);
+ for(const [slot,r] of Object.entries(raw)){
+  if(!slotIDs.includes(slot)||!r||typeof r.operationId!=="string"||
+   !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(r.operationId)||
+   typeof r.code!=="string"||!r.code||!["none","pending","closed"].includes(r.status)||
+   !["applied","rolled_back"].includes(r.outcome)||(r.outcome==="applied"&&r.version===0)||
+   !Number.isSafeInteger(r.version)||r.version<0||!reviewReceipt(slot))
+   throw Error("Invalid review receipt");
+  reviewReceipts[slot]={operationId:r.operationId,code:r.code,version:r.version,status:r.status,outcome:r.outcome};
+  reviewPersistence.set(slot,{state:"readback_confirmed",...reviewReceipts[slot]});
+ }
+}
 const commander=new CommanderAccess();
 let commanderLinkBusy=false;
 let writeQueue=Promise.resolve(),historyDirty=false;
 function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
  profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions,commanderLink:commander.export(),
- reassignmentCutoffs:Object.fromEntries(reassignmentCutoff)};}
+ reassignmentCutoffs:Object.fromEntries(reassignmentCutoff),
+ reviewReceipts:Object.fromEntries(slotIDs.map(slot=>[slot,reviewReceipt(slot)]).filter(([,r])=>r))};}
 function persistState(){
  if(!durable.enabled)return Promise.resolve();
- writeQueue=writeQueue.catch(()=>{}).then(()=>durable.save(stateSnapshot()));
+ writeQueue=writeQueue.catch(()=>{}).then(async()=>{
+  const next=stateSnapshot();await durable.save(next);
+  for(const slot of slotIDs){
+   const r=reviewReceipt(slot);
+   if(reviewPersistenceStatus(slot).state==="reconciliation_needed"&&r&&
+    JSON.stringify(next.reviewReceipts[slot])===JSON.stringify(r))
+    reviewPersistence.set(slot,{state:"write_confirmed",...r});
+  }
+ });
  return writeQueue;
 }
 // Reject queued measurements recorded before a wearer changed.
@@ -90,7 +128,7 @@ async function updateRosterSafely(slot,action,body,actor){
   next.roster=withRosterSlot(next.roster,slot,current,event);
   if(changed){
    next.reassignmentCutoffs[slot]=cutoff;
-   delete next.history[slot];delete next.profiles[slot];delete next.medicReviews[slot];
+   delete next.history[slot];delete next.profiles[slot];delete next.medicReviews[slot];delete next.reviewReceipts[slot];
   }
   if(durable.enabled){
    try{await durable.save(next);}
@@ -111,7 +149,7 @@ async function updateRosterSafely(slot,action,body,actor){
   catch(error){roster.loadData(before);throw error;}
   if(changed){
    reassignmentCutoff.set(slot,cutoff);
-   recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);autoHR.reset(slot);
+   recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);delete reviewReceipts[slot];reviewPersistence.delete(slot);autoHR.reset(slot);
   }
   uncertainRosterWrites.delete(slot);
  };
@@ -181,7 +219,7 @@ function snapshot(){const now=Date.now();
   const autoCheck=!!(rev?.status==="pending"&&(rev?.openedBy==="system"||rev?.autoPauseRequired));
   const profile=code?privateProfiles.get(id,code):null;
   const monitoringStatus=profile?.reviewThresholdConfirmed&&profile?.reviewThresholdBpm!==null?"OPERATOR_CONFIGURED_UNVERIFIED":"MONITORING_NOT_CONFIGURED";
-  return {id,autoCheck,autoAlert:explainAutoReview(rev),monitoringStatus,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
+  return {id,autoCheck,reviewPersistencePending:["saving","reconciliation_needed"].includes(reviewPersistenceStatus(id).state),autoAlert:explainAutoReview(rev),monitoringStatus,hr:state==="CONNECTED"?r.hr:null,timestamp:r?.timestamp??null,
    stale:state!=="CONNECTED",state,paused,gateway,gatewayOnline,source:r?.source??(SYNTHETIC?"SIMULATED":null)};
  });}
 function commanderSnapshot(){
@@ -386,6 +424,9 @@ const server=http.createServer(async(req,res)=>{
   const slot=medicRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"register wearer before medical review"});return;}
   if(req.method==="GET"){
+   if(["saving","reconciliation_needed"].includes(reviewPersistenceStatus(slot).state)){
+    send(res,503,{error:"review durability requires reconciliation",persistence:reviewPersistenceStatus(slot)});return;
+   }
    try{
     const profile=privateProfiles.get(slot,code),review=medicReviews.get(slot,code);
     const phase=roster.getGroupPhase();
@@ -405,7 +446,10 @@ const server=http.createServer(async(req,res)=>{
     const restVerified=phase.phase==="hourly_rest"&&Number.isSafeInteger(phase.changedAt)&&
      Date.now()-phase.changedAt>=3*60000;
     if(!restVerified)signal.deltaBpm=null;
-    send(res,200,{slot,review,signal,recoveryShadow,archiveUnavailable,phase:phase.phase,
+    if(["saving","reconciliation_needed"].includes(reviewPersistenceStatus(slot).state)){
+     send(res,503,{error:"review durability requires reconciliation",persistence:reviewPersistenceStatus(slot)});return;
+    }
+    send(res,200,{slot,review:medicReviews.get(slot,code),persistence:reviewPersistenceStatus(slot),signal,recoveryShadow,archiveUnavailable,phase:phase.phase,
      restPhaseRecorded:restVerified,baselineConfigured:profile.baselineConfirmed,
      context:{ageYears:profile.ageYears,bmi:profile.bmi,medications:profile.medications,
       conditions:profile.conditions,wbgtC:conditions.timestamp&&Date.now()-conditions.timestamp<=1800000?conditions.wbgtC:null},
@@ -420,25 +464,48 @@ const server=http.createServer(async(req,res)=>{
   try{
    const body=await readBody(req,900);
    if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
-   const backup=medicReviews.export()[slot];
-   const review=medicReviews.update(slot,code,body,isViewer);
-   // Keep rollback and compensation inside the writer queue. A failed HTTP
-   // acknowledgement may follow a successful remote commit (including close).
-   // Later queued writers must see the restored/current review, never save the
-   // failed optimistic close before rollback has run.
+   // Stage inside the single writer queue; do not expose an unconfirmed close.
+   let review;
    writeQueue=writeQueue.catch(()=>{}).then(async()=>{
-    try{await durable.save(stateSnapshot());}
-    catch(error){
-     if(roster.get(slot).version===rosterVersion)medicReviews.rollback(slot,review,backup);
-     historyDirty=true;
-     try{await durable.save(stateSnapshot());}catch{}
-     throw error;
-    }
+    if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion)
+     throw Object.assign(Error("wearer changed; reload before continuing"),{status:409});
+    if(reviewPersistenceStatus(slot).state==="reconciliation_needed")
+     throw Object.assign(Error("review durability requires reconciliation"),{status:503});
+    const before=medicReviews.export()[slot];
+    const draft=new MedicReviews();draft.load(medicReviews.export());
+    review=draft.update(slot,code,body,isViewer);
+    const operationId=randomUUID();
+    const receipt={operationId,code,version:review.version,status:review.status,outcome:"applied"};
+    reviewPersistence.set(slot,{state:"saving",operationId});
+    const next=stateSnapshot();next.medicReviews[slot]=review;next.reviewReceipts[slot]=receipt;
+    let failure;
+    try{
+     await durable.save(next);
+     if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion||
+      JSON.stringify(medicReviews.export()[slot])!==JSON.stringify(before))
+      throw Object.assign(Error("review changed; refresh first"),{status:409});
+     medicReviews.load({...medicReviews.export(),[slot]:review});
+     reviewReceipts[slot]=receipt;
+     reviewPersistence.set(slot,{state:"write_confirmed",...receipt});
+     publish();return;
+    }catch(error){failure=error;}
+    // Preserve any automatic escalation that arrived while the write awaited.
+    const current=medicReviews.export()[slot];
+    const rollback={operationId,code,version:current?.version||0,status:current?.status||"none",outcome:"rolled_back"};
+    reviewReceipts[slot]=rollback;
+    reviewPersistence.set(slot,{state:"reconciliation_needed",operationId});
+    historyDirty=true;
+    try{
+     await durable.save(stateSnapshot());
+     reviewPersistence.set(slot,{state:"write_confirmed",...rollback});
+    }catch{}
+    publish();
+    if(failure.status===409)throw failure;
+    throw Object.assign(Error("review not confirmed; reload before retry"),{status:503});
    });
    try{await writeQueue;}
-   catch{send(res,503,{error:"review not confirmed; durable storage unavailable"});return;}
-   if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
-   send(res,200,{review});
+   catch(error){send(res,error.status||503,{error:error.message,persistence:reviewPersistenceStatus(slot)});return;}
+   send(res,200,{review,persistence:reviewPersistenceStatus(slot)});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"review request unavailable"});}
   return;
  }
@@ -643,6 +710,7 @@ async function boot(){
    if(!state.roster||!state.profiles||!state.history)throw Error("Incomplete encrypted STEVE snapshot");
    roster.loadData(state.roster);privateProfiles.load(state.profiles);pulseHistory.load(state.history);
    if(state.medicReviews)medicReviews.load(state.medicReviews);
+   restoreReviewReceipts(state.reviewReceipts);
    if(state.conditions&&typeof state.conditions==="object")conditions=state.conditions;
    if(state.commanderLink)commander.load(state.commanderLink);
    if(restoreReassignmentCutoffs(state.reassignmentCutoffs))await durable.save(stateSnapshot());

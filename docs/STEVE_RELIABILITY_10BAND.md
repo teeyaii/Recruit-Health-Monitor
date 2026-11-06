@@ -1,6 +1,6 @@
 # STEVE 1.0 — Reliability recovery and 10-band readiness
 
-> **Current update — 6 Nov 2026:** main/live baseline for this audit is `0169626` (#78/#79 included). Current owner test set is **5 watches R06–R10**, not a current ten-watch hardware validation. Earlier results below are historical. The owner skipped 60 minutes; do not restart that gate for offline development. See [Issue #76 audit](ISSUE_76_CASE_LIFECYCLE_QA.md) and [AI proposal awaiting approval](STEVE_AI_CLAUDE_PROPOSAL.md).
+> **Current update — 6 Nov 2026:** repository audit baseline `0169626` (#78/#79 included). Latest owner order reports simultaneous 10 watches / 2 gateways; no independent hardware validation in this audit. 60-minute endurance remains PENDING and does not block offline development. See [case recovery audit](ISSUE_76_CASE_LIFECYCLE_QA.md). Offline read-only AI foundation is authorized; external model calls and clinical predictions are not.
 
 
 Status (5 Nov 2026, Render live `97169b4`): **4-watch reconnect scenarios pass on the owner's iPhone/Bluefy** (owner-reported, see the third hardware result below). A fifth watch, 10/60-minute endurance and a second gateway (G02) are not yet verified.

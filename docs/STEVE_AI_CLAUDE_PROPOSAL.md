@@ -1,3 +1,5 @@
+> Update 6 Nov 2026: owner authorized offline read-only AI Shadow foundation and independent backend contract work. Earlier approval wording below is historical; external providers, health-data export and clinical predictions still require separate authorization.
+
 # ข้อเสนอ STEVE AI — งานออกแบบสำหรับ Claude (รอเจ้าของอนุมัติ)
 
 6 Nov 2026. This is a proposal, not implementation or deployment authorization.

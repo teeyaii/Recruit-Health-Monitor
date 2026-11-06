@@ -54,12 +54,13 @@ globalThis.fetch=async(url,options)=>{
  }
  let mode='';try{mode=await readFile(process.env.QA_CONTROL,'utf8');}catch{}
  if(mode!=='fail-always')await writeFile(process.env.QA_CONTROL,'');
- if(mode.startsWith('hold')){
+ if(mode.startsWith('hold')&&mode!=='hold-after'){
   await writeFile(process.env.QA_ENTERED,'1');
   while(true){try{await readFile(process.env.QA_RELEASE);break;}catch{}await new Promise(r=>setTimeout(r,10));}
  }
  if(mode==='fail-before'||mode==='fail-always'||mode==='hold-fail')return {ok:false,status:503};
  await atomic(process.env.QA_STATE,options.body);
+ if(mode==='hold-after'){await writeFile(process.env.QA_ENTERED,'1');await new Promise(()=>{});}
  if(mode==='fail-after-rollback-fails'){await writeFile(process.env.QA_CONTROL,'fail-always');return {ok:false,status:503};}
  if(mode==='fail-after')return {ok:false,status:503};
  return {ok:true,status:201};
@@ -70,7 +71,7 @@ globalThis.fetch=async(url,options)=>{
   STEVE_SLOT_MAP_JSON:JSON.stringify(map),STEVE_SYNTHETIC_MODE:synthetic?'1':'0',
   STEVE_SUPABASE_URL:'https://unit-independent-qa.supabase.co',STEVE_SUPABASE_SERVICE_ROLE_KEY:'sb_secret_'+randomBytes(32).toString('hex'),
   STEVE_DATA_ENCRYPTION_KEY:randomBytes(32).toString('base64'),STEVE_ARCHIVE_ENABLED:archive?'1':'0',QA_FAST_ARCHIVE:archive?'1':'0',QA_ARCHIVE:archiveFile,QA_CLOCK:clock,QA_STATE:state,QA_CONTROL:control,QA_ENTERED:entered,QA_RELEASE:release};
- const stop=async()=>{if(child&&child.exitCode===null){const done=once(child,'exit');child.kill();await done;}};
+ const stop=async(signal='SIGTERM')=>{if(child&&child.exitCode===null){const done=once(child,'exit');child.kill(signal);await done;}};
  t.after(async()=>{await stop();await rm(dir,{recursive:true,force:true});});
  const boot=async()=>{
   const socket=createServer();socket.listen(0,'127.0.0.1');await once(socket,'listening');
@@ -95,7 +96,7 @@ globalThis.fetch=async(url,options)=>{
  const controlSave=async mode=>{await rm(entered,{force:true});await rm(release,{force:true});await writeFile(control,mode);};
  const waitHeld=async()=>{for(let i=0;i<200;i++){try{await readFile(entered);return;}catch{}await delay(10);}throw Error('save did not reach hold');};
  await boot();
- return {archiveRows:async()=>{try{return JSON.parse(await readFile(archiveFile,'utf8'));}catch(e){if(e.code==='ENOENT')return [];throw e;}},stored,rewrite,controlSave,waitHeld,releaseSave:()=>writeFile(release,'1'),req,login,phone,sample,ingest,advance,enroll,now:()=>now,restart:async()=>{await stop();await boot();}};
+ return {archiveRows:async()=>{try{return JSON.parse(await readFile(archiveFile,'utf8'));}catch(e){if(e.code==='ENOENT')return [];throw e;}},stored,rewrite,controlSave,waitHeld,releaseSave:()=>writeFile(release,'1'),req,login,phone,sample,ingest,advance,enroll,now:()=>now,restart:async()=>{await stop();await boot();},crashRestart:async()=>{await stop('SIGKILL');await boot();}};
 }
 const snapshot=async(h,cookie)=>(await h.req('/api/snapshot',{cookie})).data.recruits;
 
@@ -449,4 +450,79 @@ test('SIMULATED #76: automatic case close, dedup, rearm, acknowledgement and EME
  await h.restart();const again=await h.login('medic');
  assert.equal((await h.req(path,{cookie:again})).data.review.status,'pending');
  assert.equal((await snapshot(h,again))[5].hr,null);
+});
+
+for(const action of ['request','close'])test(`SIMULATED #80: ambiguous ${action} is explicitly unresolved until restart readback`,async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R06');
+ const path='/api/medic-reviews/R06';
+ if(action==='close')assert.equal((await h.req(path,{method:'PUT',cookie:m,body:{version:0,action:'request',reason:'other'}})).status,200);
+ const version=action==='close'?1:0;
+ await h.controlSave('fail-after-rollback-fails');
+ const failed=await h.req(path,{method:'PUT',cookie:m,body:{version,action,reason:'other'}});
+ assert.equal(failed.status,503);
+ assert.equal(failed.data.persistence.state,'reconciliation_needed');
+ const uncertain=await h.req(path,{cookie:m});
+ assert.equal(uncertain.status,503,'memory rollback is not verified durable truth');
+ assert.equal(uncertain.data.persistence.state,'reconciliation_needed');
+ await h.controlSave('');await h.restart();const again=await h.login('medic');
+ const recovered=await h.req(path,{cookie:again});
+ assert.equal(recovered.status,200);
+ assert.equal(recovered.data.review.status,action==='close'?'closed':'pending');
+ assert.equal(recovered.data.persistence.state,'readback_confirmed');
+ assert.equal(recovered.data.persistence.operationId,failed.data.persistence.operationId);
+ assert.equal(recovered.data.persistence.outcome,'applied');
+ assert.equal((await h.req(path,{method:'PUT',cookie:again,body:{version,action,reason:'other'}})).status,409);
+});
+
+test('SIMULATED #80: queued same-version case commands cannot overwrite the confirmed winner',async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R06');
+ const path='/api/medic-reviews/R06',body={version:0,action:'request',reason:'other'};
+ await h.controlSave('hold');
+ const first=h.req(path,{method:'PUT',cookie:m,body});await h.waitHeld();
+ const second=h.req(path,{method:'PUT',cookie:m,body});
+ await h.releaseSave();
+ const replies=await Promise.all([first,second]);
+ assert.deepEqual(replies.map(r=>r.status),[200,409]);
+ assert.equal((await h.stored()).medicReviews.R06.version,1);
+ await h.restart();const again=await h.login('medic');
+ assert.equal((await h.req(path,{cookie:again})).data.review.version,1);
+});
+
+test('SIMULATED #80: SIGKILL after remote close commit recovers its recognized receipt',async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R06');
+ const path='/api/medic-reviews/R06';
+ assert.equal((await h.req(path,{method:'PUT',cookie:m,body:{version:0,action:'request',reason:'other'}})).status,200);
+ await h.controlSave('hold-after');
+ const interrupted=h.req(path,{method:'PUT',cookie:m,body:{version:1,action:'close'}}).catch(e=>e);
+ await h.waitHeld();const committed=await h.stored();
+ assert.equal(committed.medicReviews.R06.status,'closed');
+ await h.crashRestart();assert.ok(await interrupted instanceof Error);
+ const again=await h.login('medic'),recovered=await h.req(path,{cookie:again});
+ assert.equal(recovered.data.review.status,'closed');
+ assert.equal(recovered.data.persistence.state,'readback_confirmed');
+ assert.equal(recovered.data.persistence.operationId,committed.reviewReceipts.R06.operationId);
+});
+
+for(const receipt of [null,{R06:{operationId:'bad'}},{R99:{}}])test('SIMULATED #80: malformed case receipt prevents startup '+JSON.stringify(receipt),async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R06');
+ await h.rewrite(s=>{s.reviewReceipts=receipt;});
+ await assert.rejects(h.restart(),/failed to start/);
+});
+
+test('SIMULATED #80: automatic escalation during a held close preserves newer evidence',async t=>{
+ const h=await lab(t),m=await h.login('medic'),a=await h.phone('G02');await h.enroll(m,'R06');
+ const path='/api/medic-reviews/R06';
+ assert.equal((await h.req('/api/private-profile/R06',{method:'PUT',cookie:m,body:{version:0,confirmed:true,weightKg:null,heightCm:null,conditions:'',reviewThresholdBpm:150,reviewThresholdConfirmed:true}})).status,200);
+ assert.equal((await h.req('/api/training',{method:'PUT',cookie:m,body:{version:0,phase:'training'}})).status,200);
+ assert.equal((await h.req(path,{method:'PUT',cookie:m,body:{version:0,action:'request',reason:'other'}})).status,200);
+ for(let i=0;i<5;i++){await h.advance(7000);await h.ingest('G02',a,[h.sample('R06',{hr:160})]);}
+ await h.controlSave('hold');const close=h.req(path,{method:'PUT',cookie:m,body:{version:1,action:'close'}});await h.waitHeld();
+ await h.advance(7000);const ingest=h.ingest('G02',a,[h.sample('R06',{hr:160})]);
+ for(let i=0;i<100&&!(await snapshot(h,m))[5].autoCheck;i++)await delay(10);
+ assert.equal((await snapshot(h,m))[5].autoCheck,true);
+ await h.releaseSave();assert.equal((await close).status,409);assert.equal((await ingest).status,200);
+ const current=(await h.req(path,{cookie:m})).data.review;
+ assert.equal(current.status,'pending');assert.equal(current.version,2);assert.equal(current.autoPauseRequired,true);assert.ok(current.autoEvidence);
+ assert.deepEqual((await h.stored()).medicReviews.R06,current);
+ await h.restart();const again=await h.login('medic');assert.deepEqual((await h.req(path,{cookie:again})).data.review,current);
 });
