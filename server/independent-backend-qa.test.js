@@ -1,45 +1,75 @@
-// Issue #71: SIMULATED ONLY. Real HTTP handlers, isolated child clock and
+// Issues #71 / #74: SIMULATED ONLY. Real HTTP handlers, isolated child clock and
 // encrypted persistence with a local transport double. No external service/BLE.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {mkdtemp,writeFile,rename,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,rename,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {randomBytes} from 'node:crypto';
 import {createServer} from 'node:net';
 import {setTimeout as delay} from 'node:timers/promises';
+import {DurableState} from './durable-state.js';
 
 const slots=Array.from({length:10},(_,i)=>'R'+String(i+1).padStart(2,'0'));
 const map={G01:{},G02:{}};
 slots.forEach((s,i)=>map[i<5?'G01':'G02'][s]='qa-device-'+s);
 const initial=1793900000000;
-async function lab(t,{synthetic=false}={}){
+async function lab(t,{synthetic=false,archive=false}={}){
  const dir=await mkdtemp(join(tmpdir(),'steve-independent-qa-'));
  const clock=join(dir,'clock'),state=join(dir,'state'),hook=join(dir,'hook.mjs');
+ const control=join(dir,'control'),entered=join(dir,'entered'),release=join(dir,'release'),archiveFile=join(dir,'archive');
  let now=initial,child,base;
  const tokens=Object.fromEntries(['viewer','trainer','medic','G01','G02'].map(r=>[r,randomBytes(32).toString('hex')]));
  await writeFile(clock,String(now));
  await writeFile(hook,`
 import {readFileSync} from 'node:fs';
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile,rename} from 'node:fs/promises';
 Date.now=()=>Number(readFileSync(process.env.QA_CLOCK,'utf8'));
+if(process.env.QA_FAST_ARCHIVE==='1'){
+ const interval=globalThis.setInterval;globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===30000?50:ms,...args);
+}
+const atomic=async(file,value)=>{await writeFile(file+'.tmp',value);await rename(file+'.tmp',file);};
 globalThis.fetch=async(url,options)=>{
+ if(String(url).startsWith('https://unit-independent-qa.supabase.co/rest/v1/steve_hr_archive')){
+  const q=new URL(url).searchParams;
+  let rows=[];try{rows=JSON.parse(await readFile(process.env.QA_ARCHIVE,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
+  if(options.method==='POST')for(const row of JSON.parse(options.body)){
+   rows=rows.filter(r=>!(r.slot===row.slot&&r.owner===row.owner&&r.minute_ms===row.minute_ms));rows.push(row);
+  }
+  if(options.method==='DELETE')rows=rows.filter(r=>q.has('slot')?r.slot!==q.get('slot').slice(3):r.minute_ms>=Number(q.get('minute_ms').slice(3)));
+  if(options.method==='GET'){
+   if(q.get('limit')==='0')return {ok:true,json:async()=>[]};
+   const selected=rows.filter(r=>(!q.has('slot')||r.slot===q.get('slot').slice(3))&&(!q.has('owner')||r.owner===q.get('owner').slice(3)));
+   return {ok:true,json:async()=>selected};
+  }
+  await atomic(process.env.QA_ARCHIVE,JSON.stringify(rows));return {ok:true,status:201};
+ }
  if(!String(url).startsWith('https://unit-independent-qa.supabase.co/rest/v1/steve_secure_state'))throw Error('External network forbidden');
  if(options.method==='GET'){
   let rows=[];try{rows=[JSON.parse(await readFile(process.env.QA_STATE,'utf8'))];}catch(e){if(e.code!=='ENOENT')throw e;}
   return {ok:true,json:async()=>rows};
  }
- await writeFile(process.env.QA_STATE,options.body);return {ok:true,status:201};
+ let mode='';try{mode=await readFile(process.env.QA_CONTROL,'utf8');}catch{}
+ if(mode!=='fail-always')await writeFile(process.env.QA_CONTROL,'');
+ if(mode.startsWith('hold')){
+  await writeFile(process.env.QA_ENTERED,'1');
+  while(true){try{await readFile(process.env.QA_RELEASE);break;}catch{}await new Promise(r=>setTimeout(r,10));}
+ }
+ if(mode==='fail-before'||mode==='fail-always'||mode==='hold-fail')return {ok:false,status:503};
+ await atomic(process.env.QA_STATE,options.body);
+ if(mode==='fail-after-rollback-fails'){await writeFile(process.env.QA_CONTROL,'fail-always');return {ok:false,status:503};}
+ if(mode==='fail-after')return {ok:false,status:503};
+ return {ok:true,status:201};
 };`);
  const env={PATH:process.env.PATH,NODE_ENV:'test',COOKIE_SECURE:'1',
   STEVE_VIEWER_TOKEN:tokens.viewer,STEVE_TRAINER_TOKEN:tokens.trainer,STEVE_MEDIC_TOKEN:tokens.medic,
   STEVE_GATEWAY_TOKEN_G01:tokens.G01,STEVE_GATEWAY_TOKEN_G02:tokens.G02,
   STEVE_SLOT_MAP_JSON:JSON.stringify(map),STEVE_SYNTHETIC_MODE:synthetic?'1':'0',
   STEVE_SUPABASE_URL:'https://unit-independent-qa.supabase.co',STEVE_SUPABASE_SERVICE_ROLE_KEY:'sb_secret_'+randomBytes(32).toString('hex'),
-  STEVE_DATA_ENCRYPTION_KEY:randomBytes(32).toString('base64'),STEVE_ARCHIVE_ENABLED:'0',QA_CLOCK:clock,QA_STATE:state};
+  STEVE_DATA_ENCRYPTION_KEY:randomBytes(32).toString('base64'),STEVE_ARCHIVE_ENABLED:archive?'1':'0',QA_FAST_ARCHIVE:archive?'1':'0',QA_ARCHIVE:archiveFile,QA_CLOCK:clock,QA_STATE:state,QA_CONTROL:control,QA_ENTERED:entered,QA_RELEASE:release};
  const stop=async()=>{if(child&&child.exitCode===null){const done=once(child,'exit');child.kill();await done;}};
  t.after(async()=>{await stop();await rm(dir,{recursive:true,force:true});});
  const boot=async()=>{
@@ -59,8 +89,13 @@ globalThis.fetch=async(url,options)=>{
  const ingest=(gateway,cookie,readings,extra={})=>req('/api/ingest',{method:'POST',cookie,headers:{'X-STEVE-Gateway':'1'},body:{gateway,source:synthetic?'SIMULATED':'GATEWAY',readings,...extra}});
  const advance=async(ms)=>{now+=ms;await writeFile(clock+'.tmp',String(now));await rename(clock+'.tmp',clock);};
  const enroll=async(cookie,id,extra={})=>{const r=await req('/api/roster/'+id,{method:'PUT',cookie,body:{version:0,code:'QA_'+id,restriction:'none',observation:'none',...extra}});assert.equal(r.status,200);return r;};
+ const codec=new DurableState(env);
+ const stored=async()=>codec.decrypt(JSON.parse(await readFile(state,'utf8')).envelope);
+ const rewrite=async(fn)=>{const data=await stored();fn(data);await writeFile(state,JSON.stringify({id:'primary',envelope:codec.encrypt(data)}));};
+ const controlSave=async mode=>{await rm(entered,{force:true});await rm(release,{force:true});await writeFile(control,mode);};
+ const waitHeld=async()=>{for(let i=0;i<200;i++){try{await readFile(entered);return;}catch{}await delay(10);}throw Error('save did not reach hold');};
  await boot();
- return {req,login,phone,sample,ingest,advance,enroll,now:()=>now,restart:async()=>{await stop();await boot();}};
+ return {archiveRows:async()=>{try{return JSON.parse(await readFile(archiveFile,'utf8'));}catch(e){if(e.code==='ENOENT')return [];throw e;}},stored,rewrite,controlSave,waitHeld,releaseSave:()=>writeFile(release,'1'),req,login,phone,sample,ingest,advance,enroll,now:()=>now,restart:async()=>{await stop();await boot();}};
 }
 const snapshot=async(h,cookie)=>(await h.req('/api/snapshot',{cookie})).data.recruits;
 
@@ -196,7 +231,7 @@ test('SIMULATED: reproduce previous-wearer replay across encrypted restart',asyn
  await h.restart();const newPhone=await h.phone('G01');
  const replay=await h.ingest('G01',newPhone,[old]);
  assert.equal(replay.status,200);
- await t.test('P1: previous wearer packet must not be attached to QA_NEW after restart',{todo:process.env.STEVE_QA_ENFORCE_KNOWN_DEFECTS==='1'?false:'Issue #71: persist reassignment cutoff before accepting queued frames'},()=>{
+ await t.test('P1: previous wearer packet must not be attached to QA_NEW after restart',()=>{
   assert.equal(replay.data.accepted,0);
  });
 });
@@ -213,3 +248,144 @@ test('SIMULATED: disconnect refreshes ownership; source spoofing and cross-origi
  await h.advance(10*60*60*1000);
  assert.equal((await h.ingest('G01',a,[h.sample('R01')])).status,401,'expired browser session cannot write');
  });
+
+const change=(h,cookie,code,version=1,slot='R01')=>h.req('/api/roster/'+slot,{method:'PUT',cookie,body:{version,code,restriction:'none',observation:'none'}});
+for(const failure of ['fail-before','fail-after'])test('SIMULATED: '+failure+' rolls back wearer, cutoff, profile and pending case durably',async t=>{
+ const h=await lab(t),m=await h.login('medic'),a=await h.phone('G01');
+ await h.enroll(m,'R01');await h.advance(1);
+ const old=h.sample('R01');assert.equal((await h.ingest('G01',a,[old])).data.accepted,1);
+ assert.equal((await h.req('/api/private-profile/R01',{method:'PUT',cookie:m,body:{version:0,confirmed:true,weightKg:null,heightCm:null,conditions:'QA_OLD_PROFILE'}})).status,200);
+ assert.equal((await h.req('/api/medic-reviews/R01',{method:'PUT',cookie:m,body:{version:0,action:'request',reason:'other',note:'QA_OLD_CASE'}})).status,200);
+ const before=await h.stored();await h.advance(1);await h.controlSave(failure);
+ const result=await change(h,m,'QA_NEW');assert.equal(result.status,503);assert.equal(result.data.ok,undefined);
+ assert.deepEqual(await h.stored(),before,'compensating write restores the confirmed state even after lost ACK');
+ assert.equal((await h.req('/api/roster',{cookie:m})).data.slots[0].code,'QA_R01');
+ assert.equal((await h.req('/api/private-profile/R01',{cookie:m})).data.profile.conditions,'QA_OLD_PROFILE');
+ assert.equal((await h.req('/api/medic-reviews/R01',{cookie:m})).data.review.status,'pending');
+ await h.restart();const again=await h.login('medic');
+ assert.equal((await h.req('/api/roster',{cookie:again})).data.slots[0].version,1);
+ await h.advance(1);assert.equal((await change(h,again,'QA_NEW')).status,200);
+ const phone=await h.phone('G01');assert.equal((await h.ingest('G01',phone,[old])).data.accepted,0);
+ const fresh=await h.stored();assert.equal(fresh.roster.slots.R01.code,'QA_NEW');assert.equal(fresh.reassignmentCutoffs.R01,h.now());
+ assert.equal(fresh.history.R01,undefined);assert.equal(fresh.profiles.R01,undefined);assert.equal(fresh.medicReviews.R01,undefined);
+});
+
+test('SIMULATED: unconfirmed rollback blocks only its slot until explicit successful retry',async t=>{
+ const h=await lab(t),m=await h.login('medic'),a=await h.phone('G01'),b=await h.phone('G02');
+ await h.enroll(m,'R01');await h.advance(1);await h.controlSave('fail-always');
+ assert.equal((await change(h,m,'QA_NEW')).status,503);
+ assert.equal((await h.req('/api/roster',{cookie:m})).data.slots[0].code,'QA_R01');
+ assert.equal((await snapshot(h,m))[0].state,'PAUSED');
+ assert.equal((await h.ingest('G01',a,[h.sample('R01')])).data.accepted,0);
+ assert.equal((await h.ingest('G02',b,[h.sample('R06')])).data.accepted,1);
+ await h.controlSave('');await h.advance(1);
+ assert.equal((await change(h,m,'QA_NEW')).status,200);
+ await h.advance(1);assert.equal((await h.ingest('G01',a,[h.sample('R01')])).data.accepted,1);
+});
+
+test('SIMULATED: held save never publishes uncommitted wearer; blocks same-slot writes while peers and group updates survive',async t=>{
+ const h=await lab(t),m=await h.login('medic'),a=await h.phone('G01'),b=await h.phone('G02');
+ await h.enroll(m,'R01');await h.enroll(m,'R06');await h.advance(1);const old=h.sample('R01');
+ await h.ingest('G01',a,[old]);await h.advance(1);const cutoff=h.now();
+ await h.controlSave('hold');const changing=change(h,m,'QA_NEW');await h.waitHeld();
+ assert.equal((await h.req('/api/roster',{cookie:m})).data.slots[0].code,'QA_R01');
+ assert.equal((await h.stored()).roster.slots.R01.code,'QA_R01');
+ assert.equal((await snapshot(h,m))[0].hr,null);
+ assert.equal((await h.ingest('G01',a,[old])).data.accepted,0);
+ assert.equal((await change(h,m,'QA_RACE')).status,409);
+ assert.equal((await h.req('/api/private-profile/R01',{method:'PUT',cookie:m,body:{version:0,confirmed:true,weightKg:null,heightCm:null,conditions:'QA_RACE'}})).status,409);
+ assert.equal((await h.req('/api/medic-reviews/R01',{method:'PUT',cookie:m,body:{version:0,action:'request',reason:'other'}})).status,409);
+ assert.equal((await h.ingest('G02',b,[h.sample('R06')])).data.accepted,1);
+ const peerChange=change(h,m,'QA_PEER',1,'R06');
+ const phase=h.req('/api/training',{method:'PUT',cookie:m,body:{version:0,phase:'training'}});
+ await h.releaseSave();assert.equal((await changing).status,200);assert.equal((await peerChange).status,200);assert.equal((await phase).status,200);
+ const persisted=await h.stored();assert.equal(persisted.roster.slots.R01.code,'QA_NEW');assert.equal(persisted.roster.slots.R06.code,'QA_PEER');
+ assert.equal(persisted.roster.groupPhase.phase,'training');assert.equal(persisted.reassignmentCutoffs.R01,cutoff);
+ await h.restart();const again=await h.phone('G01');
+ assert.equal((await h.ingest('G01',again,[old])).data.accepted,0);
+ assert.equal((await h.ingest('G01',again,[h.sample('R01',{timestamp:cutoff})])).data.accepted,0,'boundary is inclusive');
+ await h.advance(1);assert.equal((await h.ingest('G01',again,[h.sample('R01')])).data.accepted,1);
+});
+
+test('SIMULATED: serialized roster saves cannot assign one code to two slots',async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R01');await h.enroll(m,'R06');await h.advance(1);
+ await h.controlSave('hold');const first=change(h,m,'QA_UNIQUE');await h.waitHeld();
+ const second=change(h,m,'QA_UNIQUE',1,'R06');await delay(30);await h.releaseSave();
+ assert.equal((await first).status,200);assert.equal((await second).status,409);
+ const roster=(await h.req('/api/roster',{cookie:m})).data.slots;
+ assert.equal(roster.filter(r=>r.code==='QA_UNIQUE').length,1);
+});
+
+for(const partial of [false,true])test('SIMULATED: legacy '+(partial?'partial':'missing')+' cutoff migration rejects ambiguous old packets then resumes',async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R01');await h.enroll(m,'R06');
+ const retained=(await h.stored()).reassignmentCutoffs.R06;
+ await h.rewrite(state=>{if(partial)delete state.reassignmentCutoffs.R01;else delete state.reassignmentCutoffs;});
+ await h.advance(2);const bootAt=h.now();await h.restart();
+ const a=await h.phone('G01');
+ assert.equal((await h.ingest('G01',a,[h.sample('R01',{timestamp:initial})])).data.accepted,0);
+ assert.equal((await h.ingest('G01',a,[h.sample('R01',{timestamp:bootAt+1000})])).data.accepted,0);
+ const migrated=await h.stored();assert.equal(migrated.reassignmentCutoffs.R01,bootAt+1000);
+ if(partial)assert.equal(migrated.reassignmentCutoffs.R06,retained);
+ await h.advance(1001);assert.equal((await h.ingest('G01',a,[h.sample('R01')])).data.accepted,1);
+ await h.restart();assert.equal((await h.stored()).reassignmentCutoffs.R01,bootAt+1000,'migration must not extend every restart');
+});
+
+test('SIMULATED: reconnect cannot restore previous wearer history/profile/automatic alert after restart',async t=>{
+ const h=await lab(t),m=await h.login('medic'),a=await h.phone('G01');await h.enroll(m,'R01');
+ assert.equal((await h.req('/api/private-profile/R01',{method:'PUT',cookie:m,body:{version:0,confirmed:true,weightKg:null,heightCm:null,conditions:'QA_OLD',reviewThresholdBpm:150,reviewThresholdConfirmed:true}})).status,200);
+ assert.equal((await h.req('/api/training',{method:'PUT',cookie:m,body:{version:0,phase:'training'}})).status,200);
+ let old;
+ for(let i=0;i<6;i++){await h.advance(7000);old=h.sample('R01',{hr:160});assert.equal((await h.ingest('G01',a,[old])).data.accepted,1);}
+ assert.equal((await snapshot(h,m))[0].autoCheck,true);
+ await h.advance(1);assert.equal((await change(h,m,'QA_NEW')).status,200);await h.restart();
+ const again=await h.login('medic'),phone=await h.phone('G01');
+ assert.equal((await h.ingest('G01',phone,[old])).data.accepted,0);
+ let detail=(await h.req('/api/medic-reviews/R01',{cookie:again})).data;
+ assert.deepEqual(detail.points,[]);assert.equal(detail.review.status,'none');
+ assert.equal((await snapshot(h,again))[0].autoCheck,false);
+ await h.advance(1);assert.equal((await h.ingest('G01',phone,[h.sample('R01',{hr:75})])).data.accepted,1);
+ detail=(await h.req('/api/medic-reviews/R01',{cookie:again})).data;
+ assert.deepEqual(detail.points,[[h.now(),75]]);assert.equal(detail.review.status,'none');
+});
+
+test('SIMULATED: commit ACK lost and compensation fails; restart restores matching new wearer and cutoff safely',async t=>{
+ const h=await lab(t),m=await h.login('medic'),a=await h.phone('G01');await h.enroll(m,'R01');await h.advance(1);
+ const old=h.sample('R01');await h.ingest('G01',a,[old]);await h.advance(1);
+ await h.controlSave('fail-after-rollback-fails');assert.equal((await change(h,m,'QA_NEW')).status,503);
+ assert.equal((await snapshot(h,m))[0].state,'PAUSED');assert.equal((await h.ingest('G01',a,[old])).data.accepted,0);
+ assert.equal((await h.stored()).roster.slots.R01.code,'QA_NEW','remote commit succeeded although response was lost');
+ await h.controlSave('');await h.restart();const again=await h.phone('G01'),viewer=await h.login('medic');
+ assert.equal((await h.req('/api/roster',{cookie:viewer})).data.slots[0].code,'QA_NEW');
+ assert.equal((await h.ingest('G01',again,[old])).data.accepted,0);
+ await h.advance(1);assert.equal((await h.ingest('G01',again,[h.sample('R01')])).data.accepted,1);
+});
+
+test('SIMULATED: legacy migration write failure prevents listening; a healthy retry resumes',async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R01');
+ await h.rewrite(s=>{delete s.reassignmentCutoffs;});await h.controlSave('fail-before');
+ await assert.rejects(h.restart(),/failed to start/);
+ await h.controlSave('');await h.restart();
+ assert.equal((await h.stored()).reassignmentCutoffs.R01,h.now()+1000);
+});
+
+for(const invalid of [null,{R01:-1},{R01:Number.MAX_SAFE_INTEGER},{R99:1}])test('SIMULATED: malformed durable cutoff fails closed: '+JSON.stringify(invalid),async t=>{
+ const h=await lab(t),m=await h.login('medic');await h.enroll(m,'R01');
+ await h.rewrite(s=>{s.reassignmentCutoffs=invalid;});
+ await assert.rejects(h.restart(),/failed to start/);
+});
+
+test('SIMULATED: archived and pending old-wearer samples cannot enter the new archive after restart',async t=>{
+ const h=await lab(t,{archive:true}),m=await h.login('medic'),a=await h.phone('G01');await h.enroll(m,'R01');await h.advance(1);
+ const flush=async()=>{await h.advance(90000);for(let i=0;i<200;i++){if((await h.archiveRows()).length)return;await delay(10);}throw Error('archive did not flush');};
+ assert.equal((await h.ingest('G01',a,[h.sample('R01',{hr:160})])).data.accepted,1);await flush();
+ assert.ok((await h.archiveRows()).length>0,'old history was durably archived');
+ const old=h.sample('R01',{hr:160});assert.equal((await h.ingest('G01',a,[old])).data.accepted,1);
+ await h.advance(1);assert.equal((await change(h,m,'QA_NEW')).status,200);
+ assert.equal((await h.archiveRows()).length,0,'existing archive clear semantics preserved');
+ await h.restart();const phone=await h.phone('G01'),medic=await h.login('medic');
+ assert.equal((await h.ingest('G01',phone,[old])).data.accepted,0);
+ assert.deepEqual((await h.req('/api/archive/R01?hours=4',{cookie:medic})).data.points,[]);
+ await h.advance(1);const freshAt=h.now();assert.equal((await h.ingest('G01',phone,[h.sample('R01',{hr:75})])).data.accepted,1);
+ await flush();
+ assert.deepEqual((await h.req('/api/archive/R01?hours=4',{cookie:medic})).data.points,[[freshAt,75]]);
+});
