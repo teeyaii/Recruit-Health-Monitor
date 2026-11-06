@@ -448,6 +448,10 @@ function readinessDetail(state,slot,now){
   if(/ส่ง HTTPS ไม่สำเร็จ/.test(e))return " • ส่งข้อมูลไม่ถึงเซิร์ฟเวอร์ ตรวจอินเทอร์เน็ต";
   return s?.ack==="กำลังส่ง HTTPS"?" • กำลังส่ง":"";
  }
+ if(state==="BLE_NO_DATA"&&s){
+  if(s.repairing)return " • กำลังสมัครรับข้อมูลใหม่";
+  if(!s.lastAt)return " • ยังไม่เคยได้รับข้อมูลหลังเชื่อม";
+ }
  if(state==="DISCONNECTED"&&b?.verified&&b.autoEnabled){
   if(!Number.isFinite(b.nextRetryAt??0))return " • ต้องกดเชื่อมใหม่";
   if(connecting&&attemptOwner?.slot===slot)return " • กำลังเชื่อมกลับ";
@@ -754,6 +758,17 @@ function waitForAdvertisement(s,ms){
   }catch{finish("unsupported");}
  });
 }
+// Issue #77: every GATT operation the page issues (connect, service/characteristic
+// lookup, start/stopNotifications) runs one at a time through this FIFO queue.
+// Each op is bounded, so a hung op releases the queue at its timeout and can never
+// starve the other watches. The native chooser is NOT queued (it needs the gesture).
+let bleChain=Promise.resolve();
+function bleExclusive(s,fn,ms=GATT_STEP_MS){
+ const run=()=>s.closed?Promise.reject({name:"AbortError"}):bounded(s,Promise.resolve().then(fn),ms);
+ const result=bleChain.then(run,run);
+ bleChain=result.then(()=>{},()=>{});
+ return result;
+}
 function validAttempt(s){
  if(s.closed||document.hidden||s.generation!==generation||!auth)throw {name:"AbortError"};
 }
@@ -844,18 +859,20 @@ async function connectBand(slot,expected,mode){
    const b=bindings.get(slot);if(b)b.advert=seen;
   }
   step(s,"gatt");
-  const connection=s.device.gatt.connect();
-  Promise.resolve(connection).then(()=>{
-   if(s.closed&&!Array.from(live.values()).some(other=>other!==s&&other.device?.id===s.device.id)){
-    try{s.device.gatt.disconnect()}catch{}
-   }
-  },()=>{});
-  const gatt=await bounded(s,connection);
+  const gatt=await bleExclusive(s,()=>{
+   const connection=s.device.gatt.connect();
+   Promise.resolve(connection).then(()=>{
+    if(s.closed&&!Array.from(live.values()).some(other=>other!==s&&other.device?.id===s.device.id)){
+     try{s.device.gatt.disconnect()}catch{}
+    }
+   },()=>{});
+   return connection;
+  });
   if(s.closed&&s.device.gatt.connected)s.device.gatt.disconnect();
   validAttempt(s);step(s,"service");
-  const service=await bounded(s,gatt.getPrimaryService(HR_SERVICE));
+  const service=await bleExclusive(s,()=>gatt.getPrimaryService(HR_SERVICE));
   validAttempt(s);step(s,"characteristic");
-  s.characteristic=await bounded(s,service.getCharacteristic(HR_MEASUREMENT));
+  s.characteristic=await bleExclusive(s,()=>service.getCharacteristic(HR_MEASUREMENT));
   validAttempt(s);step(s,"subscribe");
   s.onValue=event=>{
    if(s.closed||document.hidden||!s.ready)return;
@@ -874,7 +891,8 @@ async function connectBand(slot,expected,mode){
     return;
    }
     const now=Date.now(),sequence=++s.sequence;
-   s.lastAt=now;s.bpm=bpm;if(bpm!==null)s.softRepaired=false;transition(s,bpm===null?"RECOVERABLE":"LIVE");s.stage="receiving";
+   s.lastAt=now;s.bpm=bpm;
+   if(bpm!==null){s.softRepaired=false;const b=bindings.get(slot);if(b&&b.failures){b.failures=0;b.lastError="";}}transition(s,bpm===null?"RECOVERABLE":"LIVE");s.stage="receiving";
    s.state=bpm===null?"CONTACT LOST / NO DATA":stages.receiving+" • BLE "+bpm+" BPM";
    if(bpm===null)s.ack="NO DATA";
    paint(s);
@@ -903,7 +921,7 @@ async function connectBand(slot,expected,mode){
    }).finally(()=>{s.busy=false;});
   };
   // Match the working Google notifications sample: subscribe, then attach listener.
-  await bounded(s,s.characteristic.startNotifications());
+  await bleExclusive(s,()=>s.characteristic.startNotifications());
   validAttempt(s);
   s.characteristic.addEventListener("characteristicvaluechanged",s.onValue);
   if(s.probe){
@@ -1010,7 +1028,7 @@ $("connect").addEventListener("click",()=>{
 });
 $("slot").addEventListener("change",()=>{$("expected").value=bindings.get($("slot").value)?.expected||"";});
 async function connectAllRemembered(){
- if(!auth||bulkConnecting||connecting||chooserPending||document.hidden)return;
+ if(!auth||bulkConnecting||connecting||recoveryRunning||chooserPending||document.hidden)return;
  bulkConnecting=true;controls();
  const epoch=generation,targets=provision.slice(),missing=[],failed=[];
  let started=0,already=0;
@@ -1179,7 +1197,9 @@ async function recoverKnown(){
     // error would hide the real cause. Back off and retry later instead.
     if(attempt===0&&binding.device&&/TimeoutError|NetworkError/.test(sessions.get(slot)?.error||""))break;
    }
-   if(live.get(slot)?.ready){binding.failures=0;binding.nextRetryAt=0;binding.lastError="";}
+   // BLE setup succeeded, but recovery is only proven by a first valid HR sample
+   // (see onValue). Keep the failure history so silent links stay paced.
+   if(live.get(slot)?.ready){binding.nextRetryAt=0;}
    else if(epoch===generation&&!document.hidden){
     // Usually out of range: keep retrying in the foreground with backoff so the
     // watch reconnects by itself when the wearer walks back.
@@ -1207,13 +1227,14 @@ document.addEventListener("visibilitychange",()=>{
 window.addEventListener("pagehide",()=>{if(chooserPending)return;suspend();});
 const SOFT_REPAIR_MS=25000, HARD_REPAIR_MS=45000;
 async function resubscribe(s){
- if(s.closed||!s.characteristic||!s.device?.gatt?.connected)return;
- s.notifications="สมัคร Notify ใหม่บนการเชื่อมต่อเดิม";paint(s);
- try{if(typeof s.characteristic.stopNotifications==="function")await bounded(s,s.characteristic.stopNotifications());}catch{}
- if(s.closed)return;
- try{await bounded(s,s.characteristic.startNotifications());if(!s.closed)s.notifications="รับ Notify แล้ว (สมัครใหม่)";}
- catch{if(!s.closed)s.notifications="สมัคร Notify ใหม่ไม่สำเร็จ • รอเชื่อมใหม่";}
- if(!s.closed)paint(s);
+ if(s.closed||s.repairing||!s.characteristic||!s.device?.gatt?.connected)return;
+ s.repairing=true;s.notifications="สมัคร Notify ใหม่บนการเชื่อมต่อเดิม";paint(s);
+ try{
+  try{if(typeof s.characteristic.stopNotifications==="function")await bleExclusive(s,()=>s.characteristic.stopNotifications());}catch{}
+  if(s.closed)return;
+  try{await bleExclusive(s,()=>s.characteristic.startNotifications());if(!s.closed)s.notifications="รับ Notify แล้ว (สมัครใหม่)";}
+  catch{if(!s.closed)s.notifications="สมัคร Notify ใหม่ไม่สำเร็จ • รอเชื่อมใหม่";}
+ }finally{s.repairing=false;if(!s.closed)paint(s);}
 }
 setInterval(()=>{
  if(auth && Date.now()>=auth.expiresAt)expireSession();
@@ -1228,11 +1249,13 @@ setInterval(()=>{
   // Only repair missing BLE notifications. Fresh BLE with an HTTP failure must
   // keep its subscription and retry uploads on subsequent samples.
   const silentFor=Date.now()-(s.lastAt??s.readyAt);
-  const repairable=!document.hidden&&!chooserPending&&!connecting&&!recoveryRunning&&s.ready&&!s.probe&&
-     binding?.verified&&binding.autoEnabled&&auth;
+  const quiet=!document.hidden&&!chooserPending&&!connecting&&!recoveryRunning&&!bulkConnecting&&
+     s.ready&&!s.probe&&!s.repairing&&binding?.autoEnabled&&auth;
+  const repairable=quiet&&binding?.verified;
   // Tier 1: re-arm notifications on the SAME GATT link. Band 10 can pause HR
   // briefly; a forced disconnect is far more disruptive on iOS than a resubscribe.
-  if(repairable&&silentFor>SOFT_REPAIR_MS&&!s.softRepaired){s.softRepaired=true;resubscribe(s);continue;}
+  // Same device and characteristic: allowed before the first verified sample too.
+  if(quiet&&silentFor>SOFT_REPAIR_MS&&!s.softRepaired){s.softRepaired=true;resubscribe(s);continue;}
   // Tier 2: bounded full reconnect of this slot only.
   // After two quick repairs the slot is handed to the backoff scheduler instead
   // of staying parked as a STALE "live" session that no retry ever reaches
