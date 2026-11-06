@@ -443,6 +443,7 @@ body.presentation .grid .card[data-risk]{min-height:0}
   <p class="medic-caution">ข้อมูลจากสายรัดเป็นข้อมูลประกอบการตรวจ ไม่ใช่คำวินิจฉัย • ตรวจคุณภาพสัญญาณก่อนประเมิน</p>
   <p id="medicRecoveryShadow" class="status-note">งานวิจัยช่วงพัก • ยังไม่มีข้อมูล</p>
   <div class="operator-actions"><button type="button" id="medicClose" class="secondary">ปิดรายการหลังประเมินแล้ว</button></div>
+  <p class="status-note">ปิดรายการ = บันทึกว่าเจ้าหน้าที่ประเมินผู้สวมแล้ว • ไม่ใช่การอนุญาตให้กลับไปฝึกโดยอัตโนมัติ • การรับทราบในทะเบียนไม่ใช่การปิดรายการนี้</p>
   <p id="medicMessage" role="status"></p>
  </details>
  <details><summary>ประวัติการแก้ไข</summary><div id="rosterAudit">ยังไม่มีการเปลี่ยนแปลง</div></details>
@@ -579,7 +580,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   const alertClass=emergencyFlag?"alert-emergency":r.autoCheck?"alert-auto-check":watchFlag?"watch":r.paused?"pause":stale?"stale":"fresh";
   const signal=state==="DISCONNECTED"?"DISCONNECTED":stale?"NO DATA":"LIVE";
   const activity=r.autoCheck?"PAUSE / CHECK":r.paused?"PAUSED":"";
-  return '<article class="card '+alertClass+'" data-risk="'+risk+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+(synthetic?' • SIMULATED':'')+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>BPM</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div>'+(activity?'<p class="card-activity safety">'+activity+'</p>':'')+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
+  return '<article class="card '+alertClass+'" data-risk="'+risk+'"><div class="card-personnel-head"><div class="card-personnel-title"><span class="card-personnel-caption">ผู้สวม</span><strong class="card-personnel-code">'+escapeHtml(registered?profile.code:"ยังไม่ลงทะเบียน")+'</strong><small class="card-slot-label">ช่อง '+escapeHtml(r.id)+(synthetic?' • SIMULATED':'')+'</small></div><span class="status-chip">'+chip+'</span></div><div class="bpm">'+(stale?'—':r.hr)+' <small>BPM</small></div><div class="signal-line"><span>สัญญาณ</span><span class="'+(stale?'signal-lost':'signal-ok')+'">'+signal+'</span></div>'+(activity?'<p class="card-activity safety">'+activity+'</p>':'')+(registered&&(archiveAllowed()||!stale)?'<button type="button" class="history-open" data-history-slot="'+escapeHtml(r.id)+'">ดูแนวโน้ม BPM ย้อนหลัง</button>':'')+(registered&&r.autoCheck&&medicReviewAllowed()?'<button type="button" class="history-open review-open" data-review-slot="'+escapeHtml(r.id)+'">เปิดรายการรอประเมิน</button>':'')+(registered&&note?'<p class="safety">'+escapeHtml(note)+(profile.acknowledged?' • รับทราบแล้ว':' • ยังไม่รับทราบ')+'</p>':'')+'</article>';
  }).join("");
  if(!shown.length)cards.innerHTML='<p class="notice">ยังไม่มีผู้สวมที่ลงทะเบียน</p>';
  panel.hidden=critical.length===0;
@@ -590,7 +591,7 @@ function draw(data){if(!data||!Array.isArray(data.recruits))return;last=data;
   '<div>'+autoCases.map(id=>{
    const r=shown.find(p=>p.id===id),p=rosterData.slots.find(p=>p.id===id),a=r?.autoAlert;
    const evidence=a?.evidence;
-   return '<details><summary>'+escapeHtml(id)+' • '+escapeHtml(p?.code||"")+' — ควรพักและตรวจ</summary><small>'+escapeHtml(a?.reason||"ตรวจพบชีพจรสูงต่อเนื่อง")+'<br>'+escapeHtml(a?.summary||"ไม่มีรายละเอียดค่าขณะแจ้งเตือนของเคสเดิม")+
+   return '<details><summary>'+escapeHtml(id)+' • '+escapeHtml(p?.code||"")+' — ควรพักและตรวจ</summary>'+(medicReviewAllowed()?'<button type="button" class="review-open" data-review-slot="'+escapeHtml(id)+'">เปิดรายการรอประเมิน</button>':'')+'<small>'+escapeHtml(a?.reason||"ตรวจพบชีพจรสูงต่อเนื่อง")+'<br>'+escapeHtml(a?.summary||"ไม่มีรายละเอียดค่าขณะแจ้งเตือนของเคสเดิม")+
     (evidence?'<br>เวลาค่าที่ใช้แจ้งเตือน '+escapeHtml(new Date(evidence.lastAt).toLocaleString("th-TH")):'')+
     '<br>'+escapeHtml(a?.action||"พักกิจกรรม ตรวจยืนยันชีพจรและให้เจ้าหน้าที่ประเมินอาการ")+
     '<br>'+escapeHtml(a?.limitation||"ข้อมูลชีพจรจากอุปกรณ์ไม่ใช่การวินิจฉัย")+'</small></details>';
@@ -848,9 +849,24 @@ function openHistory(slot){
  refreshHistory();
  byId("historyPanel").scrollIntoView?.({behavior:"smooth",block:"start"});
 }
+// Uses the existing roster selector + Medic Review panel and its existing permission
+// (the panel is only revealed for operator roles); it adds no new data path.
+function medicReviewAllowed(){return !!operatorRole&&typeof byId==="function"&&byId("medicPanel")?.hidden===false;}
+function openMedicReview(slot){
+ if(!medicReviewAllowed()||!rosterData?.slots?.some(p=>p.id===slot&&p.code))return;
+ byId("rosterSlot").value=slot;fillRoster();
+ if(byId("medicPanel").open)loadMedicReview();else byId("medicPanel").open=true; // ontoggle loads
+ byId("medicPanel").scrollIntoView?.({behavior:"smooth",block:"start"});
+}
 byId("cards").onclick=e=>{
+ const review=e.target.closest("button[data-review-slot]")?.dataset.reviewSlot;
+ if(review)return openMedicReview(review);
  const slot=e.target.closest("button[data-history-slot]")?.dataset.historySlot;
  if(slot)openHistory(slot);
+};
+byId("autoPauseAlerts").onclick=e=>{
+ const review=e.target.closest("button[data-review-slot]")?.dataset.reviewSlot;
+ if(review)openMedicReview(review);
 };
 byId("historyClose").onclick=closeHistory;
 byId("historyRanges").onclick=e=>{
@@ -906,6 +922,17 @@ async function loadRoster(keepSelection=false){
   "ยังไม่มีรายการ";
  if(last)draw(last);
 }
+// One place that turns a failed write into a cause-specific Thai message.
+// Never reports success, never retries a write, tolerates non-JSON error pages.
+async function mutationFailure(r){
+ let detail="";try{const d=await r.json();detail=typeof d?.error==="string"?d.error:"";}catch{}
+ if(r.status===401)return "หมดเวลาเข้าใช้งาน • เข้าสู่ระบบใหม่ (ข้อมูลที่กรอกยังอยู่ ยังไม่ได้บันทึก)";
+ if(r.status===403)return "บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้ • ยังไม่ได้บันทึก";
+ if(r.status===409)return "ข้อมูลถูกแก้จากอีกจอหรือเปลี่ยนผู้สวมแล้ว • ยังไม่ได้บันทึก ตรวจค่าล่าสุดแล้วค่อยบันทึกอีกครั้ง";
+ if(r.status===503)return "ระบบบันทึกถาวรไม่พร้อม • ยังไม่ถือว่าบันทึกสำเร็จ ลองใหม่ภายหลัง";
+ return "บันทึกไม่สำเร็จ (HTTP "+r.status+")"+(detail?" • "+detail:"")+" • ยังไม่ได้บันทึก";
+}
+const NETWORK_FAILURE="เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ • ยังไม่ได้บันทึก ตรวจอินเทอร์เน็ตแล้วลองใหม่";
 async function rosterAction(action){
  const p=selectedRecord();if(!p||!["save","ack"].includes(action))return;
  const code=byId("rosterCode").value.trim();
@@ -919,10 +946,22 @@ async function rosterAction(action){
   {version:p.version,code,restriction:byId("rosterRestriction").value,observation:p.observation}:
   {version:p.version};
  const button=byId(action==="save"?"rosterSave":"rosterAcknowledge");
- button.disabled=true;
+ if(!button||button.disabled)return; // in flight: ignore repeated taps
+ button.disabled=true;byId("rosterStatus").textContent="กำลังบันทึก "+p.id+"...";
+ const typed={slot:p.id,code:byId("rosterCode").value,restriction:byId("rosterRestriction").value};
  try{
-  const r=await fetch(url,{method:action==="save"?"PUT":"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-  if(!r.ok){const d=await r.json();throw Error(d.error||"HTTP "+r.status);}
+  let r;
+  try{r=await fetch(url,{method:action==="save"?"PUT":"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});}
+  catch{byId("rosterStatus").textContent=NETWORK_FAILURE;return;}
+  if(!r.ok){
+   const message=await mutationFailure(r);
+   if(r.status===409){
+    // Show the latest server state, but keep what the operator typed so nothing is lost.
+    await loadRoster(true);
+    if(byId("rosterSlot").value===typed.slot){byId("rosterCode").value=typed.code;byId("rosterRestriction").value=typed.restriction;}
+   }
+   byId("rosterStatus").textContent=message;return;
+  }
   await loadRoster(true);
   await snapshot();
   refreshMedicPending();
@@ -930,7 +969,7 @@ async function rosterAction(action){
    "เปลี่ยนผู้สวมสำเร็จ: "+p.id+" • ล้าง BPM และสถานะเดิมแล้ว • รอข้อมูลใหม่จาก Band ที่ตรวจผู้สวมแล้ว":
    reopening?"เปิดรับ BPM ใหม่เรียบร้อยแล้ว • รอข้อมูลสด":
    "บันทึกข้อมูล "+p.id+" สำเร็จ";
- }catch(e){byId("rosterStatus").textContent="บันทึกไม่ได้: "+e.message+" • กรุณาโหลดข้อมูลล่าสุดก่อนลองใหม่";}
+ }catch(e){byId("rosterStatus").textContent="บันทึกแล้ว แต่โหลดข้อมูลใหม่ไม่สำเร็จ • กด โหลดข้อมูลล่าสุด";}
  finally{button.disabled=false;}
 }
 byId("rosterSlot").onchange=fillRoster;
@@ -948,7 +987,7 @@ byId("resolveLegacyObservation").onclick=async()=>{
   const r=await fetch("/api/roster/"+p.id,{method:"PUT",credentials:"same-origin",
    headers:{"Content-Type":"application/json"},
    body:JSON.stringify({version:p.version,code:p.code,restriction:p.restriction,observation:"none"})});
-  if(!r.ok){const d=await r.json();throw Error(d.error||"HTTP "+r.status);}
+  if(!r.ok)throw Error(await mutationFailure(r));
   await loadRoster(true);await snapshot();
   byId("rosterStatus").textContent="สิ้นสุดสถานะเหตุเดิมหลังประเมินแล้ว • "+p.id+
    " • เคสประเมินอัตโนมัติแยกต่างหาก";
@@ -1002,13 +1041,18 @@ byId("privateSave").onclick=async()=>{
    baselineConfirmed:byId("privateBaselineConfirmed").checked,
    reviewThresholdBpm:byId("privateAlertLimit").value||null,
    reviewThresholdConfirmed:byId("privateAlertConfirmed").checked};
-  const r=await fetch("/api/private-profile/"+p.id,{method:"PUT",credentials:"same-origin",
-   headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  if(!r.ok)throw Error("บันทึกไม่สำเร็จ (HTTP "+r.status+")");
-  const data=await r.json();privateVersion=data.profile.version;
+  byId("privateStatus").textContent="กำลังบันทึกแบบเข้ารหัส...";
+  let r;
+  try{r=await fetch("/api/private-profile/"+p.id,{method:"PUT",credentials:"same-origin",
+   headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});}catch{throw Error(NETWORK_FAILURE);}
+  if(!r.ok)throw Error(await mutationFailure(r));
+  const data=await r.json();
+  // The operator may have switched wearer while saving: never apply this result to another person.
+  if(privateSlot!==p.id||selectedRecord()?.id!==p.id){return;}
+  privateVersion=data.profile.version;
   byId("privateStatus").textContent="บันทึกข้อมูลส่วนตัวแบบเข้ารหัสสำเร็จ";updatePrivateBmi();
   if(byId("medicPanel").open)loadMedicReview();
- }catch(e){byId("privateStatus").textContent=e.message+" • โหลดข้อมูลล่าสุดก่อนลองใหม่";}
+ }catch(e){if(privateSlot===p.id)byId("privateStatus").textContent=e.message;}
  finally{privateBusy=false;byId("privateSave").disabled=false;}
 };
 let medicSlot=null,medicCode=null,medicVersion=0,medicBusy=false;
@@ -1108,12 +1152,13 @@ byId("medicClose").onclick=async()=>{
  medicBusy=true;byId("medicClose").disabled=true;
  byId("medicMessage").textContent="กำลังบันทึกการปิดหลังเจ้าหน้าที่ประเมิน...";
  try{
-  const r=await fetch("/api/medic-reviews/"+p.id,{method:"PUT",credentials:"same-origin",
+  let r;
+  try{r=await fetch("/api/medic-reviews/"+p.id,{method:"PUT",credentials:"same-origin",
    headers:{"Content-Type":"application/json"},
-   body:JSON.stringify({version:medicVersion,action:"close",note:""})});
-  if(!r.ok){const data=await r.json();throw Error(data.error||"HTTP "+r.status);}
+   body:JSON.stringify({version:medicVersion,action:"close",note:""})});}catch{throw Error(NETWORK_FAILURE);}
+  if(!r.ok)throw Error(await mutationFailure(r));
   await Promise.all([loadMedicReview(),refreshMedicPending()]);
- }catch(e){byId("medicMessage").textContent="บันทึกไม่สำเร็จ • "+e.message;await loadMedicReview();}
+ }catch(e){const m=e.message;await loadMedicReview();byId("medicMessage").textContent=m;}
  finally{medicBusy=false;}
 };
 
@@ -1299,7 +1344,18 @@ function connect(){byId("commanderShareBox").hidden=false;commanderShareStatus()
  snapshot();loadGroupPhase();refreshMedicPending();loadRoster().catch(()=>{byId("rosterStatus").textContent="โหลดข้อมูลผู้ฝึกไม่สำเร็จ";byId("rosterBox").hidden=true;});
 }
 document.getElementById('login').onsubmit=async e=>{e.preventDefault();const token=document.getElementById('token').value;document.getElementById('token').value='';try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});if(r.ok)connect();else summary.textContent=r.status===401?'รหัสไม่ถูกต้อง':'เข้าใช้งานไม่สำเร็จ • ลองใหม่เมื่อเซิร์ฟเวอร์พร้อม';}catch{summary.textContent='เข้าใช้งานไม่สำเร็จ • ตรวจเครือข่ายแล้วลองใหม่';}};
-document.getElementById('wbgtForm').onsubmit=async e=>{e.preventDefault();const wbgtC=Number(document.getElementById('wbgt').value);try{const r=await fetch('/api/context',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({wbgtC})});if(!r.ok)throw Error('HTTP '+r.status);document.getElementById('wbgt').value='';await contextStatus();}catch{document.getElementById('conditions').textContent='WBGT: บันทึกไม่สำเร็จ';}};
+let wbgtBusy=false;
+document.getElementById('wbgtForm').onsubmit=async e=>{
+ e.preventDefault();if(wbgtBusy)return;
+ const wbgtC=Number(document.getElementById('wbgt').value),button=document.querySelector('#wbgtForm button');
+ wbgtBusy=true;if(button)button.disabled=true;document.getElementById('conditions').textContent='WBGT: กำลังบันทึก...';
+ try{
+  let r;try{r=await fetch('/api/context',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({wbgtC})});}catch{throw Error(NETWORK_FAILURE);}
+  if(!r.ok)throw Error(await mutationFailure(r));
+  document.getElementById('wbgt').value='';await contextStatus();
+ }catch(err){document.getElementById('conditions').textContent='WBGT: '+err.message;} // typed value kept
+ finally{wbgtBusy=false;if(button)button.disabled=false;}
+};
 document.getElementById('logout').onclick=async()=>{disconnect();try{const r=await fetch('/api/logout',{method:'POST'});if(!r.ok)throw Error('logout failed');}catch{summary.textContent='ล้างหน้าจอแล้ว แต่ยังยกเลิก session ไม่สำเร็จ • เชื่อมเครือข่ายแล้วกดออกจากระบบอีกครั้ง';document.getElementById('controls').hidden=false;}};
 document.getElementById('refresh').onclick=()=>{snapshot();loadRoster(true).catch(()=>{});};
 setInterval(()=>{if(last)draw(last);if(groupPhaseData)paintGroupPhase();},1000);

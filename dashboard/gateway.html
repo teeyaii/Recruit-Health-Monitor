@@ -81,6 +81,9 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 .readiness li button{margin:0;min-height:40px;padding:7px 12px;font-size:.82rem}
 #sessionLogPanel textarea{width:100%;box-sizing:border-box;background:#101a13;color:#dfeee2;border:1px solid #4f6d56;border-radius:9px;font:12px/1.4 ui-monospace,Menlo,monospace}
 #sessionLogPanel .session-actions{display:flex;flex-wrap:wrap;gap:8px}#sessionLogPanel .session-actions button{margin:0}
+.pairing-panel{margin:6px 0 10px;border:1px solid #3e5b44;border-radius:12px;padding:0 12px}
+.pairing-panel>summary{font-weight:700;color:#d6ead9;min-height:44px;display:flex;align-items:center}
+.pairing-panel[open]{padding-bottom:10px}
 .pair-guide{padding:12px 14px;margin:10px 0;border:1px solid #55715b;background:#1b3025;border-radius:12px}
 .pair-guide strong{display:block;font-size:.95rem;color:#e0f3df}
 .pair-guide p{margin:5px 0 0;color:#c1d7c7;font-size:.88rem;line-height:1.55}
@@ -110,6 +113,8 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
  <div class="readiness-head"><strong id="readinessSummary">พร้อมส่งข้อมูล 0/0</strong><small>ความพร้อมด้านการเชื่อมต่อเท่านั้น • ไม่ใช่ผลประเมินทางการแพทย์หรือความพร้อมฝึก</small></div>
  <ul id="readinessList"></ul>
 </div>
+<details id="pairingPanel" class="pairing-panel"><summary id="pairingSummary">＋ จับคู่นาฬิกาใหม่ / เปลี่ยนเรือน</summary>
+<p class="muted" id="pairingHint">ใช้ครั้งแรก หรือเมื่อเปลี่ยนนาฬิกา • ใช้งานประจำวันกด "เชื่อมทุกเรือนที่จำไว้" ด้านบนพอ</p>
 <div class="quick"><button id="quickR01" disabled>เชื่อม R01 · 47FD</button><button id="quickR02" disabled>เชื่อม R02 · A746</button></div>
 <div class="quick" id="extraBandControls" aria-label="เพิ่มนาฬิกาเรือนที่ 3 ถึง 5"></div>
 <div class="pair-guide" id="pairGuide" role="status" aria-live="polite" hidden><strong id="pairGuideTitle">จับคู่ทีละเรือน ไม่ต้องจำ UUID</strong><p id="pairGuideText">ถ้า Bluefy แสดง UUID หลายรายการ ให้แยกเรือนเป้าหมายออกจากเรือนอื่นก่อนสแกน เว็บเปลี่ยนชื่อรายการนี้ไม่ได้ หลังเลือกต้องตรวจด้วยการปิด/เปิด Share HR ของเรือนจริงก่อนอนุญาตให้ส่งข้อมูล ห้ามเดาจากลำดับรหัส</p></div>
@@ -121,6 +126,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 <button id="connect" disabled>เชื่อมต่อ Band 10</button>
 <button id="resetBle" class="secondary">เชื่อมใหม่ทั้งหมด (Soft Reset)</button>
 <p class="technical">สถานะ BLE ล่าสุด:</p><p id="bleStatus" class="status technical" role="status">รอสิทธิ์และอุปกรณ์ BLE</p>
+</details>
 </details><p id="simpleStatus" role="status">เปิด Share HR บนนาฬิกา แล้วกดปุ่มเชื่อม</p><div id="slots" aria-live="polite"></div>
 <section id="reservedSlots" aria-labelledby="reservedTitle">
 <h2 id="reservedTitle">ช่องอุปกรณ์เพิ่มเติม</h2>
@@ -198,7 +204,7 @@ function bandSuffix(slot){
  return auth?.gateway==="G01"?(FIXED_BAND_SUFFIXES[slot]||bindings.get(slot)?.expected):bindings.get(slot)?.expected;
 }
 function guidePair(slot,expected,message){
- $("pairGuide").hidden=false;
+ $("pairGuide").hidden=false;$("pairingPanel").open=true;
  $("pairGuideTitle").textContent=slot+" · "+expected+" — ตรวจเรือนจริง";
  $("pairGuideText").textContent=message;
 }
@@ -256,7 +262,7 @@ function paintGatewayOverview(){
   !x.closed&&x.bpm!==null&&Number.isSafeInteger(x.lastAt)&&now-x.lastAt<=15000);
  $("gatewayBadge").textContent=auth?.gateway||"ยังไม่เข้าสู่ระบบ";
  $("gatewayDevices").textContent=fresh.length+" เรือน";
- const acknowledged=fresh.filter(x=>x.ack==="Server acknowledged"&&x.ackAt===x.lastAt).length;
+ const acknowledged=[...live.values()].filter(x=>slotCategory(x,now)==="LIVE_ACK").length;
  updateReadiness();
  $("gatewayUpload").textContent=!auth?"ยังไม่เชื่อมต่อ":
   acknowledged?"รับแล้ว "+acknowledged+" เรือน":fresh.length?"กำลังส่งข้อมูล":"รอ BPM จริง";
@@ -424,10 +430,35 @@ function paintSession(){
 // Readiness: rows are built once per slot set and only updated in place, so a
 // tap on a row button is never lost to a re-render.
 const readinessRows=new Map();let readinessKey="";
-const READY_TEXT={LIVE_ACK:"LIVE • Server ACK",LIVE_NO_ACK:"LIVE จากนาฬิกา • รอ/ไม่มี Server ACK",BLE_NO_DATA:"เชื่อมอยู่ แต่ไม่มีข้อมูลใหม่ (NO DATA)",DISCONNECTED:"ยังไม่เชื่อม / หลุด (NO DATA)",UNCONFIGURED:"ยังไม่ได้ตั้งค่าในเซิร์ฟเวอร์"};
+const READY_TEXT={LIVE_ACK:"LIVE • เซิร์ฟเวอร์ยืนยันแล้ว",LIVE_NO_ACK:"มีข้อมูลจากนาฬิกา แต่เซิร์ฟเวอร์ยังไม่ยืนยัน • ไม่ต้องจับคู่ใหม่",BLE_NO_DATA:"เชื่อมอยู่ แต่ไม่มีข้อมูลใหม่ (NO DATA) • ตรวจ Share HR และการสวม",DISCONNECTED:"นาฬิกาหลุด / ยังไม่เชื่อม (NO DATA)",UNCONFIGURED:"ยังไม่ได้ตั้งค่าในเซิร์ฟเวอร์ • ติดต่อผู้ดูแล",HELD:"ต้องเข้าใช้งานใหม่ • นาฬิกายังเชื่อมอยู่ ไม่ต้องจับคู่ใหม่",CONFLICT:"ช่องนี้ถูกใช้จากอีกเครื่อง • ออกจากระบบเครื่องเดิมก่อน ไม่ต้องจับคู่ใหม่",UNKNOWN:"ไม่ทราบสาเหตุ • ดูรายละเอียดในการ์ด"};
+// Explain the cause using only states this page actually observed; never guess.
+function readinessState(slot,now){
+ if(!provision.some(p=>p.id===slot))return "UNCONFIGURED";
+ const s=live.get(slot),last=sessions.get(slot);
+ if(!auth&&heldGateway)return "HELD";
+ if(!s&&last?.conflict)return "CONFLICT";
+ return slotCategory(s,now);
+}
+function readinessDetail(state,slot,now){
+ const s=live.get(slot),b=bindings.get(slot);
+ if(state==="LIVE_NO_ACK"){
+  const e=s?.error||"";
+  if(/HTTP 401/.test(e))return " • session หมดอายุ";
+  if(/HTTP 5\d\d/.test(e))return " • เซิร์ฟเวอร์ขัดข้องชั่วคราว ("+e.match(/HTTP 5\d\d/)[0]+")";
+  if(/ส่ง HTTPS ไม่สำเร็จ/.test(e))return " • ส่งข้อมูลไม่ถึงเซิร์ฟเวอร์ ตรวจอินเทอร์เน็ต";
+  return s?.ack==="กำลังส่ง HTTPS"?" • กำลังส่ง":"";
+ }
+ if(state==="DISCONNECTED"&&b?.verified&&b.autoEnabled){
+  if(!Number.isFinite(b.nextRetryAt??0))return " • ต้องกดเชื่อมใหม่";
+  if(connecting&&attemptOwner?.slot===slot)return " • กำลังเชื่อมกลับ";
+  if((b.nextRetryAt||0)>now)return " • จะลองเชื่อมเองใน "+Math.ceil((b.nextRetryAt-now)/1000)+" วิ";
+ }
+ return "";
+}
+function readinessGateway(){return auth?.gateway||heldGateway||null;}
 function readinessSlots(){
- if(!auth)return [];
- const ids=new Set([...(GATEWAY_PLAN[auth.gateway]||[]),...provision.map(p=>p.id)]);
+ const gateway=readinessGateway();if(!gateway)return [];
+ const ids=new Set([...(GATEWAY_PLAN[gateway]||[]),...provision.map(p=>p.id)]);
  return [...ids].sort();
 }
 function retrySlot(slot){
@@ -439,7 +470,7 @@ function retrySlot(slot){
  $("simpleStatus").textContent=slot+" • อ่านรหัส 4 ตัวท้ายจากนาฬิกาจริง กรอก แล้วกด เชื่อมต่อ Band 10";
 }
 function buildReadiness(){
- const slots=readinessSlots(),key=(auth?.gateway||"")+":"+slots.join(",");
+ const slots=readinessSlots(),key=(readinessGateway()||"")+":"+slots.join(",");
  $("readiness").hidden=!slots.length;
  if(key===readinessKey)return;
  readinessKey=key;readinessRows.clear();$("readinessList").replaceChildren();
@@ -450,20 +481,29 @@ function buildReadiness(){
  }
 }
 function updateReadiness(){
- if(!auth){$("readiness").hidden=true;return;}
+ if(!readinessGateway()){$("readiness").hidden=true;return;}
  buildReadiness();
  const now=Date.now();let ready=0;const authorized=provision.length;
  for(const [slot,r] of readinessRows){
-  const provisioned=provision.some(p=>p.id===slot),s=live.get(slot);
-  const state=provisioned?slotCategory(s,now):"UNCONFIGURED";
+  const state=readinessState(slot,now),s=live.get(slot);
   if(state==="LIVE_ACK")ready++;
   if(r.row.dataset)r.row.dataset.state=state;
-  r.chip.textContent=READY_TEXT[state]+(s?.ackAt&&provisioned?" • ACK "+Math.round((now-s.ackAt)/1000)+" วิที่แล้ว":"");
-  r.btn.hidden=!provisioned||state==="LIVE_ACK"||state==="LIVE_NO_ACK";
+  r.chip.textContent=(READY_TEXT[state]||READY_TEXT.UNKNOWN)+readinessDetail(state,slot,now)
+   +(state==="LIVE_ACK"&&s?.ackAt?" • "+Math.round((now-s.ackAt)/1000)+" วิที่แล้ว":"");
+  // Only offer an action that fixes this cause. Server/session problems never ask to re-pair.
+  // HELD: the login form is already shown above; no per-row action.
+  r.btn.hidden=!["DISCONNECTED","BLE_NO_DATA"].includes(state);
   r.btn.disabled=connecting||chooserPending||document.hidden||bulkConnecting;
   r.btn.textContent=bandSuffix(slot)?"เชื่อมใหม่":"เพิ่ม "+slot;
  }
- $("readinessSummary").textContent="พร้อมส่งข้อมูล "+ready+"/"+authorized+(auth?" • "+auth.gateway:"");
+ const held=!auth&&heldGateway;
+ $("readinessSummary").textContent=held?"ต้องเข้าใช้งาน "+heldGateway+" ใหม่ • ข้อมูลยังไม่ถูกส่ง":
+  "พร้อมส่งข้อมูล "+ready+"/"+authorized+" • "+readinessGateway();
+ // Everything healthy: clear finished pairing guidance so it does not look like a pending step.
+ if(!held&&authorized&&ready===authorized&&!connecting&&!chooserPending){
+  $("pairGuide").hidden=true;
+  if(/เชื่อมแล้ว|ผ่านการตรวจเรือนจริง|รอสัญญาณ/.test($("simpleStatus").textContent))$("simpleStatus").textContent="ทุกเรือนส่งข้อมูลและเซิร์ฟเวอร์ยืนยันแล้ว";
+ }
 }
 function paintOptionalBands(){
  // Every slot the server authorizes for THIS Gateway gets a button (G01: R03–R05,
@@ -601,7 +641,8 @@ function paint(s){
  const tile=tiles.get(s.slot);
  if(tile?.dataset)tile.dataset.status=s.closed||s.bpm===null||!s.lastAt||Date.now()-s.lastAt>15000?"NO_DATA":"LIVE";
  const fresh=!s.closed&&s.bpm!==null&&Number.isSafeInteger(s.lastAt)&&Date.now()-s.lastAt<=15000;
- const confirmed=fresh&&s.ackAt&&s.ackAt>=s.lastAt&&Date.now()-s.ackAt<=15000&&s.ack==="Server acknowledged";
+ // Same definition as the readiness panel and the logger (slotCategory).
+ const confirmed=slotCategory(s,Date.now())==="LIVE_ACK";
  s.indicator.textContent=s.closed?"NO DATA • กดเชื่อมต่อใหม่":
   s.lifecycle==="STALE"?"NO DATA • สัญญาณค้าง กดเชื่อมต่อใหม่":
   s.error?"ส่งข้อมูลไม่สำเร็จ":
@@ -674,8 +715,9 @@ function addTile(slot,expected,mode){
  stop.addEventListener("click",()=>{const b=bindings.get(slot);if(b)b.autoEnabled=false;stopped(live.get(slot),"หยุดโดยผู้ทดสอบ / NO DATA");});
  const verify=element("button","secondary");verify.hidden=true;
  const details=element("details","advanced technical"),summary=element("summary","","รายละเอียด"),diagnostics=element("p","status");
- details.append(summary,diagnostics,notify,backend,errorNode);
- const actions=element("div","band-actions");actions.append(retry,broadRetry,stop,verify);
+ details.append(summary,diagnostics,notify,backend,errorNode,stop);
+ // Daily view keeps only recovery actions; "disconnect" lives in the folded details.
+ const actions=element("div","band-actions");actions.append(retry,broadRetry,verify);
  div.append(head,measure,indicator,age,details,actions);$("slots").append(div);tiles.set(slot,div);
  return {verify,indicator,measure,age,notify,backend,errorNode,retry,stop,broadRetry,diagnostics};
 }
@@ -845,7 +887,7 @@ async function connectBand(slot,expected,mode){
     if(result.ok&&(s.sequence!==sequence||Date.now()-now>15000))return;
     if(!result.ok)logEvent(slot,result.conflict?"ack_conflict":"ack_failure");
     if(result.conflict){
-     s.error=result.detail;s.ownsDevice=false;pairedDevices.delete(s.device.id);
+     s.conflict=true;s.error=result.detail;s.ownsDevice=false;pairedDevices.delete(s.device.id);
      s.device.removeEventListener("gattserverdisconnected",s.onDisconnect);
      try{s.device.gatt.disconnect()}catch{}
      const binding=bindings.get(slot);if(binding)binding.autoEnabled=false;
@@ -922,6 +964,8 @@ function applyProvision(payload){
  $("slot").replaceChildren();
  for(const s of provision){const option=element("option","",s.id);option.value=s.id;$("slot").append(option);}
  $("slot").disabled=!provision.length;serverStatus("พร้อมใช้งาน "+payload.gateway+" • เชื่อม Band ได้เลย");
+ // First-time use: show pairing. Daily use (something remembered): keep it folded.
+ $("pairingPanel").open=!provision.some(p=>bindings.get(p.id)?.verified);
  $("gatewaySessionNote").textContent=["G01","G02","G03"].includes(payload.gateway)?
   "เซสชัน 10 ชั่วโมง • Bluefy":
   "เซสชัน 2 ชั่วโมง • Bluefy";
