@@ -59,18 +59,49 @@ function restoreReviewReceipts(raw){
   reviewPersistence.set(slot,{state:"readback_confirmed",...reviewReceipts[slot]});
  }
 }
+// Profile receipts are private and scoped to a current wearer/profile revision.
+let profileReceipts={};
+const profilePersistence=new Map();
+function profileReceipt(slot){
+ const r=profileReceipts[slot],record=privateProfiles.export()[slot];
+ return r&&r.code===roster.get(slot).code&&r.version===(record?.version||0)?r:null;
+}
+function profilePersistenceStatus(slot){
+ const state=profilePersistence.get(slot);
+ return state&&(["saving","reconciliation_needed"].includes(state.state)||profileReceipt(slot))?
+  state:{state:"untracked",operationId:null};
+}
+function restoreProfileReceipts(raw){
+ if(raw===undefined)return;
+ if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("Invalid profile receipts");
+ profileReceipts=structuredClone(raw);
+ for(const [slot,r] of Object.entries(raw)){
+  if(!slotIDs.includes(slot)||!r||typeof r.operationId!=="string"||
+   !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(r.operationId)||
+   typeof r.code!=="string"||!r.code||!["applied","rolled_back"].includes(r.outcome)||(r.outcome==="applied"&&r.version===0)||
+   !Number.isSafeInteger(r.version)||r.version<0||!profileReceipt(slot))
+   throw Error("Invalid profile receipt");
+  profileReceipts[slot]={operationId:r.operationId,code:r.code,version:r.version,outcome:r.outcome};
+  profilePersistence.set(slot,{state:"readback_confirmed",...profileReceipts[slot]});
+ }
+}
 const commander=new CommanderAccess();
 let commanderLinkBusy=false;
 let writeQueue=Promise.resolve(),historyDirty=false;
 function stateSnapshot(){return {schema:1,roster:roster.exportData(),history:pulseHistory.export(),
  profiles:privateProfiles.export(),medicReviews:medicReviews.export(),conditions,commanderLink:commander.export(),
  reassignmentCutoffs:Object.fromEntries(reassignmentCutoff),
+ profileReceipts:Object.fromEntries(slotIDs.map(slot=>[slot,profileReceipt(slot)]).filter(([,r])=>r)),
  reviewReceipts:Object.fromEntries(slotIDs.map(slot=>[slot,reviewReceipt(slot)]).filter(([,r])=>r))};}
 function persistState(){
  if(!durable.enabled)return Promise.resolve();
  writeQueue=writeQueue.catch(()=>{}).then(async()=>{
   const next=stateSnapshot();await durable.save(next);
   for(const slot of slotIDs){
+   const profile=profileReceipt(slot);
+   if(profilePersistenceStatus(slot).state==="reconciliation_needed"&&profile&&
+    JSON.stringify(next.profileReceipts[slot])===JSON.stringify(profile))
+    profilePersistence.set(slot,{state:"write_confirmed",...profile});
    const r=reviewReceipt(slot);
    if(reviewPersistenceStatus(slot).state==="reconciliation_needed"&&r&&
     JSON.stringify(next.reviewReceipts[slot])===JSON.stringify(r))
@@ -128,7 +159,7 @@ async function updateRosterSafely(slot,action,body,actor){
   next.roster=withRosterSlot(next.roster,slot,current,event);
   if(changed){
    next.reassignmentCutoffs[slot]=cutoff;
-   delete next.history[slot];delete next.profiles[slot];delete next.medicReviews[slot];delete next.reviewReceipts[slot];
+   delete next.history[slot];delete next.profiles[slot];delete next.medicReviews[slot];delete next.reviewReceipts[slot];delete next.profileReceipts[slot];
   }
   if(durable.enabled){
    try{await durable.save(next);}
@@ -149,7 +180,7 @@ async function updateRosterSafely(slot,action,body,actor){
   catch(error){roster.loadData(before);throw error;}
   if(changed){
    reassignmentCutoff.set(slot,cutoff);
-   recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);delete reviewReceipts[slot];reviewPersistence.delete(slot);autoHR.reset(slot);
+   recruits.delete(slot);pulseHistory.clear(slot);privateProfiles.clear(slot);medicReviews.clear(slot);delete reviewReceipts[slot];reviewPersistence.delete(slot);delete profileReceipts[slot];profilePersistence.delete(slot);autoHR.reset(slot);
   }
   uncertainRosterWrites.delete(slot);
  };
@@ -424,6 +455,9 @@ const server=http.createServer(async(req,res)=>{
   const slot=medicRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"register wearer before medical review"});return;}
   if(req.method==="GET"){
+   if(["saving","reconciliation_needed"].includes(profilePersistenceStatus(slot).state)){
+    send(res,503,{error:"profile durability requires reconciliation",persistence:profilePersistenceStatus(slot)});return;
+   }
    if(["saving","reconciliation_needed"].includes(reviewPersistenceStatus(slot).state)){
     send(res,503,{error:"review durability requires reconciliation",persistence:reviewPersistenceStatus(slot)});return;
    }
@@ -446,6 +480,9 @@ const server=http.createServer(async(req,res)=>{
     const restVerified=phase.phase==="hourly_rest"&&Number.isSafeInteger(phase.changedAt)&&
      Date.now()-phase.changedAt>=3*60000;
     if(!restVerified)signal.deltaBpm=null;
+    if(["saving","reconciliation_needed"].includes(profilePersistenceStatus(slot).state)){
+     send(res,503,{error:"profile durability requires reconciliation",persistence:profilePersistenceStatus(slot)});return;
+    }
     if(["saving","reconciliation_needed"].includes(reviewPersistenceStatus(slot).state)){
      send(res,503,{error:"review durability requires reconciliation",persistence:reviewPersistenceStatus(slot)});return;
     }
@@ -515,19 +552,58 @@ const server=http.createServer(async(req,res)=>{
   if(!durable.enabled){send(res,503,{error:"secure external storage not yet configured"});return;}
   const slot=privateRoute[1],code=roster.get(slot).code,rosterVersion=roster.get(slot).version;
   if(!code){send(res,409,{error:"register recruit before storing private information"});return;}
-  if(req.method==="GET"){send(res,200,{profile:privateProfiles.get(slot,code),sensitive:true});return;}
+  if(req.method==="GET"){
+   if(slotWriteBlocked(slot)||["saving","reconciliation_needed"].includes(profilePersistenceStatus(slot).state)){
+    send(res,503,{error:"profile durability requires reconciliation",persistence:profilePersistenceStatus(slot)});return;
+   }
+   send(res,200,{profile:privateProfiles.get(slot,code),persistence:profilePersistenceStatus(slot),sensitive:true});return;
+  }
   if(req.method!=="PUT"){send(res,405,{error:"method not allowed"});return;}
   if(!sameOrigin(req)){send(res,403,{error:"origin mismatch"});return;}
   if(!req.headers["content-type"]?.toLowerCase().startsWith("application/json")){send(res,415,{error:"JSON required"});return;}
   try{
    const body=await readBody(req,1024);
    if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
-   const backup=privateProfiles.export()[slot];
-   const profile=privateProfiles.update(slot,code,body);
-   try{await persistState();}
-   catch{if(roster.get(slot).version===rosterVersion)privateProfiles.rollback(slot,profile,backup);historyDirty=true;send(res,503,{error:"secure storage unavailable; changes not confirmed"});return;}
-   if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion){send(res,409,{error:"wearer changed; reload before continuing"});return;}
-   send(res,200,{profile,sensitive:true});
+   let profile;
+   writeQueue=writeQueue.catch(()=>{}).then(async()=>{
+    if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion)
+     throw Object.assign(Error("wearer changed; reload before continuing"),{status:409});
+    if(profilePersistenceStatus(slot).state==="reconciliation_needed")
+     throw Object.assign(Error("profile durability requires reconciliation"),{status:503});
+    const before=privateProfiles.export()[slot];
+    const draft=new PrivateProfiles();draft.load(privateProfiles.export());
+    profile=draft.update(slot,code,body);
+    const operationId=randomUUID();
+    const receipt={operationId,code,version:profile.version,outcome:"applied"};
+    profilePersistence.set(slot,{state:"saving",operationId});
+    const next=stateSnapshot();next.profiles[slot]=profile;next.profileReceipts[slot]=receipt;
+    let failure;
+    try{
+     await durable.save(next);
+     if(slotWriteBlocked(slot)||roster.get(slot).version!==rosterVersion||
+      JSON.stringify(privateProfiles.export()[slot])!==JSON.stringify(before))
+      throw Object.assign(Error("profile changed; refresh first"),{status:409});
+     privateProfiles.load({...privateProfiles.export(),[slot]:profile});
+     profileReceipts[slot]=receipt;
+     profilePersistence.set(slot,{state:"write_confirmed",...receipt});return;
+    }catch(error){failure=error;}
+    // Roll back the durable proposal before another queued writer can run.
+    // A failed response does not establish whether the remote upsert committed.
+    const current=privateProfiles.export()[slot];
+    const rollback={operationId,code,version:current?.version||0,outcome:"rolled_back"};
+    profileReceipts[slot]=rollback;
+    profilePersistence.set(slot,{state:"reconciliation_needed",operationId});
+    historyDirty=true;
+    try{
+     await durable.save(stateSnapshot());
+     profilePersistence.set(slot,{state:"write_confirmed",...rollback});
+    }catch{}
+    if(failure.status===409)throw failure;
+    throw Object.assign(Error("profile not confirmed; reload before retry"),{status:503});
+   });
+   try{await writeQueue;}
+   catch(error){send(res,error.status||503,{error:error.message,persistence:profilePersistenceStatus(slot)});return;}
+   send(res,200,{profile,persistence:profilePersistenceStatus(slot),sensitive:true});
   }catch(e){send(res,e.status||500,{error:e.status?e.message:"private profile unavailable"});}
   return;
  }
@@ -711,6 +787,7 @@ async function boot(){
    roster.loadData(state.roster);privateProfiles.load(state.profiles);pulseHistory.load(state.history);
    if(state.medicReviews)medicReviews.load(state.medicReviews);
    restoreReviewReceipts(state.reviewReceipts);
+   restoreProfileReceipts(state.profileReceipts);
    if(state.conditions&&typeof state.conditions==="object")conditions=state.conditions;
    if(state.commanderLink)commander.load(state.commanderLink);
    if(restoreReassignmentCutoffs(state.reassignmentCutoffs))await durable.save(stateSnapshot());
