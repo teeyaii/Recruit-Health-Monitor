@@ -20,6 +20,11 @@ const PORT=Number(process.env.PORT||8080);
 const TTL_MS=15000;
 const DEMO_ENABLED=process.env.STEVE_DEMO_MODE==="1" && process.env.NODE_ENV!=="production";
 const MAX_AGE_MS=15000;
+// The live per-slot duplicate watermark is intentionally process-local. After
+// restart, reject every pre-boot timestamp (including the existing 1 s allowed
+// client clock lead) so replay cannot resurrect already accepted telemetry.
+// New streams resume as their timestamps pass this bounded startup cutoff.
+const INGEST_BOOT_CUTOFF_MS=Date.now()+1000;
 const SYNTHETIC=DEMO_ENABLED || (process.env.STEVE_SYNTHETIC_MODE==="1" && process.env.NODE_ENV!=="production");
 // Test-only ephemeral commander link issuance permits HTTP authorization tests without live Supabase.
 const COMMANDER_PERSISTENCE=process.env.NODE_ENV==="test"&&process.env.STEVE_TEST_EPHEMERAL_COMMANDER==="1";
@@ -645,7 +650,7 @@ const server=http.createServer(async(req,res)=>{
    // Omitted state remains compatible with existing Gateway HR packets.
    if(item.state!==undefined&&!["CONNECTED","DISCONNECTED"].includes(item.state))continue;
    if(!slotIsAuthorized(body.gateway,item)||slotWriteBlocked(item.id)||!roster.canIngest(item.id))continue;
-   if(item.timestamp<=(reassignmentCutoff.get(item.id)??0))continue;
+   if(item.timestamp<=INGEST_BOOT_CUTOFF_MS||item.timestamp<=(reassignmentCutoff.get(item.id)??0))continue;
    if(seen.has(item.id))continue;
    seen.add(item.id);
    const prior=recruits.get(item.id);if(prior&&(prior.eventAt??prior.timestamp)>=item.timestamp)continue;
@@ -717,6 +722,9 @@ async function boot(){
   }
  }
  if(!durable.enabled)restoreReassignmentCutoffs(undefined);
+ // Do not advertise readiness while first legitimate notifications would be
+ // rejected by the startup replay quarantine. Existing stored cutoffs still apply.
+ await new Promise(resolve=>setTimeout(resolve,Math.max(0,INGEST_BOOT_CUTOFF_MS-Date.now()+1)));
  server.listen(PORT,"0.0.0.0",()=>console.log("STEVE prototype listening on",PORT,strictMode?"(strict mode)":"(development credentials)"));
 }
 boot().catch(()=>{console.error("STEVE secure storage startup failed; check remote store configuration");process.exitCode=1;});
