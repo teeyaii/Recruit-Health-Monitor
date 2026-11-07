@@ -26,7 +26,7 @@ Status: **IMPLEMENTED** as an internal module with **SIMULATED** tests only. It 
 
 ## 2. What the module does (`server/shadow-analysis.js`)
 - **C1 Quality.** It counts rejected samples by reason: shape, range, future, outside window, previous wearer, duplicate and out-of-order. It measures gaps longer than 45 s and coverage (5-s buckets ÷ window), flags implausible jumps (≥ 45 BPM within 15 s) and staleness (> 15 s). Its status is one of `valid`, `insufficient`, `suspicious`, `no_data` or `different_wearer`. It never imputes, interpolates or smooths.
-- **C2 Features.** These are computed only when the data allows: median, IQR (spread, **not HRV**), Theil-Sen trend in BPM/min (only for `valid` data spanning ≥ 3 min), and the time continuously at or above the **existing clinician-confirmed personal limit** (null if none). It also gives the difference from a confirmed baseline (null if none) and per-phase sample counts and medians from the recorded transitions.
+- **C2 Features.** These are computed only when the data allows: median, IQR (spread, **not HRV**), and the Theil-Sen trend in BPM/min. The trend is computed **only for the current recorded phase segment** (since the last transition inside the window, exposed as `trendScope`), only for `valid` data, and only when that segment spans ≥ 3 min. A training rise followed by a rest fall is therefore never reported as "rising during rest". It also gives the time continuously at or above the **existing clinician-confirmed personal limit** (null if none). It also gives the difference from a confirmed baseline (null if none) and per-phase sample counts and medians from the recorded transitions.
 - **Recovery.** It reuses `describeRecoveryShadow` unchanged.
 - **C3 Explanation.** A Thai sentence list is built only from these fields. It always ends with "ยังไม่สามารถสรุปภาวะทางการแพทย์…ไม่ใช่การวินิจฉัยหรือการอนุญาตให้ฝึก". Missing information is listed in Thai, and SIMULATED inputs are labelled.
 - **Constants.** Every constant is reused from existing modules (25–240 BPM, 15 s, 45 s, 45 BPM/15 s, 5 s, 30 min WBGT). The only additions are presentation rules for describing data (≥ 12 samples, ≥ 50% coverage, ≥ 3 min span, a change ≥ 5 BPM before calling a trend rising or falling). **No clinical threshold was added or changed.**
@@ -34,12 +34,15 @@ Status: **IMPLEMENTED** as an internal module with **SIMULATED** tests only. It 
 ### Example output (synthetic)
 ```
 ข้อมูลจำลอง (SIMULATED) ไม่ใช่การวัดจริง • ข้อมูลต่อเนื่องเพียงพอสำหรับอธิบายแนวโน้ม (ครอบคลุม 93.6% ของ 30 นาที, 337 ค่า)
-• แนวโน้มชีพจรสูงขึ้นต่อเนื่อง (1.2 BPM/นาที ตลอด 29.9 นาที, median 131 BPM) ระหว่างฝึก
+• แนวโน้มชีพจรสูงขึ้นต่อเนื่อง (1.2 BPM/นาที ตลอด 29.9 นาที) ระหว่างฝึก • median ทั้งช่วงวิเคราะห์ 131 BPM
 • อยู่ที่หรือสูงกว่าเกณฑ์ส่วนบุคคลที่เจ้าหน้าที่ตั้งไว้ต่อเนื่องนานสุด 7 นาที
 • ข้อมูลที่ยังขาด: ไม่มี HRV (BPM เฉลี่ยใช้คำนวณไม่ได้), ยังไม่มี baseline ที่ยืนยัน, WBGT เก่ากว่า 30 นาที
 • ยังไม่สามารถสรุปภาวะทางการแพทย์จากชีพจรอย่างเดียวได้ • ข้อมูลประกอบการพิจารณาของเจ้าหน้าที่เท่านั้น ไม่ใช่การวินิจฉัยหรือการอนุญาตให้ฝึก
 ```
 The structured output also carries `clinicalEffect:"none"`, `mode:"shadow_research_only"`, quality counts, gaps and features. It does not carry raw samples, wearer codes, notes or profile fields.
+
+- **Wearer boundary.** Samples at or before the reassignment cutoff are excluded, the same strictly-after rule as ingestion (`server/index.js`).
+- **Alert context.** It reads the persisted `autoEvidence` (validated with `validAutoEvidence` from `medic-review.js`); invalid or invented evidence fields are ignored.
 
 ## 3. Safety properties (tested)
 The output is pure, deterministic and frozen, and the module never mutates its inputs. Its output contains no NORMAL/WATCH/EMERGENCY, no diagnosis wording and no "safe/return to training".
@@ -96,7 +99,14 @@ No evidence-backed defect remained, so there is no Gateway follow-up PR.
 - Open hardware question: `watchAdvertisements` runs outside the GATT queue. It is a listen-only operation, and there is no evidence it conflicts; check it on Bluefy.
 - Daily-operations UX was delivered in #78. I found no new verified usability defect, so there is no cosmetic PR.
 
-## 8. Next phase
+## 8. Integration requirements (for the future adapter; Codex review #81)
+This module is **not yet a versioned backend contract consumer**. Before any endpoint calls it, the adapter (Codex-owned, under existing trainer/medic permissions) must:
+- pass only the **current** wearer's data, with `wearerSince` set to the durable reassignment cutoff;
+- check the roster revision before and after reading, and return 409 if the wearer changed, like the existing review routes;
+- read from confirmed persisted state (history, review and profile), and refuse or label the analysis when storage freshness is unknown;
+- pin `SHADOW_VERSION` in the response and never pass free-text notes, reasons or profile fields.
+
+## 9. Next phase
 1. Owner: hardware check of #79 on R06–R10 at morning start-up.
 2. With owner approval, expose `analyzeShadow` read-only inside the existing trainer/medic Medic panel (Codex adds a GET endpoint under existing permissions; Claude adds the UI), labelled "งานวิจัย • ไม่ใช่คำวินิจฉัย".
 3. Codex: case event log and WBGT history contracts.

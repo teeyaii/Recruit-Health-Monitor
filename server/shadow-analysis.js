@@ -10,6 +10,7 @@
 // detect heat illness, dehydration or arrhythmia. Missing data is reported as
 // missing: values are never imputed, interpolated or smoothed into "normal".
 import {describeRecoveryShadow} from "./recovery-shadow.js";
+import {validAutoEvidence} from "./medic-review.js";
 
 export const SHADOW_VERSION="steve-shadow-0.1";
 // Engineering/data-quality constants reused from existing modules
@@ -39,7 +40,9 @@ export function assessDataQuality(points,{now,from,to=now,wearerSince=null}={}){
   const [t,bpm]=p;
   if(bpm<BPM_MIN||bpm>BPM_MAX){rejected.outOfRange++;continue;}
   if(t>now+1000){rejected.future++;continue;}
-  if(Number.isSafeInteger(wearerSince)&&t<wearerSince){rejected.previousWearer++;continue;}
+  // Same boundary as ingestion: a sample at or before the reassignment cutoff
+  // belongs to the previous wearer (server/index.js rejects timestamp <= cutoff).
+  if(Number.isSafeInteger(wearerSince)&&t<=wearerSince){rejected.previousWearer++;continue;}
   if(t<from||t>to){rejected.outsideWindow++;continue;}
   if(t<lastSeen){rejected.outOfOrder++;continue;}       // never re-sorted into the series
   if(t===lastSeen){rejected.duplicate++;continue;}       // replayed / duplicate timestamp
@@ -94,7 +97,15 @@ export function describeFeatures(quality,{transitions=[],confirmedBaselineBpm=nu
  const byPhase={training:[],hourly_rest:[],no_training:[],unrecorded:[]};
  for(const [t,b] of s)byPhase[phaseAt(phases,t)||"unrecorded"].push(b);
  const phaseSummary=Object.fromEntries(Object.entries(byPhase).map(([k,v])=>[k,{samples:v.length,medianBpm:v.length?r1(median(v)):null}]));
+ // The trend is described only for the CURRENT phase segment (since the last
+ // recorded transition inside the window), so a training rise followed by a
+ // rest fall is never reported as "rising during rest".
+ const lastTransition=phases.filter(e=>e.at>quality.from&&e.at<=quality.to).at(-1);
+ const segmentFrom=lastTransition?lastTransition.at:quality.from;
+ const segment=s.filter(([t])=>t>=segmentFrom);
  const out={medianBpm:null,iqrBpm:null,trendBpmPerMin:null,trendDirection:null,spanMinutes:null,
+  trendScope:{phase:phaseAt(phases,quality.to)||"unrecorded",from:segmentFrom,to:quality.to,
+   wholeWindow:!lastTransition,samples:segment.length,spanMinutes:null},
   phaseAtEnd:phaseAt(phases,quality.to)||"unrecorded",phaseSummary,
   baselineDifferenceBpm:null,atOrAbovePersonalLimitMinutes:null,limitations:limits};
  if(quality.status==="no_data"||quality.status==="different_wearer"){limits.push("no_samples");return out;}
@@ -102,11 +113,13 @@ export function describeFeatures(quality,{transitions=[],confirmedBaselineBpm=nu
  out.medianBpm=r1(median(values));
  out.iqrBpm=values.length>=4?r1(quantile(values,0.75)-quantile(values,0.25)):null;
  out.spanMinutes=r1((s.at(-1)[0]-s[0][0])/60000);
+ const segSpan=segment.length>1?segment.at(-1)[0]-segment[0][0]:0;
+ out.trendScope.spanMinutes=r1(segSpan/60000);
  if(quality.status!=="valid")limits.push("trend_not_described_quality_"+quality.status);
- else if(s.at(-1)[0]-s[0][0]<MIN_TREND_SPAN_MS)limits.push("trend_span_too_short");
+ else if(segment.length<MIN_SAMPLES||segSpan<MIN_TREND_SPAN_MS)limits.push(lastTransition?"trend_current_phase_too_short":"trend_span_too_short");
  else{
-  out.trendBpmPerMin=r1(theilSenPerMinute(s));
-  const change=out.trendBpmPerMin*out.spanMinutes;
+  out.trendBpmPerMin=r1(theilSenPerMinute(segment));
+  const change=out.trendBpmPerMin*out.trendScope.spanMinutes;
   out.trendDirection=Math.abs(change)<DESCRIBED_CHANGE_BPM?"flat":change>0?"rising":"falling";
  }
  // Within-session spread (IQR of BPM) is NOT heart-rate variability.
@@ -139,7 +152,7 @@ const QUALITY_TH={valid:"ข้อมูลต่อเนื่องเพี�
  suspicious:"พบการเปลี่ยนแปลงของค่าที่อาจมาจากสัญญาณ/การสวม ควรตรวจสายรัดก่อนใช้ข้อมูล",no_data:"ไม่มีข้อมูลชีพจรในช่วงนี้",
  different_wearer:"ข้อมูลในช่วงนี้เป็นของผู้สวมคนก่อน ไม่นำมาวิเคราะห์"};
 const MISSING_TH={hrv_not_available_from_bpm:"ไม่มี HRV (BPM เฉลี่ยใช้คำนวณไม่ได้)",no_confirmed_baseline:"ยังไม่มี baseline ที่ยืนยัน",
- no_confirmed_personal_limit:"ยังไม่มีเกณฑ์ส่วนบุคคลที่ยืนยัน",trend_span_too_short:"ช่วงข้อมูลสั้นเกินอธิบายแนวโน้ม",no_samples:"ไม่มีค่าที่ใช้ได้",
+ no_confirmed_personal_limit:"ยังไม่มีเกณฑ์ส่วนบุคคลที่ยืนยัน",trend_span_too_short:"ช่วงข้อมูลสั้นเกินอธิบายแนวโน้ม",trend_current_phase_too_short:"ช่วงกิจกรรมปัจจุบันยังสั้นเกินอธิบายแนวโน้ม",no_samples:"ไม่มีค่าที่ใช้ได้",
  training_phase_unrecorded:"ไม่ได้บันทึกสถานะฝึก/พัก",no_fresh_sample:"ไม่มีค่าใหม่ใน 15 วินาที",wbgt_missing:"ไม่มี WBGT",wbgt_stale:"WBGT เก่ากว่า 30 นาที",
  wbgt_estimated_not_authoritative:"WBGT เป็นค่าประมาณ ไม่ใช่ค่าวัด",wbgt_unknown_source:"ไม่ทราบแหล่งที่มา WBGT",wbgt_invalid:"ค่า WBGT ไม่ถูกต้อง"};
 const missingTh=code=>MISSING_TH[code]||(code.startsWith("trend_not_described_quality_")?"ไม่อธิบายแนวโน้มเพราะคุณภาพข้อมูล":code);
@@ -156,16 +169,22 @@ export function analyzeShadow({points,now,windowMinutes=30,wearerSince=null,tran
  if(features.phaseAtEnd==="unrecorded")missing.push("training_phase_unrecorded");
  if(quality.stale)missing.push("no_fresh_sample");
  // Existing alert evidence is echoed for context only; it is never changed or re-scored.
+ // MedicReviews persists measured trigger evidence as `autoEvidence` (validated by
+ // validAutoEvidence). Anything else is ignored rather than trusted.
+ const e=existingReview?.autoEvidence;
  const alertContext=existingReview?{status:existingReview.status??null,openedBy:existingReview.openedBy??null,
-  evidence:existingReview.evidence?{rule:existingReview.evidence.rule??null,firstAt:existingReview.evidence.firstAt??null,lastAt:existingReview.evidence.lastAt??null,sampleCount:existingReview.evidence.sampleCount??null}:null}:null;
+  autoPauseRequired:existingReview.autoPauseRequired===true,
+  evidence:validAutoEvidence(e)?{rule:e.rule,firstAt:e.firstAt,lastAt:e.lastAt,sampleCount:e.sampleCount}:null}:null;
  const sentences=[];
  if(source==="SIMULATED")sentences.push("ข้อมูลจำลอง (SIMULATED) ไม่ใช่การวัดจริง");
  sentences.push(QUALITY_TH[quality.status]+" (ครอบคลุม "+quality.coveragePct+"% ของ "+windowMinutes+" นาที, "+quality.acceptedSamples+" ค่า)");
  if(quality.stale&&quality.acceptedSamples)sentences.push("ไม่มีค่าใหม่ใน 15 วินาทีล่าสุด จึงไม่ใช่สถานะ LIVE");
  if(features.trendDirection){
   const dir={rising:"สูงขึ้นต่อเนื่อง",falling:"ลดลงต่อเนื่อง",flat:"ค่อนข้างคงที่"}[features.trendDirection];
-  sentences.push("แนวโน้มชีพจร"+dir+" ("+features.trendBpmPerMin+" BPM/นาที ตลอด "+features.spanMinutes+" นาที, median "+features.medianBpm+" BPM) "+PHASE_TH[features.phaseAtEnd]);
- }else if(features.medianBpm!==null)sentences.push("median "+features.medianBpm+" BPM แต่ยังไม่อธิบายแนวโน้ม");
+  const sc=features.trendScope;
+  sentences.push("แนวโน้มชีพจร"+dir+" ("+features.trendBpmPerMin+" BPM/นาที ตลอด "+sc.spanMinutes+" นาที"+
+   (sc.wholeWindow?"":" ล่าสุด")+") "+PHASE_TH[sc.phase]+(sc.wholeWindow?"":" (นับเฉพาะช่วงปัจจุบัน)")+" • median ทั้งช่วงวิเคราะห์ "+features.medianBpm+" BPM");
+ }else if(features.medianBpm!==null)sentences.push("median "+features.medianBpm+" BPM แต่ยังไม่อธิบายแนวโน้ม"+(features.trendScope.wholeWindow?"":" ของช่วง"+PHASE_TH[features.trendScope.phase]));
  if(features.atOrAbovePersonalLimitMinutes)sentences.push("อยู่ที่หรือสูงกว่าเกณฑ์ส่วนบุคคลที่เจ้าหน้าที่ตั้งไว้ต่อเนื่องนานสุด "+features.atOrAbovePersonalLimitMinutes+" นาที");
  if(features.baselineDifferenceBpm!==null)sentences.push("ต่างจาก baseline ที่ยืนยันแล้ว "+(features.baselineDifferenceBpm>0?"+":"")+features.baselineDifferenceBpm+" BPM");
  if(recovery.status==="observed")sentences.push("ช่วงพักที่บันทึก: median ช่วงแรก "+recovery.firstMedianBpm+" → ช่วงหลัง "+recovery.lateMedianBpm+" BPM");

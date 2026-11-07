@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {assessDataQuality,describeFeatures,validateWbgtContext,analyzeShadow,SHADOW_VERSION} from './shadow-analysis.js';
 import {AutoHRMonitor} from './auto-hr-monitor.js';
+import {MedicReviews} from './medic-review.js';
 
 const NOW=1_794_000_000_000, MIN=60000;
 const series=(fromMs,toMs,stepMs,bpmAt)=>{const p=[];for(let t=fromMs;t<=toMs;t+=stepMs)p.push([t,bpmAt(t)]);return p;};
@@ -31,9 +32,9 @@ test('quality: stale data is flagged; previous-wearer samples are excluded at th
  const old=steady(30).map(([t,b])=>[t-60000,b]);
  assert.equal(assessDataQuality(old,{now:NOW,from:NOW-30*MIN}).stale,true);
  const boundary=NOW-10*MIN;
- const mixed=[...series(NOW-30*MIN,boundary-5000,5000,()=>150),...series(boundary,NOW-1000,5000,()=>72)];
+ const mixed=[...series(NOW-30*MIN,boundary,5000,()=>150),...series(boundary+5000,NOW-1000,5000,()=>72)];
  const q=assessDataQuality(mixed,{now:NOW,from:NOW-30*MIN,wearerSince:boundary});
- assert.ok(q.rejected.previousWearer>200);assert.ok(q.series.every(([t,b])=>t>=boundary&&b===72));
+ assert.ok(q.rejected.previousWearer>200);assert.ok(q.series.every(([t,b])=>t>boundary&&b===72));
  const onlyOld=assessDataQuality(series(NOW-30*MIN,boundary-5000,5000,()=>150),{now:NOW,from:NOW-30*MIN,wearerSince:boundary});
  assert.equal(onlyOld.status,'different_wearer');
  const a=analyzeShadow({points:mixed,now:NOW,wearerSince:boundary});
@@ -87,7 +88,7 @@ test('recovery reuses Phase 2 shadow: incomplete rest interval is collecting/ins
 test('safety: pure, deterministic, no input mutation, no clinical effect, no risk class or diagnosis wording',()=>{
  const start=NOW-30*MIN,p=series(start,NOW-1000,5000,t=>Math.round(110+(t-start)/MIN));
  const transitions=[{at:start,phase:'training'}],review={status:'pending',openedBy:'system',version:3,
-  evidence:{rule:'sustained_personal_limit',firstAt:NOW-60000,lastAt:NOW-5000,sampleCount:6,latestBpm:150}};
+  autoEvidence:{rule:'sustained_personal_limit',firstAt:NOW-60000,lastAt:NOW-25000,sampleCount:6,latestBpm:150}};
  const input={points:p,now:NOW,transitions,confirmedPersonalLimitBpm:130,existingReview:review,confirmedBaselineBpm:70};
  const snapshot=JSON.stringify(input);
  const a=analyzeShadow(input),b=analyzeShadow(input);
@@ -112,7 +113,7 @@ test('safety: shadow analysis never changes existing automatic alert decisions',
 });
 test('privacy: review notes, reasons, wearer codes and profile fields are never echoed; synthetic data is labelled',()=>{
  const review={status:'pending',openedBy:'medic',note:'PRIVATE NOTE xyz',reason:'other',code:'SYN-SECRET-CODE',profile:{medications:'drugX'},
-  evidence:{rule:'r',firstAt:1,lastAt:2,sampleCount:3,latestBpm:150,extra:'leak'}};
+  autoEvidence:{rule:'sustained_personal_limit',firstAt:1000,lastAt:41000,sampleCount:6,latestBpm:150,extra:'leak'}};
  const a=analyzeShadow({points:steady(30),now:NOW,existingReview:review,source:'SIMULATED'});
  const text=JSON.stringify(a);
  for(const leak of ['PRIVATE NOTE','SYN-SECRET-CODE','drugX','leak','medications'])assert.ok(!text.includes(leak),leak);
@@ -135,7 +136,44 @@ test('WBGT context: only a fresh instrument/manual reading is authoritative; wea
 test('isolation: module performs no I/O, has no external calls and is not wired into the server',async()=>{
  const src=await readFile(new URL('./shadow-analysis.js',import.meta.url),'utf8');
  assert.doesNotMatch(src,/\bfetch\(|require\(|process\.env|https?:\/\/|writeFile|createServer|medicReviews|autoRequest/);
- assert.deepEqual([...src.matchAll(/^import .* from "(.*)";$/gm)].map(m=>m[1]),['./recovery-shadow.js']);
+ assert.deepEqual([...src.matchAll(/^import .* from "(.*)";$/gm)].map(m=>m[1]),['./recovery-shadow.js','./medic-review.js'],'pure local helpers only');
  const index=await readFile(new URL('./index.js',import.meta.url),'utf8');
  assert.doesNotMatch(index,/shadow-analysis/,'not connected to any endpoint or alert path');
+});
+
+// ---- Review #81 (Codex) regressions ----
+test('review P2: wearer boundary is strictly after the cutoff, matching ingestion (exact cutoff rejected, +1 accepted)',()=>{
+ const cutoff=NOW-10*MIN,opts={now:cutoff+1000,from:cutoff-30*MIN,wearerSince:cutoff};
+ const atCutoff=assessDataQuality([[cutoff,180]],opts);
+ assert.equal(atCutoff.acceptedSamples,0);assert.equal(atCutoff.rejected.previousWearer,1);assert.equal(atCutoff.status,'different_wearer');
+ const after=assessDataQuality([[cutoff+1,72]],opts);
+ assert.equal(after.acceptedSamples,1);assert.equal(after.rejected.previousWearer,0);
+});
+test('review P2: training rise then rest fall is described for the current rest segment, never "rising during rest"',()=>{
+ const start=NOW-30*MIN,restAt=start+25*MIN;
+ const p=series(start,NOW-1000,5000,t=>t<restAt?Math.round(80+(t-start)/(25*MIN)*60):Math.round(140-(t-restAt)/(5*MIN)*30));
+ const transitions=[{at:start-MIN,phase:'training'},{at:restAt,phase:'hourly_rest'}];
+ const a=analyzeShadow({points:p,now:NOW,transitions});
+ assert.equal(a.features.trendScope.phase,'hourly_rest');assert.equal(a.features.trendScope.wholeWindow,false);
+ assert.equal(a.features.trendDirection,'falling');
+ assert.doesNotMatch(a.explanationTh,/สูงขึ้นต่อเนื่อง[^•]*ระหว่างพัก/);
+ assert.match(a.explanationTh,/แนวโน้มชีพจรลดลงต่อเนื่อง[^•]*ระหว่างพักประจำชั่วโมง \(นับเฉพาะช่วงปัจจุบัน\)/);
+ // Just entered rest: too short to describe the current segment, so no trend at all.
+ const early=analyzeShadow({points:p.filter(([t])=>t<restAt+MIN),now:restAt+MIN,transitions});
+ assert.equal(early.features.trendDirection,null);
+ assert.ok(early.missingInformation.includes('trend_current_phase_too_short'));
+ assert.match(early.explanationTh,/ช่วงกิจกรรมปัจจุบันยังสั้นเกินอธิบายแนวโน้ม/);
+});
+test('review P2: evidence comes from a real MedicReviews system record (autoEvidence); invented fields ignored',()=>{
+ const reviews=new MedicReviews(),now=NOW-5*MIN;
+ const ev={rule:'sustained_personal_limit',firstAt:now-35000,lastAt:now,sampleCount:6,latestBpm:162};
+ const created=reviews.autoRequest('R06','SYN006','high_sustained',now,ev);
+ assert.equal(created.created,true);
+ const record=reviews.get('R06','SYN006');assert.ok(record.autoEvidence);assert.equal('evidence' in record,false);
+ const a=analyzeShadow({points:steady(30),now:NOW,existingReview:record});
+ assert.deepEqual(a.alertContext,{status:'pending',openedBy:'system',autoPauseRequired:false,
+  evidence:{rule:'sustained_personal_limit',firstAt:ev.firstAt,lastAt:ev.lastAt,sampleCount:6}});
+ assert.equal(reviews.get('R06','SYN006').version,record.version,'existing case untouched');
+ const forged=analyzeShadow({points:steady(30),now:NOW,existingReview:{...record,autoEvidence:{rule:'made_up',firstAt:1,lastAt:2,sampleCount:1,latestBpm:999}}});
+ assert.equal(forged.alertContext.evidence,null,'invalid evidence is not trusted');
 });
