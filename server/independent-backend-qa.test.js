@@ -95,7 +95,7 @@ globalThis.fetch=async(url,options)=>{
  const rewrite=async(fn)=>{const data=await stored();fn(data);await writeFile(state,JSON.stringify({id:'primary',envelope:codec.encrypt(data)}));};
  const controlSave=async mode=>{await rm(entered,{force:true});await rm(release,{force:true});await writeFile(control,mode);};
  const waitHeld=async()=>{for(let i=0;i<200;i++){try{await readFile(entered);return;}catch{}await delay(10);}throw Error('save did not reach hold');};
- await boot();
+ await boot();await advance(1001); // Advance beyond the startup replay floor.
  return {archiveRows:async()=>{try{return JSON.parse(await readFile(archiveFile,'utf8'));}catch(e){if(e.code==='ENOENT')return [];throw e;}},stored,rewrite,controlSave,waitHeld,releaseSave:()=>writeFile(release,'1'),req,login,phone,sample,ingest,advance,enroll,now:()=>now,restart:async()=>{await stop();await boot();},crashRestart:async()=>{await stop('SIGKILL');await boot();}};
 }
 const snapshot=async(h,cookie)=>(await h.req('/api/snapshot',{cookie})).data.recruits;
@@ -193,7 +193,7 @@ test('SIMULATED: EMERGENCY and pending case survive disconnect, stale timeout an
  assert.equal((await h.req('/api/roster',{cookie:again})).data.slots[0].observation,'confusion_collapse_seizure');
  assert.equal((await h.req('/api/medic-reviews/R01',{cookie:again})).data.review.status,'pending');
  assert.ok((await snapshot(h,again)).every(r=>r.hr===null));
- const reconnect=await h.phone('G01');await h.advance(1);
+ const reconnect=await h.phone('G01');await h.advance(1001);
  assert.equal((await h.ingest('G01',reconnect,[h.sample('R01')])).data.accepted,1);
 });
 
@@ -305,7 +305,7 @@ test('SIMULATED: held save never publishes uncommitted wearer; blocks same-slot 
  await h.restart();const again=await h.phone('G01');
  assert.equal((await h.ingest('G01',again,[old])).data.accepted,0);
  assert.equal((await h.ingest('G01',again,[h.sample('R01',{timestamp:cutoff})])).data.accepted,0,'boundary is inclusive');
- await h.advance(1);assert.equal((await h.ingest('G01',again,[h.sample('R01')])).data.accepted,1);
+ await h.advance(1001);assert.equal((await h.ingest('G01',again,[h.sample('R01')])).data.accepted,1);
 });
 
 test('SIMULATED: serialized roster saves cannot assign one code to two slots',async t=>{
@@ -344,7 +344,7 @@ test('SIMULATED: reconnect cannot restore previous wearer history/profile/automa
  let detail=(await h.req('/api/medic-reviews/R01',{cookie:again})).data;
  assert.deepEqual(detail.points,[]);assert.equal(detail.review.status,'none');
  assert.equal((await snapshot(h,again))[0].autoCheck,false);
- await h.advance(1);assert.equal((await h.ingest('G01',phone,[h.sample('R01',{hr:75})])).data.accepted,1);
+ await h.advance(1001);assert.equal((await h.ingest('G01',phone,[h.sample('R01',{hr:75})])).data.accepted,1);
  detail=(await h.req('/api/medic-reviews/R01',{cookie:again})).data;
  assert.deepEqual(detail.points,[[h.now(),75]]);assert.equal(detail.review.status,'none');
 });
@@ -358,7 +358,7 @@ test('SIMULATED: commit ACK lost and compensation fails; restart restores matchi
  await h.controlSave('');await h.restart();const again=await h.phone('G01'),viewer=await h.login('medic');
  assert.equal((await h.req('/api/roster',{cookie:viewer})).data.slots[0].code,'QA_NEW');
  assert.equal((await h.ingest('G01',again,[old])).data.accepted,0);
- await h.advance(1);assert.equal((await h.ingest('G01',again,[h.sample('R01')])).data.accepted,1);
+ await h.advance(1001);assert.equal((await h.ingest('G01',again,[h.sample('R01')])).data.accepted,1);
 });
 
 test('SIMULATED: legacy migration write failure prevents listening; a healthy retry resumes',async t=>{
@@ -386,7 +386,7 @@ test('SIMULATED: archived and pending old-wearer samples cannot enter the new ar
  await h.restart();const phone=await h.phone('G01'),medic=await h.login('medic');
  assert.equal((await h.ingest('G01',phone,[old])).data.accepted,0);
  assert.deepEqual((await h.req('/api/archive/R01?hours=4',{cookie:medic})).data.points,[]);
- await h.advance(1);const freshAt=h.now();assert.equal((await h.ingest('G01',phone,[h.sample('R01',{hr:75})])).data.accepted,1);
+ await h.advance(1001);const freshAt=h.now();assert.equal((await h.ingest('G01',phone,[h.sample('R01',{hr:75})])).data.accepted,1);
  await flush();
  assert.deepEqual((await h.req('/api/archive/R01?hours=4',{cookie:medic})).data.points,[[freshAt,75]]);
 });
